@@ -1,0 +1,113 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "client-reporting-api"
+version = "0.1.0"
+description = "Client reporting, fee engine, and invoice management service"
+requires-python = ">=3.13,<3.14"
+authors = [
+    { name = "Unified Trading System", email = "team@example.com" },
+]
+dependencies = [
+    "fastapi>=0.110.0,<1.0.0",
+    "uvicorn[standard]>=0.27.0,<1.0.0",
+    "sse-starlette>=1.6.1,<2.0.0",
+    "jinja2>=3.0.0,<4.0.0",
+    "matplotlib>=3.9.0,<4.0.0",
+    "anthropic>=0.40.0,<1.0.0",
+    "google-auth>=2.40.0,<3.0.0",
+    "pyyaml>=6.0.1,<7.0.0",
+    "unified-internal-contracts>=0.1.0",
+    "unified-trading-library>=1.5.0,<2.0.0",
+    "unified-config-interface>=0.1.0",
+    "unified-events-interface>=0.1.0",
+]
+
+[project.license]
+text = "Proprietary"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.1,<10.0.0",
+    "pytest-asyncio>=0.25.0,<2.0.0",
+    "pytest-cov>=7.0.0,<8.0.0",
+    "pytest-xdist>=3.6.0,<4.0.0",
+    "pytest-timeout>=2.4.0,<3.0.0",
+    "ruff==0.15.0",
+    "basedpyright>=1.21.0,<2.0.0",
+    "pip-audit>=2.7.0,<3.0.0",
+    "bandit>=1.7.0,<2.0.0",
+]
+
+[project.scripts]
+client-reporting = "client_reporting_api.main:main"
+
+[tool.uv.sources.unified-internal-contracts]
+path = "../unified-internal-contracts"
+
+[tool.uv.sources.unified-trading-library]
+path = "../unified-trading-library"
+
+[tool.uv.sources.unified-config-interface]
+path = "../unified-config-interface"
+
+[tool.uv.sources.unified-events-interface]
+path = "../unified-events-interface"
+
+[tool.setuptools.packages.find]
+include = [
+    "client_reporting_api*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+    "RUF",
+    "G",
+]
+ignore = [
+    "E501",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.basedpyright]
+pythonVersion = "3.13"
+reportAny = "error"
+reportUnknownMemberType = "error"
+reportUnknownVariableType = "error"
+reportUnknownArgumentType = "error"
+typeCheckingMode = "strict"
+include = [
+    "client_reporting_api",
+]
+exclude = [
+    "tests",
+    "**/__pycache__",
+    ".venv*",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = [
+    "tests",
+]

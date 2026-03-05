@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ client_id }} — {{ period_month }} Executive Summary</title>
+  <style>
+    :root{
+      --gold: #D0A94A;
+      --black: #0A0A0A;
+      --ink: #1A1A1A;
+      --muted: #6B7280;
+      --bg: #FFFFFF;
+      --banner-text: #0A0A0A;
+      --card: #F8F7F5;
+      --rule: #E6E2DA;
+    }
+    body{
+      font-family: Calibri, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      font-size: 11pt;
+      line-height: 1.55;
+    }
+    .container{ max-width: 900px; margin: 0 auto; padding: 28px 32px; }
+    .title{ margin-top: 12px; }
+    .report-title{ font-size: 28pt; font-weight: 700; margin: 18px 0 6px; color: var(--black); }
+    .subtitle{ color: var(--muted); }
+    .divider{ height: 2px; background: linear-gradient(90deg, var(--gold), transparent); margin: 18px 0 6px; }
+    .section{ margin: 28px 0 10px; }
+    .banner{ background: var(--gold); color: var(--banner-text); padding: 10px 14px; border-radius: 10px; font-weight: 700; }
+    .card{ background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; margin-top:10px; }
+    .chart img{ width:100%; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header class="title">
+      <h1 class="report-title">{{ period_month }} Executive Summary – {{ client_id }}</h1>
+      <div class="subtitle">{{ period_month }} • Odum Research</div>
+      <div class="divider"></div>
+    </header>
+
+    <section class="section">
+      <span class="banner">Highlights</span>
+      <div class="card">
+        {% if ai_summary %}
+        {{ ai_summary }}
+        {% else %}
+        Client {{ client_id }} achieved {{ return_pct }}% returns in {{ period_month }}.
+        Closing AUM: {{ currency }}{{ closing_aum }}.
+        {% endif %}
+      </div>
+    </section>
+
+    {% if chart_base64 %}
+    <section class="section">
+      <span class="banner">Performance Chart</span>
+      <div class="card">
+        <img src="data:image/png;base64,{{ chart_base64 }}" alt="Performance chart" />
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="section">
+      <span class="banner">Important Information</span>
+      <div class="card">
+        <p>This document has been approved and issued by Odum Research. Authorised and regulated by the FCA.
+        FCA Registration No. 975797. Registered in England and Wales No. 13531816. Registered office: 9 Appold Street, London EC2A 2AP.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

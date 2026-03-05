@@ -1,0 +1,23 @@
+{
+  "reportAny": "error",
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": "error",
+  "typeCheckingMode": "strict",
+  "include": [
+    "client_reporting_api"
+  ],
+  "exclude": [
+    "tests",
+    "**/__pycache__",
+    ".venv*"
+  ],
+  "extraPaths": [
+    "../unified-internal-contracts",
+    "../unified-trading-library",
+    "../unified-trading-services",
+    "../unified-config-interface",
+    "../unified-events-interface",
+    "../unified-cloud-interface"
+  ],
+  "reportUnknownVariableType": "error"
+}
