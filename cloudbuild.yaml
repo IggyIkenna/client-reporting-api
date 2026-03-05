@@ -1,0 +1,115 @@
+# Cloud Build Configuration for Library Publishing
+# Libraries don't need Docker images - just lint, build wheel, and publish
+
+steps:
+  # Step 1: Run lint check
+  - name: 'python:3.13-slim'
+    id: 'lint'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        uv pip install ruff==0.15.0
+        ruff check .
+        ruff format --check .
+
+  # Step 1.5: Run tests
+  - name: 'python:3.13-slim'
+    id: 'run-tests'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install uv
+        uv pip install --system -e ".[dev]"
+        python -m pytest tests/ -v --tb=short
+    waitFor: ['lint']
+
+  # Step 2: Build Python package (wheel)
+  - name: 'python:3.13-slim'
+    id: 'build-wheel'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install uv build
+        python -m build --wheel --outdir dist/
+        ls -lh dist/
+    waitFor: ['run-tests']
+
+  # Step 2.5: Store build metadata (version -> commit mapping)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
+    id: 'store-metadata'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        apk add --no-cache python3
+
+        WHEEL_FILE=$$(ls dist/*.whl)
+        VERSION=$$(echo $$WHEEL_FILE | sed -n 's/.*-\([0-9.]*\)-.*/\1/p')
+
+        echo "{\"version\":\"$$VERSION\",\"commit\":\"$COMMIT_SHA\",\"short_sha\":\"$SHORT_SHA\",\"build_id\":\"$BUILD_ID\",\"timestamp\":\"$$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /tmp/build-metadata.json
+
+        gsutil cp /tmp/build-metadata.json \
+          gs://$PROJECT_ID-build-metadata/client-reporting-api/versions/$$VERSION.json || true
+
+        echo "✓ Stored build metadata for version $$VERSION"
+    waitFor: ['build-wheel']
+
+  # Step 3: Publish Python package to Artifact Registry with version validation
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
+    id: 'publish-python'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        apk add --no-cache python3 py3-pip jq
+        pip3 install --break-system-packages twine keyrings.google-artifactregistry-auth
+
+        WHEEL_FILE=$$(ls dist/*.whl)
+        VERSION=$$(echo $$WHEEL_FILE | sed -n 's/.*-\([0-9.]*\)-.*/\1/p')
+
+        # Check if version exists
+        EXISTING_VERSIONS=$$(gcloud artifacts versions list \
+          --package=client-reporting-api \
+          --repository=unified-libraries \
+          --location=asia-northeast1 \
+          --format="value(VERSION)" 2>/dev/null || echo "")
+
+        if echo "$$EXISTING_VERSIONS" | grep -qx "$$VERSION"; then
+          if gsutil cp gs://$PROJECT_ID-build-metadata/client-reporting-api/versions/$$VERSION.json /tmp/existing-metadata.json 2>/dev/null; then
+            EXISTING_COMMIT=$$(jq -r '.commit' /tmp/existing-metadata.json)
+
+            if [ "$$EXISTING_COMMIT" = "$COMMIT_SHA" ]; then
+              echo "✓ Version $$VERSION already published from commit $COMMIT_SHA (idempotent)"
+              exit 0
+            else
+              echo "❌ ERROR: Version $$VERSION exists with DIFFERENT code!"
+              echo "Current commit: $COMMIT_SHA"
+              echo "Published commit: $$EXISTING_COMMIT"
+              echo "Action: Bump version in pyproject.toml"
+              exit 1
+            fi
+          else
+            echo "⚠️ Version $$VERSION exists but no metadata. Bump version to be safe."
+            exit 1
+          fi
+        fi
+
+        # Version doesn't exist - publish
+        python3 -m twine upload \
+          --repository-url https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/ \
+          --non-interactive \
+          dist/*.whl
+
+        echo "✓ Successfully uploaded version $$VERSION from commit $COMMIT_SHA"
+    waitFor: ['store-metadata']
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '600s'

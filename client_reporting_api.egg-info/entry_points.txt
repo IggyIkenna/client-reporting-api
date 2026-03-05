@@ -1,0 +1,2 @@
+[console_scripts]
+client-reporting = client_reporting_api.main:main
