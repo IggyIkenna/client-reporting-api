@@ -32,7 +32,7 @@ def test_missing_bearer_token_returns_401() -> None:
 def test_valid_token_passes_through() -> None:
     fake_claims = {"sub": "1234", "email": "user@example.com", "hd": "example.com"}
     with patch(
-        "client_reporting_api.auth.id_token.verify_oauth2_token",
+        "client_reporting_api._google_auth_sync.verify_oauth2_token_sync",
         return_value=fake_claims,
     ):
         client = TestClient(_make_app(), raise_server_exceptions=False)
@@ -43,7 +43,7 @@ def test_valid_token_passes_through() -> None:
 def test_wrong_domain_returns_403() -> None:
     fake_claims = {"sub": "1234", "email": "user@other.com", "hd": "other.com"}
     with patch(
-        "client_reporting_api.auth.id_token.verify_oauth2_token",
+        "client_reporting_api._google_auth_sync.verify_oauth2_token_sync",
         return_value=fake_claims,
     ):
         client = TestClient(_make_app(allowed_domains=["allowed.com"]), raise_server_exceptions=False)

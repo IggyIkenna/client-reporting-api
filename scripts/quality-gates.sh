@@ -336,7 +336,7 @@ fi
 
 # pip install anywhere other than bootstrap (must use uv pip install)
 PIP=$(rg "^RUN pip install|^RUN python -m pip| pip install " --glob "**/Dockerfile" --glob "**/*.sh" . 2>/dev/null \
-    | grep -v "pip install uv" | grep -v "#" || :)
+    | grep -v "uv pip install" | grep -v "#" || :)
 [[ -n "$PIP" ]] && { log_fail "Use 'uv pip install' not 'pip install'"; echo "$PIP" | head -3; ((V++)); } || log_success "No bare pip install"
 
 BE=$(rg "except Exception:" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null || :)

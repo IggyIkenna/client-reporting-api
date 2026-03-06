@@ -6,20 +6,23 @@ Google OAuth middleware for future OIDC migration.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Callable
-from typing import cast
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
-from google.auth.exceptions import GoogleAuthError
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
+
+from client_reporting_api._google_auth_sync import (
+    GoogleAuthError,
+    make_http_request,
+    verify_oauth2_token_sync,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,8 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)  # type: ignore[arg-type]
         self._client_id = client_id
         self._allowed_domains = allowed_domains or []
-        self._http_request = google_requests.Request()
+        self._http_request = make_http_request()
+        self._executor = ThreadPoolExecutor(max_workers=2)
 
     async def dispatch(self, request: Request, call_next: object) -> Response:
         if request.url.path in _PASSTHROUGH_PATHS:
@@ -99,15 +103,14 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "Missing Bearer token"}, status_code=401)
 
         token = auth_header[len("Bearer ") :]
-        # google.oauth2.id_token has incomplete stubs (Unknown param/return types).
-        # We extract the function as a well-typed callable to avoid reportUnknownMemberType
-        # propagating through the call site, then cast the Mapping result to dict[str, object].
-        _verify_token: Callable[[str, object, str], object] = cast(
-            Callable[[str, object, str], object], id_token.verify_oauth2_token
-        )
+        loop = asyncio.get_event_loop()
         try:
-            claims: dict[str, object] = cast(
-                dict[str, object], _verify_token(token, self._http_request, self._client_id)
+            claims: dict[str, object] = await loop.run_in_executor(
+                self._executor,
+                verify_oauth2_token_sync,
+                token,
+                self._http_request,
+                self._client_id,
             )
         except (GoogleAuthError, ValueError) as exc:
             logger.warning("Token validation failed: %s", exc)
