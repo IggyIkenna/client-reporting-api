@@ -45,5 +45,5 @@ def test_config_environment_attribute_accessible() -> None:
 
         from unified_config_interface import UnifiedCloudConfig
 
-        cfg = UnifiedCloudConfig()
+        _cfg = UnifiedCloudConfig()
         assert True

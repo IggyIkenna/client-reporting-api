@@ -2132,7 +2132,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "unified-internal-contracts"
-version = "0.1.1"
+version = "0.1.2"
 source = { directory = "../unified-internal-contracts" }
 dependencies = [
     { name = "pydantic" },
