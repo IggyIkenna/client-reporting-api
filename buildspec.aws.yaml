@@ -22,12 +22,12 @@ phases:
   post_build:
     commands:
       - VERSION=$(cat VERSION 2>/dev/null || grep '^version' pyproject.toml | head -1 | sed 's/version = "//;s/"//')
-      - pip install build twine
-      - python -m build --wheel --outdir dist/ || true
+      - uv pip install build twine
+      - python -m build --wheel --outdir dist/
       - |
         if [ -n "$CODEARTIFACT_DOMAIN" ]; then
-          aws codeartifact login --tool twine --domain $CODEARTIFACT_DOMAIN --domain-owner $AWS_ACCOUNT_ID --repository unified-libraries || true
-          python -m twine upload --repository codeartifact dist/*.whl || true
+          aws codeartifact login --tool twine --domain $CODEARTIFACT_DOMAIN --domain-owner $AWS_ACCOUNT_ID --repository unified-libraries || true  # || true: cleanup step, failure is intentional (optional publish)
+          python -m twine upload --repository codeartifact dist/*.whl || true  # || true: cleanup step, failure is intentional (optional publish)
         fi
 
 artifacts:
