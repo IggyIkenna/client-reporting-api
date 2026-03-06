@@ -1,4 +1,5 @@
 """Tests that configuration is loaded via UnifiedCloudConfig, not os.getenv."""
+
 from unittest.mock import MagicMock, patch
 
 
