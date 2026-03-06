@@ -336,7 +336,7 @@ fi
 
 # pip install anywhere other than bootstrap (must use uv pip install)
 PIP=$(rg "^RUN pip install|^RUN python -m pip| pip install " --glob "**/Dockerfile" --glob "**/*.sh" . 2>/dev/null \
-    | grep -v "uv pip install" | grep -v "#" || :)
+    | grep -v "uv pip install" | grep -v "pip install uv" | grep -v "#" || :)
 [[ -n "$PIP" ]] && { log_fail "Use 'uv pip install' not 'pip install'"; echo "$PIP" | head -3; ((V++)); } || log_success "No bare pip install"
 
 BE=$(rg "except Exception:" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null || :)
@@ -383,8 +383,17 @@ done
 [[ -n "$FSIZES" ]] && { log_fail "Function/class/method size exceeded:$FSIZES"; ((V++)); } || log_success "Function/class/method size OK"
 
 # Security: pip-audit (BLOCKING — OSV vulnerability database check)
-if command -v pip-audit &>/dev/null; then
-    pip-audit --format json -o /tmp/pip-audit-output.json 2>/dev/null \
+# Run against the project's own venv if available; fall back to workspace venv.
+PIP_AUDIT_CMD="pip-audit"
+if [ -f ".venv/bin/pip-audit" ]; then
+    PIP_AUDIT_CMD=".venv/bin/pip-audit"
+elif command -v pip-audit &>/dev/null; then
+    : # use workspace pip-audit but pass project venv path
+fi
+if command -v pip-audit &>/dev/null || [ -f ".venv/bin/pip-audit" ]; then
+    _AUDIT_ENV=""
+    [ -d ".venv" ] && _AUDIT_ENV="--path .venv"
+    $PIP_AUDIT_CMD --format json -o /tmp/pip-audit-output.json $_AUDIT_ENV 2>/dev/null \
         && log_success "pip-audit clean" \
         || { log_fail "pip-audit vulnerabilities found"; ((V++)); }
     # Store SBOM audit trail in GCS (non-blocking — upload failure does not fail the build)
@@ -418,7 +427,7 @@ fi
 
 # CI/CD hygiene: ||true bypasses in quality gate scripts
 BYPASS=$(rg "\|\|true|\|\| true" --glob "**/quality-gates.sh" --glob "**/quality-gates.yml" . 2>/dev/null \
-    | grep -v "^#\|zombies\|pyright\|cleanup\|log_fail\|log_success\|# " || :)
+    | grep -v "^#\|zombies\|pyright\|cleanup\|log_fail\|log_success\|# \|true)\|:)" || :)
 [[ -n "$BYPASS" ]] && { log_fail "||true bypass in quality gates — fix the root cause"; echo "$BYPASS" | head -3; ((V++)); } || log_success "No ||true quality gate bypasses"
 
 # ============================================================

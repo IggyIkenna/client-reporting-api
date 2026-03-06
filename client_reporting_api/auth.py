@@ -18,11 +18,11 @@ from starlette.responses import JSONResponse, Response
 from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
 
-from client_reporting_api._google_auth_sync import (
-    GoogleAuthError,
-    make_http_request,
-    verify_oauth2_token_sync,
-)
+import client_reporting_api._google_auth_sync as _google_auth_sync
+
+GoogleAuthError = _google_auth_sync.GoogleAuthError
+make_http_request = _google_auth_sync.make_http_request
+verify_oauth2_token_sync = _google_auth_sync.verify_oauth2_token_sync
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
         try:
             claims: dict[str, object] = await loop.run_in_executor(
                 self._executor,
-                verify_oauth2_token_sync,
+                _google_auth_sync.verify_oauth2_token_sync,
                 token,
                 self._http_request,
                 self._client_id,
