@@ -1,0 +1,39 @@
+# AWS CodeBuild equivalent of cloudbuild.yaml
+version: 0.2
+
+env:
+  variables:
+    AWS_DEFAULT_REGION: "ap-northeast-1"
+
+phases:
+  install:
+    runtime-versions:
+      python: "3.13"
+    commands:
+      - pip install uv
+      - VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "//;s/"//') && export VERSION
+      - echo "Building version $VERSION"
+      - uv pip install --system -e ".[dev]" || uv pip install --system -e "."
+
+  build:
+    commands:
+      - bash scripts/quality-gates.sh --no-fix --quick
+
+  post_build:
+    commands:
+      - VERSION=$(cat VERSION 2>/dev/null || grep '^version' pyproject.toml | head -1 | sed 's/version = "//;s/"//')
+      - pip install build twine
+      - python -m build --wheel --outdir dist/ || true
+      - |
+        if [ -n "$CODEARTIFACT_DOMAIN" ]; then
+          aws codeartifact login --tool twine --domain $CODEARTIFACT_DOMAIN --domain-owner $AWS_ACCOUNT_ID --repository unified-libraries || true
+          python -m twine upload --repository codeartifact dist/*.whl || true
+        fi
+
+artifacts:
+  files:
+    - "**/*"
+
+cache:
+  paths:
+    - "/root/.cache/uv/**/*"

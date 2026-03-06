@@ -19,5 +19,7 @@
     "../unified-events-interface",
     "../unified-cloud-interface"
   ],
-  "reportUnknownVariableType": "error"
+  "reportUnknownVariableType": "error",
+  "venvPath": "../",
+  "venv": ".venv-workspace"
 }
