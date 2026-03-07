@@ -3,23 +3,15 @@
   "reportMissingTypeStubs": false,
   "reportUnknownMemberType": "error",
   "typeCheckingMode": "strict",
-  "include": [
-    "client_reporting_api"
-  ],
-  "exclude": [
-    "tests",
-    "**/__pycache__",
-    ".venv*"
-  ],
+  "include": ["client_reporting_api"],
+  "exclude": ["tests", "**/__pycache__", ".venv*"],
   "extraPaths": [
     "../unified-internal-contracts",
     "../unified-trading-library",
-    "../unified-trading-services",
     "../unified-config-interface",
-    "../unified-events-interface",
-    "../unified-cloud-interface"
+    "../unified-events-interface"
   ],
   "reportUnknownVariableType": "error",
-  "venvPath": "../",
-  "venv": ".venv-workspace"
+  "venvPath": ".",
+  "venv": ".venv"
 }

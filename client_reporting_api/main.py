@@ -2,12 +2,14 @@ import logging
 
 import uvicorn
 from unified_events_interface import setup_events
+from unified_trading_library.utils.tracing import setup_tracing
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
     setup_events(service_name="client-reporting-api", mode="live", sink="cloud_logging")
+    setup_tracing("client-reporting-api")
 
     uvicorn.run(
         "client_reporting_api.api.main:app",
