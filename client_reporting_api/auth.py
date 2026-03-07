@@ -60,7 +60,7 @@ async def verify_api_key(
     if not expected_key or api_key != expected_key:
         log_event("AUTH_FAILURE", severity="WARNING", details={"auth_type": "api_key", "reason": "invalid_key"})
         raise HTTPException(status_code=401, detail="Invalid API key")
-    log_event("AUTH_SUCCESS", details={"auth_type": "api_key"})
+    logger.info("Authentication successful: auth_type=api_key")
     return api_key
 
 
@@ -127,5 +127,5 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
                 )
                 return JSONResponse({"detail": "Domain not allowed"}, status_code=403)
 
-        log_event("AUTH_SUCCESS", details={"auth_type": "oauth"})
+        logger.info("Authentication successful: auth_type=oauth")
         return await call_next(request)  # type: ignore[operator,misc]

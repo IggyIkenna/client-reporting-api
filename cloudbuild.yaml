@@ -3,46 +3,46 @@
 
 steps:
   # Step 1: Run lint check
-  - name: 'python:3.13-slim'
-    id: 'lint'
-    entrypoint: 'bash'
+  - name: "python:3.13-slim"
+    id: "lint"
+    entrypoint: "bash"
     args:
-      - '-c'
+      - "-c"
       - |
         uv pip install ruff==0.15.0
         ruff check .
         ruff format --check .
 
   # Step 1.5: Run tests
-  - name: 'python:3.13-slim'
-    id: 'run-tests'
-    entrypoint: 'bash'
+  - name: "python:3.13-slim"
+    id: "run-tests"
+    entrypoint: "bash"
     args:
-      - '-c'
+      - "-c"
       - |
         pip install uv
         uv pip install --system -e ".[dev]"
         python -m pytest tests/ -v --tb=short
-    waitFor: ['lint']
+    waitFor: ["lint"]
 
   # Step 2: Build Python package (wheel)
-  - name: 'python:3.13-slim'
-    id: 'build-wheel'
-    entrypoint: 'bash'
+  - name: "python:3.13-slim"
+    id: "build-wheel"
+    entrypoint: "bash"
     args:
-      - '-c'
+      - "-c"
       - |
         pip install uv build
         python -m build --wheel --outdir dist/
         ls -lh dist/
-    waitFor: ['run-tests']
+    waitFor: ["run-tests"]
 
   # Step 2.5: Store build metadata (version -> commit mapping)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
-    id: 'store-metadata'
-    entrypoint: 'bash'
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+    id: "store-metadata"
+    entrypoint: "bash"
     args:
-      - '-c'
+      - "-c"
       - |
         set -e
         apk add --no-cache python3
@@ -53,17 +53,17 @@ steps:
         echo "{\"version\":\"$$VERSION\",\"commit\":\"$COMMIT_SHA\",\"short_sha\":\"$SHORT_SHA\",\"build_id\":\"$BUILD_ID\",\"timestamp\":\"$$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /tmp/build-metadata.json
 
         gsutil cp /tmp/build-metadata.json \
-          gs://$PROJECT_ID-build-metadata/client-reporting-api/versions/$$VERSION.json || true
+          gs://$PROJECT_ID-build-metadata/client-reporting-api/versions/$$VERSION.json || true  # || true: cleanup step, failure is intentional (metadata storage non-blocking)
 
         echo "✓ Stored build metadata for version $$VERSION"
-    waitFor: ['build-wheel']
+    waitFor: ["build-wheel"]
 
   # Step 3: Publish Python package to Artifact Registry with version validation
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:alpine'
-    id: 'publish-python'
-    entrypoint: 'bash'
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+    id: "publish-python"
+    entrypoint: "bash"
     args:
-      - '-c'
+      - "-c"
       - |
         set -e
         apk add --no-cache python3 py3-pip jq
@@ -106,10 +106,10 @@ steps:
           dist/*.whl
 
         echo "✓ Successfully uploaded version $$VERSION from commit $COMMIT_SHA"
-    waitFor: ['store-metadata']
+    waitFor: ["store-metadata"]
 
 options:
-  machineType: 'E2_HIGHCPU_8'
+  machineType: "E2_HIGHCPU_8"
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '600s'
+timeout: "600s"

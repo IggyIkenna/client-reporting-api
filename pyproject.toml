@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools>=61.0",
+    "setuptools>=75,<82",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
@@ -22,10 +22,10 @@ dependencies = [
     "anthropic>=0.40.0,<1.0.0",
     "google-auth>=2.40.0,<3.0.0",
     "pyyaml>=6.0.1,<7.0.0",
-    "unified-internal-contracts>=0.1.0",
+    "unified-internal-contracts>=0.1.0,<1.0.0",
     "unified-trading-library>=1.5.0,<2.0.0",
-    "unified-config-interface>=0.1.0",
-    "unified-events-interface>=0.1.0",
+    "unified-config-interface>=0.1.0,<1.0.0",
+    "unified-events-interface>=0.1.0,<1.0.0",
 ]
 
 [project.license]
@@ -65,7 +65,7 @@ include = [
 ]
 
 [tool.ruff]
-line-length = 120
+line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
@@ -81,10 +81,13 @@ select = [
     "SIM",
     "RUF",
     "G",
-]
-ignore = [
-    "E501",
-]
+
+    "C90",]
+ignore = []
+
+
+[tool.ruff.lint.mccabe]
+max-complexity = 7
 
 [tool.ruff.format]
 quote-style = "double"
@@ -111,3 +114,6 @@ asyncio_mode = "auto"
 testpaths = [
     "tests",
 ]
+
+[tool.coverage.report]
+fail_under = 70
