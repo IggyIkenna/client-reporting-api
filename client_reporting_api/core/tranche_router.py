@@ -7,7 +7,10 @@ import yaml
 logger = logging.getLogger(__name__)
 
 _REGISTRY_PATH = (
-    Path(__file__).parent.parent.parent.parent / "execution-services" / "configs" / "credentials-registry.yaml"
+    Path(__file__).parent.parent.parent.parent
+    / "execution-services"
+    / "configs"
+    / "credentials-registry.yaml"
 )
 
 
