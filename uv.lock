@@ -2054,7 +2054,7 @@ wheels = [
 
 [[package]]
 name = "unified-api-contracts"
-version = "0.1.77"
+version = "0.1.83"
 source = { directory = "../unified-api-contracts" }
 dependencies = [
     { name = "pydantic" },
@@ -2126,7 +2126,7 @@ provides-extras = ["gcp", "aws", "cache", "dev"]
 
 [[package]]
 name = "unified-config-interface"
-version = "0.1.35"
+version = "0.1.37"
 source = { directory = "../unified-config-interface" }
 dependencies = [
     { name = "pydantic" },
@@ -2181,7 +2181,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "unified-internal-contracts"
-version = "0.1.17"
+version = "0.1.19"
 source = { directory = "../unified-internal-contracts" }
 dependencies = [
     { name = "pandas" },

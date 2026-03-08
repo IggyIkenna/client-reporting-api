@@ -10,6 +10,7 @@ unified-internal-contracts<1.0.0,>=0.1.0
 unified-trading-library<2.0.0,>=1.5.0
 unified-config-interface<1.0.0,>=0.1.0
 unified-events-interface<1.0.0,>=0.1.0
+prometheus-client<1.0.0,>=0.20.0
 
 [dev]
 pytest<10.0.0,>=9.0.1

@@ -78,7 +78,9 @@ jobs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Commit (MINOR/PATCH — direct commit to staging)
-        if: steps.update.outputs.skip != 'true' && steps.update.outputs.bump_type != 'major'
+        if:
+          steps.update.outputs.skip != 'true' && steps.update.outputs.bump_type
+          != 'major'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -93,14 +95,18 @@ jobs:
           git push origin staging
 
       - name: Create PR to staging (MAJOR — requires quality gates)
-        if: steps.update.outputs.skip != 'true' && steps.update.outputs.bump_type == 'major'
+        if:
+          steps.update.outputs.skip != 'true' && steps.update.outputs.bump_type
+          == 'major'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           PR_BODY:
-            "Breaking dependency update dispatched by unified-trading-pm.\n\n**Dependency:** `${{
-            steps.update.outputs.dep_name }}`\n**New version:** `${{ steps.update.outputs.dep_version
-            }}`\n**Constraint:** `${{ github.event.client_payload.constraint }}`\n\nQuality gates must pass before
-            merging to staging."
+            "Breaking dependency update dispatched by
+            unified-trading-pm.\n\n**Dependency:** `${{
+            steps.update.outputs.dep_name }}`\n**New version:** `${{
+            steps.update.outputs.dep_version }}`\n**Constraint:** `${{
+            github.event.client_payload.constraint }}`\n\nQuality gates must
+            pass before merging to staging."
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

@@ -4,6 +4,7 @@ client_reporting_api/__init__.py
 client_reporting_api/_google_auth_sync.py
 client_reporting_api/auth.py
 client_reporting_api/main.py
+client_reporting_api/metrics.py
 client_reporting_api.egg-info/PKG-INFO
 client_reporting_api.egg-info/SOURCES.txt
 client_reporting_api.egg-info/dependency_links.txt
