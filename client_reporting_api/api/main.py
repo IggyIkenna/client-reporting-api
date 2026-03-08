@@ -9,6 +9,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 # middleware support (track in UTL backlog).
 # from unified_trading_library import PrometheusMiddleware, get_metrics_response
 from client_reporting_api.api.routes.health import router as health_router
+from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
 from client_reporting_api.auth import _auth_cfg, verify_api_key
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,9 @@ app = FastAPI(
 
 # --- Unauthenticated health / metrics endpoints ---
 app.include_router(health_router)
+
+# --- Unauthenticated SSE streaming endpoints ---
+app.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
 
 # --- Authenticated API routes (require API key) ---
 # Add authenticated routers here as they are created, e.g.:

@@ -23,7 +23,7 @@ dependencies = [
     "google-auth>=2.40.0,<3.0.0",
     "pyyaml>=6.0.1,<7.0.0",
     "unified-internal-contracts>=0.1.0,<1.0.0",
-    "unified-trading-library>=1.5.0,<2.0.0",
+    "unified-trading-library>=0.3.0,<1.0.0",
     "unified-config-interface>=0.1.0,<1.0.0",
     "unified-events-interface>=0.1.0,<1.0.0",
     "prometheus-client>=0.20.0,<1.0.0",
@@ -114,6 +114,11 @@ exclude = [
 asyncio_mode = "auto"
 testpaths = [
     "tests",
+]
+markers = [
+    "unit: fast isolated unit tests (no external I/O)",
+    "integration: per-component integration tests using mocks (no live cloud)",
+    "smoke: quick happy-path smoke tests",
 ]
 
 [tool.coverage.report]
