@@ -20,7 +20,9 @@ def basic_fee_structure() -> FeeStructure:
     return FeeStructure(trader_fee_pct=0.20, odum_fee_pct=0.05)
 
 
-def test_no_pnl_above_hwm_zero_fees(calculator: FeeCalculator, basic_fee_structure: FeeStructure) -> None:
+def test_no_pnl_above_hwm_zero_fees(
+    calculator: FeeCalculator, basic_fee_structure: FeeStructure
+) -> None:
     """When closing AUM equals HWMs, all fees are zero."""
     trader_fee, odum_fee, introducer_fee, server_cost = calculator.calculate_period_fees(
         client_id="client-1",
@@ -37,7 +39,9 @@ def test_no_pnl_above_hwm_zero_fees(calculator: FeeCalculator, basic_fee_structu
     assert server_cost == Decimal("0")
 
 
-def test_pnl_above_trader_hwm_charges_trader_fee(calculator: FeeCalculator, basic_fee_structure: FeeStructure) -> None:
+def test_pnl_above_trader_hwm_charges_trader_fee(
+    calculator: FeeCalculator, basic_fee_structure: FeeStructure
+) -> None:
     """Trader fee is 20% of PnL above trader HWM."""
     trader_fee, odum_fee, introducer_fee, server_cost = calculator.calculate_period_fees(
         client_id="client-1",
@@ -54,7 +58,9 @@ def test_pnl_above_trader_hwm_charges_trader_fee(calculator: FeeCalculator, basi
     assert server_cost == Decimal("0")
 
 
-def test_pnl_above_odum_hwm_charges_odum_fee(calculator: FeeCalculator, basic_fee_structure: FeeStructure) -> None:
+def test_pnl_above_odum_hwm_charges_odum_fee(
+    calculator: FeeCalculator, basic_fee_structure: FeeStructure
+) -> None:
     """Odum fee is 5% of PnL above odum HWM."""
     trader_fee, odum_fee, _introducer_fee, _server_cost = calculator.calculate_period_fees(
         client_id="client-1",
@@ -110,7 +116,9 @@ def test_no_introducer_fee_without_introducer_id(calculator: FeeCalculator) -> N
     assert introducer_fee == Decimal("0")
 
 
-def test_server_cost_charged_when_underwater(calculator: FeeCalculator, basic_fee_structure: FeeStructure) -> None:
+def test_server_cost_charged_when_underwater(
+    calculator: FeeCalculator, basic_fee_structure: FeeStructure
+) -> None:
     """Server cost is charged when account is underwater."""
     _, _, _, server_cost = calculator.calculate_period_fees(
         client_id="client-1",
@@ -139,7 +147,9 @@ def test_custom_server_cost(calculator: FeeCalculator, basic_fee_structure: FeeS
     assert server_cost == Decimal("75")
 
 
-def test_closing_below_hwm_no_negative_fees(calculator: FeeCalculator, basic_fee_structure: FeeStructure) -> None:
+def test_closing_below_hwm_no_negative_fees(
+    calculator: FeeCalculator, basic_fee_structure: FeeStructure
+) -> None:
     """Fees are never negative when closing AUM is below HWMs."""
     trader_fee, odum_fee, introducer_fee, _ = calculator.calculate_period_fees(
         client_id="client-1",
