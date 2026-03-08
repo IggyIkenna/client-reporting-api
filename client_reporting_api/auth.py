@@ -12,9 +12,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
 
@@ -91,19 +92,19 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app: object,
+        app: ASGIApp,
         client_id: str,
         allowed_domains: list[str] | None = None,
     ) -> None:
-        super().__init__(app)  # type: ignore[arg-type]
+        super().__init__(app)
         self._client_id = client_id
         self._allowed_domains = allowed_domains or []
         self._http_request = make_http_request()
         self._executor = ThreadPoolExecutor(max_workers=2)
 
-    async def dispatch(self, request: Request, call_next: object) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path in _PASSTHROUGH_PATHS:
-            return await call_next(request)  # type: ignore[operator,misc]
+            return await call_next(request)
 
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -146,4 +147,4 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse({"detail": "Domain not allowed"}, status_code=403)
 
         logger.info("Authentication successful: auth_type=oauth")
-        return await call_next(request)  # type: ignore[operator,misc]
+        return await call_next(request)
