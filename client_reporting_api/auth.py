@@ -31,7 +31,9 @@ _auth_cfg = UnifiedCloudConfig()
 _disable_auth_raw = _auth_cfg.disable_auth
 _environment = _auth_cfg.environment
 if _disable_auth_raw and _environment == "production":
-    logging.getLogger(__name__).critical("DISABLE_AUTH=true is forbidden in production. Auth remains ENABLED.")
+    logging.getLogger(__name__).critical(
+        "DISABLE_AUTH=true is forbidden in production. Auth remains ENABLED."
+    )
     _effective_disable_auth: bool = False
 else:
     _effective_disable_auth = _disable_auth_raw
@@ -54,11 +56,19 @@ async def verify_api_key(
     if DISABLE_AUTH:
         return "dev-mode"
     if not api_key:
-        log_event("AUTH_FAILURE", severity="WARNING", details={"auth_type": "api_key", "reason": "missing_key"})
+        log_event(
+            "AUTH_FAILURE",
+            severity="WARNING",
+            details={"auth_type": "api_key", "reason": "missing_key"},
+        )
         raise HTTPException(status_code=401, detail="Missing API key")
     expected_key = _auth_cfg.api_key
     if not expected_key or api_key != expected_key:
-        log_event("AUTH_FAILURE", severity="WARNING", details={"auth_type": "api_key", "reason": "invalid_key"})
+        log_event(
+            "AUTH_FAILURE",
+            severity="WARNING",
+            details={"auth_type": "api_key", "reason": "invalid_key"},
+        )
         raise HTTPException(status_code=401, detail="Invalid API key")
     logger.info("Authentication successful: auth_type=api_key")
     return api_key
@@ -98,7 +108,9 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             log_event(
-                "AUTH_FAILURE", severity="WARNING", details={"auth_type": "oauth", "reason": "missing_bearer_token"}
+                "AUTH_FAILURE",
+                severity="WARNING",
+                details={"auth_type": "oauth", "reason": "missing_bearer_token"},
             )
             return JSONResponse({"detail": "Missing Bearer token"}, status_code=401)
 
@@ -114,7 +126,11 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
             )
         except (GoogleAuthError, ValueError) as exc:
             logger.warning("Token validation failed: %s", exc)
-            log_event("AUTH_FAILURE", severity="WARNING", details={"auth_type": "oauth", "reason": "invalid_token"})
+            log_event(
+                "AUTH_FAILURE",
+                severity="WARNING",
+                details={"auth_type": "oauth", "reason": "invalid_token"},
+            )
             return JSONResponse({"detail": "Invalid token"}, status_code=401)
 
         if self._allowed_domains:
@@ -123,7 +139,9 @@ class GoogleOAuthMiddleware(BaseHTTPMiddleware):
             if hd not in self._allowed_domains:
                 logger.warning("Domain %r not in allowed list %r", hd, self._allowed_domains)
                 log_event(
-                    "AUTH_FAILURE", severity="WARNING", details={"auth_type": "oauth", "reason": "domain_not_allowed"}
+                    "AUTH_FAILURE",
+                    severity="WARNING",
+                    details={"auth_type": "oauth", "reason": "domain_not_allowed"},
                 )
                 return JSONResponse({"detail": "Domain not allowed"}, status_code=403)
 
