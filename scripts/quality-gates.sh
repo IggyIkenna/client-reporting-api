@@ -29,7 +29,7 @@ set -e
 # ── REPO-SPECIFIC SETTINGS ────────────────────────────────────────────────────
 SERVICE_NAME="client-reporting-api"          # e.g. instruments-service
 SOURCE_DIR="client_reporting_api"            # e.g. instruments_service  (underscore form)
-MIN_COVERAGE=70  # Template default — set to (actual coverage - 1%) after first test run. See test-coverage-targets.mdc
+MIN_COVERAGE=82  # Calibrated: actual 83.41% (2026-03-08) → floor(83.41 - 1) = 82
 RUN_INTEGRATION=false              # Set true when integration tests are stable
 PYTEST_WORKERS=${PYTEST_WORKERS:-2} # Default 2; override via env (cap to avoid OOM)
 
