@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-# TODO: PrometheusMiddleware and get_metrics_response are not yet implemented in
-# unified_trading_library. Re-enable once https://github.com/unified-trading/
-# unified-trading-library adds observability middleware support.
+# TODO(GH-BACKLOG): PrometheusMiddleware and get_metrics_response are not yet implemented in
+# unified_trading_library. Re-enable once unified-trading-library adds observability
+# middleware support (track in UTL backlog).
 # from unified_trading_library import PrometheusMiddleware, get_metrics_response
 from client_reporting_api.api.routes.health import router as health_router
 from client_reporting_api.auth import _auth_cfg, verify_api_key
@@ -21,7 +21,7 @@ app = FastAPI(
     redoc_url="/redoc" if _env != "production" else None,
     openapi_url="/openapi.json" if _env != "production" else None,
 )
-# TODO: Re-enable once PrometheusMiddleware is available in unified_trading_library.
+# TODO(GH-BACKLOG): Re-enable once PrometheusMiddleware is available in unified_trading_library.
 # app.add_middleware(PrometheusMiddleware, service_name="client-reporting-api")
 
 # --- Unauthenticated health / metrics endpoints ---
