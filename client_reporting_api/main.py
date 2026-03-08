@@ -1,14 +1,21 @@
 import logging
 
 import uvicorn
+from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import setup_events
-from unified_trading_library import setup_tracing
+from unified_trading_library import PubSubEventSink, setup_tracing
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    setup_events(service_name="client-reporting-api", mode="live", sink="cloud_logging")
+    config = UnifiedCloudConfig()
+    sink = PubSubEventSink(
+        project_id=config.gcp_project_id,
+        topic="client-reporting-api-events",
+        service_name="client-reporting-api",
+    )
+    setup_events(service_name="client-reporting-api", mode="live", sink=sink)
     setup_tracing("client-reporting-api")
 
     uvicorn.run(

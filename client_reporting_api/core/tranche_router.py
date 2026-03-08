@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import cast
 
 import yaml
-from unified_internal_contracts.reporting import ClientConfig, CredentialsRegistry
+from unified_internal_contracts import ClientConfig, CredentialsRegistry
 
 logger = logging.getLogger(__name__)
 
