@@ -1,15 +1,16 @@
 import logging
 
 import uvicorn
-from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import setup_events
 from unified_trading_library import PubSubEventSink, setup_tracing
+
+from client_reporting_api.auth import _auth_cfg
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    config = UnifiedCloudConfig()
+    config = _auth_cfg
     sink = PubSubEventSink(
         project_id=config.gcp_project_id,
         topic="client-reporting-api-events",

@@ -2,18 +2,17 @@ import logging
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import Response
-from unified_config_interface import UnifiedCloudConfig
 
 # TODO: PrometheusMiddleware and get_metrics_response are not yet implemented in
 # unified_trading_library. Re-enable once https://github.com/unified-trading/
 # unified-trading-library adds observability middleware support.
 # from unified_trading_library import PrometheusMiddleware, get_metrics_response
 from client_reporting_api.api.routes.health import router as health_router
-from client_reporting_api.auth import verify_api_key
+from client_reporting_api.auth import _auth_cfg, verify_api_key
 
 logger = logging.getLogger(__name__)
 
-_env = UnifiedCloudConfig().environment
+_env = _auth_cfg.environment
 app = FastAPI(
     title="Client Reporting Service",
     version="1.0.0",
