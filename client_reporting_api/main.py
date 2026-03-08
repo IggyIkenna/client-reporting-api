@@ -2,7 +2,7 @@ import logging
 
 import uvicorn
 from unified_events_interface import setup_events
-from unified_trading_library.utils.tracing import setup_tracing
+from unified_trading_library import setup_tracing
 
 logger = logging.getLogger(__name__)
 
