@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import cast
 
 import yaml
+from unified_internal_contracts.reporting import ClientConfig, CredentialsRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -12,32 +13,6 @@ _REGISTRY_PATH = (
     / "configs"
     / "credentials-registry.yaml"
 )
-
-
-class ClientConfig(TypedDict, total=False):
-    """Configuration for a single client."""
-
-    full_name: str
-    tranche: str
-    currency: str
-    venue: str
-    secret_name: str
-    odum_fee_pct: float
-    trader_fee_pct: float
-    introducer_id: str
-    introducer_fee_pct: float
-    is_underwater: bool
-    is_active: bool
-    data_source: str
-    is_pooled: bool
-    pool_investors: dict[str, float]
-
-
-class CredentialsRegistry(TypedDict):
-    """The complete credentials registry structure."""
-
-    clients: dict[str, ClientConfig]
-    server_costs_per_underwater_account_usd: int
 
 
 def load_registry() -> CredentialsRegistry:
