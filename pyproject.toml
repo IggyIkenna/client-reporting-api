@@ -26,6 +26,7 @@ dependencies = [
     "unified-trading-library>=1.5.0,<2.0.0",
     "unified-config-interface>=0.1.0,<1.0.0",
     "unified-events-interface>=0.1.0,<1.0.0",
+    "prometheus-client>=0.20.0,<1.0.0",
 ]
 
 [project.license]

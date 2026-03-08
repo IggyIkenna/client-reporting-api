@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 # TODO: PrometheusMiddleware and get_metrics_response are not yet implemented in
 # unified_trading_library. Re-enable once https://github.com/unified-trading/
@@ -40,6 +41,5 @@ app.include_router(_authenticated_router)
 
 @app.get("/metrics")
 async def metrics() -> Response:
-    # TODO: Return real Prometheus metrics once PrometheusMiddleware is available
-    # in unified_trading_library. Currently returns an empty metrics response.
-    return Response(content="", media_type="text/plain")
+    """Prometheus metrics endpoint."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
