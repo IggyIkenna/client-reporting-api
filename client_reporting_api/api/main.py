@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 
@@ -8,14 +9,12 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
+from starlette.types import ASGIApp
 
-# TODO(GH-BACKLOG): PrometheusMiddleware and get_metrics_response are not yet implemented in
-# unified_trading_library. Re-enable once unified-trading-library adds observability
-# middleware support (track in UTL backlog).
-# from unified_trading_library import PrometheusMiddleware, get_metrics_response
 from client_reporting_api.api.routes.health import router as health_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
 from client_reporting_api.auth import _auth_cfg, verify_api_key
+from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +34,29 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class PrometheusMiddleware(BaseHTTPMiddleware):
+    """ASGI middleware that records request counts and latency into Prometheus metrics.
+
+    Uses RECORDS_PROCESSED Counter and PROCESSING_LATENCY Histogram from
+    client_reporting_api.metrics — no UTL dependency required.
+    """
+
+    def __init__(self, app: ASGIApp, service_name: str = "client-reporting-api") -> None:
+        super().__init__(app)
+        self.service_name = service_name
+
+    async def dispatch(
+        self, request: Request, call_next: _RequestResponseEndpoint
+    ) -> StarletteResponse:
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration = time.perf_counter() - start
+        status = "success" if response.status_code < 500 else "error"
+        RECORDS_PROCESSED.labels(status=status).inc()
+        PROCESSING_LATENCY.observe(duration)
+        return response
+
+
 _env = _auth_cfg.environment
 app = FastAPI(
     title="Client Reporting Service",
@@ -43,9 +65,7 @@ app = FastAPI(
     redoc_url="/redoc" if _env != "production" else None,
     openapi_url="/openapi.json" if _env != "production" else None,
 )
-# TODO(GH-BACKLOG): Re-enable once PrometheusMiddleware is available in unified_trading_library.
-# app.add_middleware(PrometheusMiddleware, service_name="client-reporting-api")
-
+app.add_middleware(PrometheusMiddleware, service_name="client-reporting-api")
 app.add_middleware(CorrelationIdMiddleware)
 
 # --- Unauthenticated health / metrics endpoints ---
