@@ -29,7 +29,7 @@ set -e
 # ── REPO-SPECIFIC SETTINGS ────────────────────────────────────────────────────
 SERVICE_NAME="client-reporting-api"          # e.g. instruments-service
 SOURCE_DIR="client_reporting_api"            # e.g. instruments_service  (underscore form)
-MIN_COVERAGE=82  # Calibrated: actual 83.41% (2026-03-08) → floor(83.41 - 1) = 82
+MIN_COVERAGE=82  # Template default — set to (actual coverage - 1%) after first test run. See test-coverage-targets.mdc
 RUN_INTEGRATION=false              # Set true when integration tests are stable
 PYTEST_WORKERS=${PYTEST_WORKERS:-2} # Default 2; override via env (cap to avoid OOM)
 
@@ -112,9 +112,11 @@ RUFF_VER=$($RUFF_CMD --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -
 
 # ── [1] AUTO-FIX (prettier + ruff, 30s each) ──────────────────────────────────
 # Prettier runs FIRST on non-Python files to prevent ruff/prettier conflict in pre-commit hooks.
+# Without this, committing JSON/YAML/MD files causes "MM" status and hook stash conflicts.
 # See: 06-coding-standards/quality-gates.md § Formatter Conflict Resolution
 if [ "$RUN_LINT" = true ] && [ "$FIX_MODE" = true ]; then
     log_section "[1/6] AUTO-FIX"
+    # Pre-format non-Python files with prettier to avoid pre-commit hook conflicts
     if command -v npx &>/dev/null; then
         npx prettier --write "**/*.{md,json,yaml,yml}" --ignore-path .gitignore 2>/dev/null \
             && log_success "Prettier: non-Python files formatted" \
@@ -157,7 +159,7 @@ if [ "$RUN_TESTS" = true ]; then
 
     # @pytest.mark.skip must have a reason comment on the preceding line
     SKIP_NO_REASON=$(rg "@pytest\.mark\.skip" --type py tests/ -B 1 2>/dev/null \
-        | grep -v "# reason:\|# noqa\|^--\|skipif" | grep "@pytest\.mark\.skip" || :)
+        | grep -v "# reason:\|# noqa\|^--" | grep "@pytest\.mark\.skip" || :)
     [[ -n "$SKIP_NO_REASON" ]] && { log_fail "pytest.mark.skip without reason comment — add '# reason: ...' above"; echo "$SKIP_NO_REASON" | head -3; exit 1; }
     log_success "All pytest.mark.skip have reason comments"
 fi
@@ -200,7 +202,7 @@ if [ "$SKIP_TYPECHECK" != "true" ]; then
     fi
     export BASEDPYRIGHT_CACHE_DIR="${TMPDIR:-/tmp}/basedpyright-cache/${SERVICE_NAME:-$(basename "$PWD")}"
     mkdir -p "$BASEDPYRIGHT_CACHE_DIR"
-    PYRIGHT_OUT=$(basedpyright "$SOURCE_DIR/" 2>&1); PYRIGHT_EXIT=$?
+    PYRIGHT_OUT=$(run_timeout 120 basedpyright "$SOURCE_DIR/" 2>&1); PYRIGHT_EXIT=$?
     if [ "$PYRIGHT_EXIT" -ne 0 ]; then echo "$PYRIGHT_OUT"; log_fail "Type check FAILED/timeout"; exit 1; fi
     WARN_COUNT=$(echo "$PYRIGHT_OUT" | grep -c " warning:" || :)
     if [ "${WARN_COUNT:-0}" -gt 0 ]; then
@@ -426,7 +428,7 @@ fi
 
 # CI/CD hygiene: ||true bypasses in quality gate scripts
 BYPASS=$(rg "\|\|true|\|\| true" --glob "**/quality-gates.sh" --glob "**/quality-gates.yml" . 2>/dev/null \
-    | grep -v "^#\|zombies\|pyright\|cleanup\|BYPASS\|log_fail\|log_success\|: *#" || :)
+    | grep -v "^#\|zombies\|pyright\|cleanup" || :)
 [[ -n "$BYPASS" ]] && { log_fail "||true bypass in quality gates — fix the root cause"; echo "$BYPASS" | head -3; ((V++)); } || log_success "No ||true quality gate bypasses"
 
 # ============================================================
@@ -584,6 +586,6 @@ VSCRIPT="${REPO_ROOT}/unified-trading-codex/scripts/run-all-validators.sh"
 
 # ── DURATION CHECK (<2 min) ───────────────────────────────────────────────────
 QG_END=$(date +%s); DUR=$((QG_END - QG_START))
-[ $DUR -gt 300 ] && { log_fail "Quality gates must complete in <5 min (took ${DUR}s)"; exit 1; }
+[ $DUR -gt 120 ] && { log_fail "Quality gates must complete in <2 min (took ${DUR}s)"; exit 1; }
 echo -e "\n${GREEN}======================================================================"
 echo -e "✅ ALL QUALITY GATES PASSED (${DUR}s)${NC}"
