@@ -25,7 +25,9 @@ _RequestResponseEndpoint = Callable[[Request], Awaitable[StarletteResponse]]
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     """Propagate or generate X-Correlation-ID for every request."""
 
-    async def dispatch(self, request: Request, call_next: _RequestResponseEndpoint) -> StarletteResponse:
+    async def dispatch(
+        self, request: Request, call_next: _RequestResponseEndpoint
+    ) -> StarletteResponse:
         correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
         request.state.correlation_id = correlation_id
         response = await call_next(request)
