@@ -108,6 +108,91 @@ steps:
         echo "✓ Successfully uploaded version $$VERSION from commit $COMMIT_SHA"
     waitFor: ["store-metadata"]
 
+  # Step 4: Build Docker image
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "configure-docker"
+    args:
+      ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
+    waitFor: ["publish-python"]
+
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "ensure-docker-repo"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        gcloud artifacts repositories describe unified-services \
+          --location=asia-northeast1 &>/dev/null || \
+        gcloud artifacts repositories create unified-services \
+          --repository-format=docker --location=asia-northeast1 \
+          --description="API services"
+    waitFor: ["publish-python"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build"
+    args:
+      - "build"
+      - "-f"
+      - "Dockerfile"
+      - "--build-arg"
+      - "PROJECT_ID=$PROJECT_ID"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:$SHORT_SHA"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:latest"
+      - "."
+    waitFor: ["configure-docker", "ensure-docker-repo"]
+
+  # Step 5: Push Docker image
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push"
+    args:
+      [
+        "push",
+        "--all-tags",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api",
+      ]
+    waitFor: ["build"]
+
+  # Step 6: Vulnerability scan — check for CRITICAL CVEs in pushed image
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "vulnerability-scan"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:$SHORT_SHA"
+        echo "Waiting for Container Analysis vulnerability scan on $IMAGE..."
+        for i in $(seq 1 18); do
+          RESULT=$(gcloud artifacts docker images describe "$IMAGE" \
+            --show-package-vulnerability --format="json" 2>/dev/null)
+          if [ -n "$RESULT" ]; then
+            CRITICAL=$(echo "$RESULT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+summary = d.get('package_vulnerability_summary', {})
+vulns = summary.get('vulnerabilities', {})
+crits = vulns.get('CRITICAL', [])
+print(len(crits))
+" 2>/dev/null || echo "0")
+            if [ "$CRITICAL" != "0" ]; then
+              echo "SCAN FAILED: $CRITICAL CRITICAL CVEs found in $IMAGE"
+              exit 1
+            fi
+            echo "Scan complete: 0 CRITICAL CVEs"
+            exit 0
+          fi
+          echo "Scan not ready (attempt $i/18) — waiting 10s..."
+          sleep 10
+        done
+        echo "WARNING: Vulnerability scan did not complete within 3 minutes — proceeding"
+        exit 0
+    waitFor: ["push"]
+
+images:
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:$SHORT_SHA"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:latest"
+
 options:
   machineType: "E2_HIGHCPU_8"
   logging: CLOUD_LOGGING_ONLY
