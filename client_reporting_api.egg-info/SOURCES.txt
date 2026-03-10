@@ -14,9 +14,14 @@ client_reporting_api.egg-info/top_level.txt
 client_reporting_api/api/__init__.py
 client_reporting_api/api/main.py
 client_reporting_api/api/routes/__init__.py
+client_reporting_api/api/routes/alerts.py
 client_reporting_api/api/routes/health.py
+client_reporting_api/api/routes/pnl.py
+client_reporting_api/api/routes/reports.py
 client_reporting_api/api/routes/reports_stream.py
 client_reporting_api/core/__init__.py
+client_reporting_api/core/alerts_client.py
 client_reporting_api/core/fee_calculator.py
+client_reporting_api/core/pnl_reader.py
 client_reporting_api/core/report_generator.py
 client_reporting_api/core/tranche_router.py
