@@ -4,7 +4,7 @@ import uvicorn
 from unified_events_interface import setup_events
 from unified_trading_library import PubSubEventSink, setup_tracing
 
-from client_reporting_api.auth import _auth_cfg
+from client_reporting_api.auth import auth_cfg as _auth_cfg
 
 logger = logging.getLogger(__name__)
 

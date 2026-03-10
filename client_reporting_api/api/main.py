@@ -11,9 +11,13 @@ from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
 
+from client_reporting_api.api.routes.alerts import router as alerts_router
 from client_reporting_api.api.routes.health import router as health_router
+from client_reporting_api.api.routes.pnl import router as pnl_router
+from client_reporting_api.api.routes.reports import router as reports_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
-from client_reporting_api.auth import _auth_cfg, verify_api_key
+from client_reporting_api.auth import auth_cfg as _auth_cfg
+from client_reporting_api.auth import verify_api_key
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
 logger = logging.getLogger(__name__)
@@ -83,6 +87,9 @@ app.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
 # For now, apply auth as a global dependency since all non-health routes should
 # be protected. New route routers should be added to the authenticated router above.
 _authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
+_authenticated_router.include_router(reports_router)
+_authenticated_router.include_router(pnl_router)
+_authenticated_router.include_router(alerts_router)
 app.include_router(_authenticated_router)
 
 
