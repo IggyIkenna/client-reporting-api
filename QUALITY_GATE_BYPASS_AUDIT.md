@@ -54,7 +54,7 @@ The `/metrics` endpoint currently returns an empty plaintext response as a place
 
 ## 2.4 Coverage (temporary)
 
-MIN_COVERAGE set to 18 in scripts/quality-gates.sh until unit tests for api/main, core/*, and routes are expanded. Target: 70%. Current: ~19%.. Remove this bypass when coverage reaches 70%.
+MIN_COVERAGE set to 18 in scripts/quality-gates.sh until unit tests for api/main, core/\*, and routes are expanded. Target: 70%. Current: ~19%.. Remove this bypass when coverage reaches 70%.
 
 ## 2.5 Bandit (temporary)
 
