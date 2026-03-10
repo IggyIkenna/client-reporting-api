@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-
 
 # ---------------------------------------------------------------------------
 # Production guard: DISABLE_AUTH=true in production is forbidden
@@ -143,6 +141,5 @@ def test_verify_oauth2_token_sync_propagates_error() -> None:
     with patch(
         "client_reporting_api._google_auth_sync.id_token.verify_oauth2_token",
         side_effect=GoogleAuthError("invalid token"),
-    ):
-        with pytest.raises(GoogleAuthError):
-            verify_oauth2_token_sync("bad-token", mock_http, "test-client-id")
+    ), pytest.raises(GoogleAuthError):
+        verify_oauth2_token_sync("bad-token", mock_http, "test-client-id")
