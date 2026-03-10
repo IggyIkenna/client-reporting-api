@@ -100,8 +100,7 @@ jobs:
           == 'major'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          PR_BODY:
-            "Breaking dependency update dispatched by
+          PR_BODY: "Breaking dependency update dispatched by
             unified-trading-pm.\n\n**Dependency:** `${{
             steps.update.outputs.dep_name }}`\n**New version:** `${{
             steps.update.outputs.dep_version }}`\n**Constraint:** `${{
