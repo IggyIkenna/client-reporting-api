@@ -22,7 +22,11 @@ steps:
       - |
         pip install uv
         uv pip install --system -e ".[dev]"
-        python -m pytest tests/ -v --tb=short
+        python -m pytest tests/ -v --tb=short \
+          --cov=client_reporting_api \
+          --cov-fail-under=85 \
+          --cov-report=xml \
+          --cov-report=term-missing
     waitFor: ["lint"]
 
   # Step 2: Build Python package (wheel)
