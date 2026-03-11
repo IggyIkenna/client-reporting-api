@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pandas as pd
 from unified_cloud_interface import DataSource, get_data_source
@@ -60,7 +61,7 @@ def generate_pnl_report(
             "rows": [],
         }
 
-    records: list[dict[str, object]] = df.to_dict(orient="records")  # type: ignore[assignment]
+    records = cast(list[dict[str, object]], df.to_dict(orient="records"))
     return {
         "status": "ok",
         "client_id": client_id,
