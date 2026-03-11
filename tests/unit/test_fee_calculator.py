@@ -17,7 +17,7 @@ def calculator() -> FeeCalculator:
 
 @pytest.fixture()
 def basic_fee_structure() -> FeeStructure:
-    return FeeStructure(trader_fee_pct=0.20, odum_fee_pct=0.05)
+    return FeeStructure(trader_fee_pct=Decimal("0.20"), odum_fee_pct=Decimal("0.05"))
 
 
 def test_no_pnl_above_hwm_zero_fees(
@@ -78,9 +78,9 @@ def test_pnl_above_odum_hwm_charges_odum_fee(
 def test_introducer_fee_calculated_when_configured(calculator: FeeCalculator) -> None:
     """Introducer fee is a fraction of odum fee when introducer is configured."""
     fee_structure = FeeStructure(
-        trader_fee_pct=0.20,
-        odum_fee_pct=0.10,
-        introducer_fee_pct=0.50,
+        trader_fee_pct=Decimal("0.20"),
+        odum_fee_pct=Decimal("0.10"),
+        introducer_fee_pct=Decimal("0.50"),
         introducer_id="intro-1",
     )
     _, odum_fee, introducer_fee, _ = calculator.calculate_period_fees(
@@ -99,9 +99,9 @@ def test_introducer_fee_calculated_when_configured(calculator: FeeCalculator) ->
 def test_no_introducer_fee_without_introducer_id(calculator: FeeCalculator) -> None:
     """Introducer fee is zero when introducer_id is not set."""
     fee_structure = FeeStructure(
-        trader_fee_pct=0.20,
-        odum_fee_pct=0.10,
-        introducer_fee_pct=0.50,
+        trader_fee_pct=Decimal("0.20"),
+        odum_fee_pct=Decimal("0.10"),
+        introducer_fee_pct=Decimal("0.50"),
         introducer_id=None,  # No introducer id
     )
     _, _, introducer_fee, _ = calculator.calculate_period_fees(
