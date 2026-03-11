@@ -52,9 +52,7 @@ def test_main_module_name_guard() -> None:
     import ast
     from pathlib import Path
 
-    source = (
-        Path(__file__).parent.parent.parent / "client_reporting_api" / "main.py"
-    ).read_text()
+    source = (Path(__file__).parent.parent.parent / "client_reporting_api" / "main.py").read_text()
     tree = ast.parse(source)
     # Check that if __name__ == "__main__": main() exists
     found = False
