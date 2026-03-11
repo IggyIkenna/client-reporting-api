@@ -174,8 +174,8 @@ def test_verify_service_token_missing_raises_401() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_production_guard_disables_auth_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When DISABLE_AUTH=true and environment=production, auth must remain ENABLED."""
+def test_production_guard_raises_on_disable_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When DISABLE_AUTH=true and environment=production, service must raise RuntimeError."""
     mock_cfg = MagicMock()
     mock_cfg.disable_auth = True
     mock_cfg.environment = "production"
@@ -192,14 +192,12 @@ def test_production_guard_disables_auth_override(monkeypatch: pytest.MonkeyPatch
         patch("unified_events_interface.setup_events"),
         patch("unified_events_interface.log_event"),
         patch("client_reporting_api._google_auth_sync.make_http_request", return_value=MagicMock()),
+        pytest.raises(RuntimeError, match="DISABLE_AUTH=true is forbidden in production"),
     ):
-        import client_reporting_api.auth as auth_mod
+        import client_reporting_api.auth  # noqa: F401
 
-    # Guard must have forced DISABLE_AUTH to False in production
-    assert auth_mod.DISABLE_AUTH is False
-
-    # Cleanup: remove the freshly-imported module so it doesn't pollute other tests
-    del sys.modules["client_reporting_api.auth"]
+    # Cleanup: remove the partially-imported module so it doesn't pollute other tests
+    sys.modules.pop("client_reporting_api.auth", None)
 
 
 # ---------------------------------------------------------------------------
