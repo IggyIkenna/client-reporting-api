@@ -24,8 +24,7 @@ on:
         required: true
         type: string
       reason:
-        description:
-          "Why this is a MAJOR bump (e.g. removed /v1/orders endpoint)"
+        description: "Why this is a MAJOR bump (e.g. removed /v1/orders endpoint)"
         required: true
         type: string
       approver:
