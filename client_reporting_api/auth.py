@@ -33,13 +33,17 @@ auth_cfg = _auth_cfg  # public alias for cross-module access
 _disable_auth_raw = _auth_cfg.disable_auth
 _environment = _auth_cfg.environment
 if _disable_auth_raw and _environment == "production":
-    logging.getLogger(__name__).critical(
-        "DISABLE_AUTH=true is forbidden in production. Auth remains ENABLED."
+    log_event(
+        "AUTH_MISCONFIGURED",
+        severity="CRITICAL",
+        details={"reason": "DISABLE_AUTH_in_production", "environment": _environment},
     )
-    _effective_disable_auth: bool = False
-else:
-    _effective_disable_auth = _disable_auth_raw
-DISABLE_AUTH: bool = _effective_disable_auth
+    raise RuntimeError(
+        "DISABLE_AUTH=true is forbidden in production. "
+        "Service refuses to start with auth disabled. "
+        "Unset DISABLE_AUTH or set ENVIRONMENT != production."
+    )
+DISABLE_AUTH: bool = _disable_auth_raw
 
 # ---------------------------------------------------------------------------
 # API key authentication (primary auth gate)
