@@ -62,4 +62,3 @@
 # **/.terraform/
 # **/*.tfstate
 # **/*.tfstate.*
-htmlcov/

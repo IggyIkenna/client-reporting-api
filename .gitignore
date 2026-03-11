@@ -44,7 +44,7 @@ __pycache__/
 .mypy_cache/
 .hypothesis/
 .ruff_cache/
-.cache
+.cache/
 *.egg-info/
 .eggs/
 *.egg
@@ -89,6 +89,7 @@ logs/
 *.log
 
 # --- Common data / document file types (generated or local, not for git) ---
+# Uncomment or add !tests/fixtures/*.csv if the repo commits CSV fixtures
 *.csv
 *.xlsx
 *.xls
