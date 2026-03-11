@@ -27,11 +27,15 @@ class TestClientReportingApiStartup:
 
     def test_import_package(self) -> None:
         """Package import must succeed."""
-        import client_reporting_api  # noqa: F401
+        import client_reporting_api
+
+        assert client_reporting_api.__name__ == "client_reporting_api"
 
     def test_import_auth_module(self) -> None:
         """auth.py must import cleanly."""
-        import client_reporting_api.auth  # noqa: F401
+        import client_reporting_api.auth
+
+        assert client_reporting_api.auth.__name__ == "client_reporting_api.auth"
 
     def test_verify_service_token_exists(self) -> None:
         """verify_service_token must be exported from auth module."""
