@@ -1,9 +1,6 @@
 [build-system]
-requires = [
-    "setuptools>=75,<82",
-    "wheel",
-]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "client-reporting-api"
@@ -23,7 +20,7 @@ dependencies = [
     "google-auth>=2.40.0,<3.0.0",
     "pyyaml>=6.0.1,<7.0.0",
     "unified-internal-contracts>=0.1.0,<1.0.0",
-    "unified-cloud-interface[gcp]>=0.11.0,<1.0.0",
+    "unified-cloud-interface>=0.11.0,<1.0.0",
     "unified-trading-library>=0.3.0,<1.0.0",
     "unified-config-interface>=0.1.0,<1.0.0",
     "unified-events-interface>=0.1.0,<1.0.0",
@@ -69,11 +66,6 @@ editable = true
 [tool.uv.sources.unified-events-interface]
 path = "../unified-events-interface"
 editable = true
-
-[tool.setuptools.packages.find]
-include = [
-    "client_reporting_api*",
-]
 
 [tool.ruff]
 line-length = 100
