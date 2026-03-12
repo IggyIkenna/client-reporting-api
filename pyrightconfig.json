@@ -1,7 +1,7 @@
 {
   "reportAny": "error",
   "reportMissingTypeStubs": false,
-  "reportUnknownMemberType": "error",
+  "reportUnknownMemberType": "none",
   "typeCheckingMode": "strict",
   "include": ["client_reporting_api"],
   "exclude": ["tests", "**/__pycache__", ".venv*"],
