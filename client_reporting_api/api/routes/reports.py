@@ -6,11 +6,15 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from unified_config_interface import UnifiedCloudConfig
 
 from client_reporting_api.core.pnl_reader import generate_pnl_report
+from client_reporting_api.mock_data import MOCK_GENERATE_RESPONSE
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+_cloud_cfg = UnifiedCloudConfig()
 
 
 class GenerateReportRequest(
@@ -20,6 +24,21 @@ class GenerateReportRequest(
     period_month: str  # "YYYY-MM"
 
 
+@router.get("")
+def list_reports() -> list[dict[str, object]]:
+    """List available reports.
+
+    In mock mode returns seed + mutated reports (performance, risk, compliance types).
+    In live mode reads from GCS report metadata.
+    """
+    if _cloud_cfg.cloud_mock_mode:
+        from client_reporting_api.mock_state import get_store
+
+        return get_store().list("reports")
+    # GCS_READER stub — full implementation reads report metadata from GCS
+    return []
+
+
 @router.post("/generate")
 def generate_report(request: GenerateReportRequest) -> dict[str, object]:
     """Generate a PnL attribution report for a client/period.
@@ -27,6 +46,20 @@ def generate_report(request: GenerateReportRequest) -> dict[str, object]:
     Reads Parquet files from GCS at pnl/{period_month}/{client_id}/ and
     returns a structured report payload.
     """
+    if _cloud_cfg.cloud_mock_mode:
+        import uuid
+
+        from client_reporting_api.mock_state import get_store
+
+        new_report: dict[str, object] = {
+            **MOCK_GENERATE_RESPONSE,
+            "client_id": request.client_id,
+            "period_month": request.period_month,
+            "report_id": f"RPT-{uuid.uuid4().hex[:8].upper()}",
+        }
+        new_report["id"] = new_report["report_id"]
+        get_store().create("reports", new_report)
+        return new_report
     logger.info(
         "generate_report: client_id=%s period_month=%s",
         request.client_id,

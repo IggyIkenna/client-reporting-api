@@ -1,136 +1,61 @@
-# Cloud Build Configuration for Library Publishing
-# Libraries don't need Docker images - just lint, build wheel, and publish
+# Cloud Build Template — Unified Trading System API Services
+#
+# API variant: NO pull-base-image (APIs use slimmer base, no UTL dependency).
+# Generated from PM template. Placeholders: client-reporting-api, unified-trading-system.
+#
+# Required step IDs:
+#   - configure-docker, ensure-repo, build, quality-gates, push, scan-check
+#
+# Add "# deploy-via-dispatch" after title if deploy_via_dispatch: true in manifest.
+#
+# Variable conventions:
+#   client-reporting-api   — e.g. batch-audit-api
+#   unified-trading-system  — e.g. unified-trading-system
+
+substitutions:
+  _SERVICE_NAME: "client-reporting-api"
+  _REGISTRY_REPO: "unified-trading-system"
 
 steps:
-  # Step 1: Run lint check
-  - name: "python:3.13-slim"
-    id: "lint"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        uv pip install ruff==0.15.0
-        ruff check .
-        ruff format --check .
-
-  # Step 1.5: Run tests
-  - name: "python:3.13-slim"
-    id: "run-tests"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        pip install uv
-        uv pip install --system -e ".[dev]"
-        python -m pytest tests/ -v --tb=short \
-          --cov=client_reporting_api \
-          --cov-fail-under=85 \
-          --cov-report=xml \
-          --cov-report=term-missing
-    waitFor: ["lint"]
-
-  # Step 2: Build Python package (wheel)
-  - name: "python:3.13-slim"
-    id: "build-wheel"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        pip install uv build
-        python -m build --wheel --outdir dist/
-        ls -lh dist/
-    waitFor: ["run-tests"]
-
-  # Step 2.5: Store build metadata (version -> commit mapping)
+steps:
+  # ── Auth pre-check: fail fast if SA lacks AR access ─
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
-    id: "store-metadata"
+    id: "auth-precheck"
     entrypoint: "bash"
     args:
       - "-c"
       - |
         set -e
-        apk add --no-cache python3
+        TOKEN=$$(gcloud auth print-access-token) || { echo "FAIL: No GCP token"; exit 1; }
+        STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $$TOKEN" "https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" || echo "000")
+        if [ "$$STATUS" != "200" ] && [ "$$STATUS" != "404" ]; then echo "FAIL: Python AR $$STATUS"; exit 1; fi
+        gcloud artifacts repositories describe unified-trading-system --location=asia-northeast1 --quiet || { echo "FAIL: Docker AR"; exit 1; }
+        echo "Auth pre-check passed"
+    waitFor: ["-"]
 
-        WHEEL_FILE=$$(ls dist/*.whl)
-        VERSION=$$(echo $$WHEEL_FILE | sed -n 's/.*-\([0-9.]*\)-.*/\1/p')
-
-        echo "{\"version\":\"$$VERSION\",\"commit\":\"$COMMIT_SHA\",\"short_sha\":\"$SHORT_SHA\",\"build_id\":\"$BUILD_ID\",\"timestamp\":\"$$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /tmp/build-metadata.json
-
-        gsutil cp /tmp/build-metadata.json \
-          gs://$PROJECT_ID-build-metadata/client-reporting-api/versions/$$VERSION.json || true  # || true: cleanup step, failure is intentional (metadata storage non-blocking)
-
-        echo "✓ Stored build metadata for version $$VERSION"
-    waitFor: ["build-wheel"]
-
-  # Step 3: Publish Python package to Artifact Registry with version validation
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
-    id: "publish-python"
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |
-        set -e
-        apk add --no-cache python3 py3-pip jq
-        pip3 install --break-system-packages twine keyrings.google-artifactregistry-auth
-
-        WHEEL_FILE=$$(ls dist/*.whl)
-        VERSION=$$(echo $$WHEEL_FILE | sed -n 's/.*-\([0-9.]*\)-.*/\1/p')
-
-        # Check if version exists
-        EXISTING_VERSIONS=$$(gcloud artifacts versions list \
-          --package=client-reporting-api \
-          --repository=unified-libraries \
-          --location=asia-northeast1 \
-          --format="value(VERSION)" 2>/dev/null || echo "")
-
-        if echo "$$EXISTING_VERSIONS" | grep -qx "$$VERSION"; then
-          if gsutil cp gs://$PROJECT_ID-build-metadata/client-reporting-api/versions/$$VERSION.json /tmp/existing-metadata.json 2>/dev/null; then
-            EXISTING_COMMIT=$$(jq -r '.commit' /tmp/existing-metadata.json)
-
-            if [ "$$EXISTING_COMMIT" = "$COMMIT_SHA" ]; then
-              echo "✓ Version $$VERSION already published from commit $COMMIT_SHA (idempotent)"
-              exit 0
-            else
-              echo "❌ ERROR: Version $$VERSION exists with DIFFERENT code!"
-              echo "Current commit: $COMMIT_SHA"
-              echo "Published commit: $$EXISTING_COMMIT"
-              echo "Action: Bump version in pyproject.toml"
-              exit 1
-            fi
-          else
-            echo "⚠️ Version $$VERSION exists but no metadata. Bump version to be safe."
-            exit 1
-          fi
-        fi
-
-        # Version doesn't exist - publish
-        python3 -m twine upload \
-          --repository-url https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/ \
-          --non-interactive \
-          dist/*.whl
-
-        echo "✓ Successfully uploaded version $$VERSION from commit $COMMIT_SHA"
-    waitFor: ["store-metadata"]
-
-  # Step 4: Build Docker image
+  # ── STEP 1: Configure Docker authentication ───────────────────────────────
   - name: "gcr.io/cloud-builders/gcloud"
     id: "configure-docker"
     args:
       ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
-    waitFor: ["publish-python"]
+    waitFor: ["-"]
 
   - name: "gcr.io/cloud-builders/gcloud"
-    id: "ensure-docker-repo"
+    id: "ensure-repo"
     entrypoint: "bash"
     args:
       - "-c"
       - |
-        gcloud artifacts repositories describe unified-services \
+        gcloud artifacts repositories describe ${_REGISTRY_REPO} \
           --location=asia-northeast1 &>/dev/null || \
-        gcloud artifacts repositories create unified-services \
-          --repository-format=docker --location=asia-northeast1 \
-          --description="API services"
-    waitFor: ["publish-python"]
+        gcloud artifacts repositories create ${_REGISTRY_REPO} \
+          --repository-format=docker \
+          --location=asia-northeast1 \
+          --description="${_SERVICE_NAME} Docker images"
+        gcloud artifacts repositories update ${_REGISTRY_REPO} \
+          --location=asia-northeast1 \
+          --enable-vulnerability-scanning 2>/dev/null || true
+    waitFor: ["-"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "build"
@@ -138,60 +63,72 @@ steps:
       - "build"
       - "-f"
       - "Dockerfile"
-      - "--build-arg"
-      - "PROJECT_ID=$PROJECT_ID"
       - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:$SHORT_SHA"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
       - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:latest"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
       - "."
-    waitFor: ["configure-docker", "ensure-docker-repo"]
+    waitFor: ["configure-docker", "ensure-repo"]
 
-  # Step 5: Push Docker image
+  - name: "gcr.io/cloud-builders/docker"
+    id: "quality-gates"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        docker run --rm \
+          --entrypoint "" \
+          -e CLOUD_BUILD=true \
+          -e CLOUD_MOCK_MODE=true \
+          -e GCP_PROJECT_ID=$PROJECT_ID \
+          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
+          /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
+    waitFor: ["build"]
+
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
     args:
       [
         "push",
         "--all-tags",
-        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}",
       ]
-    waitFor: ["build"]
+    waitFor: ["quality-gates"]
 
-  # Step 6: Vulnerability scan — check for CRITICAL CVEs in pushed image
   - name: "gcr.io/cloud-builders/gcloud"
-    id: "vulnerability-scan"
+    id: "scan-check"
     entrypoint: "bash"
     args:
       - "-c"
       - |
-        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:$SHORT_SHA"
-        echo "Waiting for Container Analysis vulnerability scan on $IMAGE..."
+        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
+        echo "Waiting for Container Analysis vulnerability scan on $$IMAGE..."
         for i in $(seq 1 18); do
-          RESULT=$(gcloud artifacts docker images describe "$IMAGE" \
+          RESULT=$(gcloud artifacts docker images describe "$$IMAGE" \
             --show-package-vulnerability --format="json" 2>/dev/null)
-          if [ -n "$RESULT" ]; then
-            CRITICAL=$(echo "$RESULT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d.get('package_vulnerability_summary',{}).get('vulnerabilities',{}).get('CRITICAL',[])))" 2>/dev/null || echo "0")
-            if [ "$CRITICAL" != "0" ]; then
-              echo "SCAN FAILED: $CRITICAL CRITICAL CVEs found in $IMAGE"
+          if [ -n "$$RESULT" ]; then
+            CRITICAL=$(echo "$$RESULT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d.get('package_vulnerability_summary',{}).get('vulnerabilities',{}).get('CRITICAL',[])))" 2>/dev/null || echo "0")
+            if [ "$$CRITICAL" != "0" ]; then
+              echo "SCAN FAILED: $$CRITICAL CRITICAL CVEs found in $$IMAGE"
               exit 1
             fi
             echo "Scan complete: 0 CRITICAL CVEs"
             exit 0
           fi
-          echo "Scan not ready (attempt $i/18) — waiting 10s..."
+          echo "Scan not ready (attempt $$i/18) — waiting 10s..."
           sleep 10
         done
-        echo "WARNING: Vulnerability scan did not complete within 3 minutes — proceeding"
+        echo "WARNING: Vulnerability scan timed out — proceeding"
         exit 0
     waitFor: ["push"]
 
 images:
-  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:$SHORT_SHA"
-  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-services/client-reporting-api:latest"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
 
 options:
-  machineType: "E2_HIGHCPU_8"
   logging: CLOUD_LOGGING_ONLY
+  machineType: "E2_HIGHCPU_8"
 
 timeout: "600s"
