@@ -8,7 +8,7 @@ router = APIRouter()
 _cloud_cfg = UnifiedCloudConfig()
 
 
-def _data_freshness() -> dict[str, str | bool]:
+def _data_freshness() -> dict[str, object]:
     """Return data freshness info for health endpoint.
 
     Placeholder — real implementation would check actual data timestamps.
@@ -20,7 +20,7 @@ def _data_freshness() -> dict[str, str | bool]:
 
 
 @router.get("/health")
-async def health() -> dict[str, str | bool]:
+async def health() -> dict[str, object]:
     return {
         "status": "ok",
         "service": "client-reporting-api",
