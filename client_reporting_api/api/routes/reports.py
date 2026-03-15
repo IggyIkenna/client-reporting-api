@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from unified_config_interface import UnifiedCloudConfig
 
 from client_reporting_api.core.pnl_reader import generate_pnl_report
 from client_reporting_api.mock_data import MOCK_GENERATE_RESPONSE
+from client_reporting_api.mock_state import get_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -32,8 +34,6 @@ def list_reports() -> list[dict[str, object]]:
     In live mode reads from GCS report metadata.
     """
     if _cloud_cfg.cloud_mock_mode:
-        from client_reporting_api.mock_state import get_store
-
         return get_store().list("reports")
     # GCS_READER stub — full implementation reads report metadata from GCS
     return []
@@ -47,10 +47,6 @@ def generate_report(request: GenerateReportRequest) -> dict[str, object]:
     returns a structured report payload.
     """
     if _cloud_cfg.cloud_mock_mode:
-        import uuid
-
-        from client_reporting_api.mock_state import get_store
-
         new_report: dict[str, object] = {
             **MOCK_GENERATE_RESPONSE,
             "client_id": request.client_id,

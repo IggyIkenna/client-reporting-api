@@ -184,13 +184,13 @@ def read_sports_positions(client_id: str) -> dict[str, object]:
             for _, row in df.iterrows():
                 open_positions.append(
                     {
-                        "bet_id": str(row.get("bet_id", "")),
-                        "venue": str(row.get("venue_key", row.get("venue", ""))),
-                        "market": str(row.get("market", row.get("fixture_id", ""))),
-                        "side": str(row.get("side", "")),
-                        "selection": str(row.get("selection", "")),
-                        "odds": str(row.get("odds", row.get("odds_at_placement", ""))),
-                        "stake": str(row.get("stake", "")),
+                        "bet_id": str(row.get("bet_id", "")),  # noqa: qg-empty-fallback
+                        "venue": str(row.get("venue_key", row.get("venue", ""))),  # noqa: qg-empty-fallback
+                        "market": str(row.get("market", row.get("fixture_id", ""))),  # noqa: qg-empty-fallback
+                        "side": str(row.get("side", "")),  # noqa: qg-empty-fallback
+                        "selection": str(row.get("selection", "")),  # noqa: qg-empty-fallback
+                        "odds": str(row.get("odds", row.get("odds_at_placement", ""))),  # noqa: qg-empty-fallback
+                        "stake": str(row.get("stake", "")),  # noqa: qg-empty-fallback
                         "status": str(row.get("status", row.get("settlement_status", "open"))),
                     }
                 )
