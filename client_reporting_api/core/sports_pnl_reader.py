@@ -39,38 +39,54 @@ def _read_sports_dataframe(prefix: str) -> pd.DataFrame:
 def generate_sports_pnl_report(client_id: str, period_month: str) -> dict[str, object]:
     """Sports P&L breakdown by venue and strategy from GCS Parquet data."""
     prefix = f"pnl/sports/{period_month}/{client_id}/"
-    logger.info("Generating sports PnL: client=%s period=%s prefix=%s", client_id, period_month, prefix)
+    logger.info(
+        "Generating sports PnL: client=%s period=%s prefix=%s", client_id, period_month, prefix
+    )
 
     df = _read_sports_dataframe(prefix)
     if df.empty:
         return {"status": "no_data", "client_id": client_id, "period_month": period_month}
 
-    total_pnl = Decimal(str(df["profit_loss"].sum())) if "profit_loss" in df.columns else Decimal("0")
+    total_pnl = (
+        Decimal(str(df["profit_loss"].sum())) if "profit_loss" in df.columns else Decimal("0")
+    )
     total_stake = Decimal(str(df["stake"].sum())) if "stake" in df.columns else Decimal("0")
     roi_pct = (total_pnl / total_stake * 100) if total_stake > 0 else Decimal("0")
 
     by_venue: list[dict[str, object]] = []
     if "venue_key" in df.columns:
         for venue, grp in df.groupby("venue_key"):
-            v_pnl = Decimal(str(grp["profit_loss"].sum())) if "profit_loss" in grp.columns else Decimal("0")
+            v_pnl = (
+                Decimal(str(grp["profit_loss"].sum()))
+                if "profit_loss" in grp.columns
+                else Decimal("0")
+            )
             v_stake = Decimal(str(grp["stake"].sum())) if "stake" in grp.columns else Decimal("0")
-            by_venue.append({
-                "venue": str(venue),
-                "pnl": str(v_pnl),
-                "volume": str(v_stake),
-                "bets": len(grp),
-                "roi_pct": str((v_pnl / v_stake * 100) if v_stake > 0 else Decimal("0")),
-            })
+            by_venue.append(
+                {
+                    "venue": str(venue),
+                    "pnl": str(v_pnl),
+                    "volume": str(v_stake),
+                    "bets": len(grp),
+                    "roi_pct": str((v_pnl / v_stake * 100) if v_stake > 0 else Decimal("0")),
+                }
+            )
 
     by_strategy: list[dict[str, object]] = []
     if "strategy_id" in df.columns:
         for strat, grp in df.groupby("strategy_id"):
-            s_pnl = Decimal(str(grp["profit_loss"].sum())) if "profit_loss" in grp.columns else Decimal("0")
-            by_strategy.append({
-                "strategy": str(strat),
-                "pnl": str(s_pnl),
-                "bets": len(grp),
-            })
+            s_pnl = (
+                Decimal(str(grp["profit_loss"].sum()))
+                if "profit_loss" in grp.columns
+                else Decimal("0")
+            )
+            by_strategy.append(
+                {
+                    "strategy": str(strat),
+                    "pnl": str(s_pnl),
+                    "bets": len(grp),
+                }
+            )
 
     return {
         "status": "ok",
@@ -102,11 +118,13 @@ def generate_clv_report(client_id: str, period_month: str) -> dict[str, object]:
     by_venue: list[dict[str, object]] = []
     if "venue_key" in with_clv.columns:
         for venue, grp in with_clv.groupby("venue_key"):
-            by_venue.append({
-                "venue": str(venue),
-                "avg_clv": str(Decimal(str(grp["clv_edge_pct"].mean()))),
-                "bets": len(grp),
-            })
+            by_venue.append(
+                {
+                    "venue": str(venue),
+                    "avg_clv": str(Decimal(str(grp["clv_edge_pct"].mean()))),
+                    "bets": len(grp),
+                }
+            )
 
     return {
         "status": "ok",
@@ -129,15 +147,21 @@ def generate_venue_performance_report(client_id: str) -> dict[str, object]:
     venues: list[dict[str, object]] = []
     if "venue_key" in df.columns:
         for venue, grp in df.groupby("venue_key"):
-            v_pnl = Decimal(str(grp["profit_loss"].sum())) if "profit_loss" in grp.columns else Decimal("0")
+            v_pnl = (
+                Decimal(str(grp["profit_loss"].sum()))
+                if "profit_loss" in grp.columns
+                else Decimal("0")
+            )
             v_stake = Decimal(str(grp["stake"].sum())) if "stake" in grp.columns else Decimal("0")
-            venues.append({
-                "venue": str(venue),
-                "status": "active",
-                "total_volume": str(v_stake),
-                "roi_pct": str((v_pnl / v_stake * 100) if v_stake > 0 else Decimal("0")),
-                "total_bets": len(grp),
-            })
+            venues.append(
+                {
+                    "venue": str(venue),
+                    "status": "active",
+                    "total_volume": str(v_stake),
+                    "roi_pct": str((v_pnl / v_stake * 100) if v_stake > 0 else Decimal("0")),
+                    "total_bets": len(grp),
+                }
+            )
 
     return {"status": "ok", "client_id": client_id, "venues": venues}
 
@@ -158,17 +182,21 @@ def read_sports_positions(client_id: str) -> dict[str, object]:
             df = result
             open_positions = []
             for _, row in df.iterrows():
-                open_positions.append({
-                    "bet_id": str(row.get("bet_id", "")),
-                    "venue": str(row.get("venue_key", row.get("venue", ""))),
-                    "market": str(row.get("market", row.get("fixture_id", ""))),
-                    "side": str(row.get("side", "")),
-                    "selection": str(row.get("selection", "")),
-                    "odds": str(row.get("odds", row.get("odds_at_placement", ""))),
-                    "stake": str(row.get("stake", "")),
-                    "status": str(row.get("status", row.get("settlement_status", "open"))),
-                })
-            total_exposure = Decimal(str(df["stake"].sum())) if "stake" in df.columns else Decimal("0")
+                open_positions.append(
+                    {
+                        "bet_id": str(row.get("bet_id", "")),
+                        "venue": str(row.get("venue_key", row.get("venue", ""))),
+                        "market": str(row.get("market", row.get("fixture_id", ""))),
+                        "side": str(row.get("side", "")),
+                        "selection": str(row.get("selection", "")),
+                        "odds": str(row.get("odds", row.get("odds_at_placement", ""))),
+                        "stake": str(row.get("stake", "")),
+                        "status": str(row.get("status", row.get("settlement_status", "open"))),
+                    }
+                )
+            total_exposure = (
+                Decimal(str(df["stake"].sum())) if "stake" in df.columns else Decimal("0")
+            )
             return {
                 "status": "ok",
                 "client_id": client_id,

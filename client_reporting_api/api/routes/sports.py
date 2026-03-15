@@ -214,6 +214,7 @@ def get_sports_pnl(
         return {**MOCK_SPORTS_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_pnl: client_id=%s period_month=%s", client_id, period_month)
     from client_reporting_api.core.sports_pnl_reader import generate_sports_pnl_report
+
     return generate_sports_pnl_report(client_id=client_id, period_month=period_month)
 
 
@@ -227,6 +228,7 @@ def get_sports_clv(
         return {**MOCK_CLV_DATA, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_clv: client_id=%s period_month=%s", client_id, period_month)
     from client_reporting_api.core.sports_pnl_reader import generate_clv_report
+
     return generate_clv_report(client_id=client_id, period_month=period_month)
 
 
@@ -239,6 +241,7 @@ def get_venue_performance(
         return {**MOCK_VENUE_PERFORMANCE, "client_id": client_id}
     logger.info("get_venue_performance: client_id=%s", client_id)
     from client_reporting_api.core.sports_pnl_reader import generate_venue_performance_report
+
     return generate_venue_performance_report(client_id=client_id)
 
 
@@ -251,6 +254,7 @@ def get_sports_positions(
         return {**MOCK_POSITIONS, "client_id": client_id}
     logger.info("get_sports_positions: client_id=%s", client_id)
     from client_reporting_api.core.sports_pnl_reader import read_sports_positions
+
     return read_sports_positions(client_id=client_id)
 
 
@@ -263,4 +267,5 @@ def get_sports_risk(
         return {**MOCK_RISK, "client_id": client_id}
     logger.info("get_sports_risk: client_id=%s", client_id)
     from client_reporting_api.core.sports_pnl_reader import read_sports_risk
+
     return read_sports_risk(client_id=client_id)

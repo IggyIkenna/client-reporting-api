@@ -15,12 +15,31 @@ from client_reporting_api.api.main import app
 
 
 @pytest.fixture(autouse=True)
-def _disable_auth() -> Generator[None]:
-    """Disable API key auth for all route tests in this module."""
-    original = _auth_module.DISABLE_AUTH
+def _disable_auth_and_mock_mode() -> Generator[None]:
+    """Disable API key auth and mock mode for all route tests in this module.
+
+    Tests mock generate_pnl_report directly, so cloud_mock_mode must be False
+    to avoid the mock-mode short-circuit in route handlers.
+    """
+    original_auth = _auth_module.DISABLE_AUTH
     _auth_module.DISABLE_AUTH = True
+
+    # Force live code path so patches on generate_pnl_report take effect
+    from client_reporting_api.api.routes import pnl as _pnl_mod
+    from client_reporting_api.api.routes import reports as _reports_mod
+
+    reports_cfg = _reports_mod._cloud_cfg
+    pnl_cfg = _pnl_mod._cloud_cfg
+    orig_reports_mock = reports_cfg.cloud_mock_mode
+    orig_pnl_mock = pnl_cfg.cloud_mock_mode
+    reports_cfg.cloud_mock_mode = False  # type: ignore[misc]
+    pnl_cfg.cloud_mock_mode = False  # type: ignore[misc]
+
     yield
-    _auth_module.DISABLE_AUTH = original
+
+    _auth_module.DISABLE_AUTH = original_auth
+    reports_cfg.cloud_mock_mode = orig_reports_mock  # type: ignore[misc]
+    pnl_cfg.cloud_mock_mode = orig_pnl_mock  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
