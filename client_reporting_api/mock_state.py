@@ -7,7 +7,7 @@ when CLOUD_MOCK_MODE=true.
 
 from __future__ import annotations
 
-from unified_trading_library.core.mock_state_store import MockStateStore
+from unified_trading_library import MockStateStore
 
 from client_reporting_api.mock_data import MOCK_REPORTS
 
