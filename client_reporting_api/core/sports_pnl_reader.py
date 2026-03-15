@@ -11,7 +11,9 @@ Architecture:
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pandas as pd
@@ -215,9 +217,6 @@ def read_sports_risk(client_id: str) -> dict[str, object]:
 
     Risk service writes to: risk/{client_id}/{date}/exposure_summary.json
     """
-    import json
-    from datetime import UTC, datetime
-
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     prefix = f"risk/{client_id}/{today}/"
     logger.info("Reading sports risk: client=%s prefix=%s", client_id, prefix)
