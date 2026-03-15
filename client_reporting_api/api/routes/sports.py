@@ -213,7 +213,8 @@ def get_sports_pnl(
     if _cloud_cfg.cloud_mock_mode:
         return {**MOCK_SPORTS_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_pnl: client_id=%s period_month=%s", client_id, period_month)
-    return {"client_id": client_id, "period_month": period_month, "status": "live_not_configured"}
+    from client_reporting_api.core.sports_pnl_reader import generate_sports_pnl_report
+    return generate_sports_pnl_report(client_id=client_id, period_month=period_month)
 
 
 @router.get("/clv")
@@ -225,7 +226,8 @@ def get_sports_clv(
     if _cloud_cfg.cloud_mock_mode:
         return {**MOCK_CLV_DATA, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_clv: client_id=%s period_month=%s", client_id, period_month)
-    return {"client_id": client_id, "period_month": period_month, "status": "live_not_configured"}
+    from client_reporting_api.core.sports_pnl_reader import generate_clv_report
+    return generate_clv_report(client_id=client_id, period_month=period_month)
 
 
 @router.get("/venue-performance")
@@ -236,7 +238,8 @@ def get_venue_performance(
     if _cloud_cfg.cloud_mock_mode:
         return {**MOCK_VENUE_PERFORMANCE, "client_id": client_id}
     logger.info("get_venue_performance: client_id=%s", client_id)
-    return {"client_id": client_id, "status": "live_not_configured"}
+    from client_reporting_api.core.sports_pnl_reader import generate_venue_performance_report
+    return generate_venue_performance_report(client_id=client_id)
 
 
 @router.get("/positions")
@@ -247,7 +250,8 @@ def get_sports_positions(
     if _cloud_cfg.cloud_mock_mode:
         return {**MOCK_POSITIONS, "client_id": client_id}
     logger.info("get_sports_positions: client_id=%s", client_id)
-    return {"client_id": client_id, "status": "live_not_configured"}
+    from client_reporting_api.core.sports_pnl_reader import read_sports_positions
+    return read_sports_positions(client_id=client_id)
 
 
 @router.get("/risk")
@@ -258,4 +262,5 @@ def get_sports_risk(
     if _cloud_cfg.cloud_mock_mode:
         return {**MOCK_RISK, "client_id": client_id}
     logger.info("get_sports_risk: client_id=%s", client_id)
-    return {"client_id": client_id, "status": "live_not_configured"}
+    from client_reporting_api.core.sports_pnl_reader import read_sports_risk
+    return read_sports_risk(client_id=client_id)
