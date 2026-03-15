@@ -17,6 +17,7 @@ from client_reporting_api.api.routes.health import router as health_router
 from client_reporting_api.api.routes.pnl import router as pnl_router
 from client_reporting_api.api.routes.reports import router as reports_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
+from client_reporting_api.api.routes.sports import router as sports_router
 from client_reporting_api.auth import auth_cfg as _auth_cfg
 from client_reporting_api.auth import verify_api_key
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
@@ -92,6 +93,7 @@ _authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
 _authenticated_router.include_router(reports_router)
 _authenticated_router.include_router(pnl_router)
 _authenticated_router.include_router(alerts_router)
+_authenticated_router.include_router(sports_router)
 app.include_router(_authenticated_router)
 
 
