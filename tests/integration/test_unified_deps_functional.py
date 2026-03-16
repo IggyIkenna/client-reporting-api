@@ -126,7 +126,6 @@ class TestUnifiedEventsInterfaceFunctional:
             },
             clear=False,
         ):
-
             from unified_events_interface import log_event
 
             # log_event is callable (the actual auth test is in unit tests)
@@ -156,9 +155,12 @@ class TestUnifiedTradingLibraryFunctional:
     @pytest.mark.integration
     def test_mock_state_store_seed_and_crud(self) -> None:
         """MockStateStore supports seed/list/create for mock_state.py."""
+        import uuid
+
         from unified_trading_library import MockStateStore
 
-        store = MockStateStore("client-reporting-test")
+        # Use unique service name to avoid cross-test state pollution
+        store = MockStateStore(f"client-reporting-test-{uuid.uuid4().hex[:8]}")
         store.seed("reports", [{"id": "r1", "type": "monthly", "client_id": "c1"}])
 
         items = store.list("reports")
