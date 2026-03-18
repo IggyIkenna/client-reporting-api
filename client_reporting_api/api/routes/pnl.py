@@ -22,7 +22,7 @@ def get_pnl(
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """Return PnL attribution data for a client/period from GCS."""
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_pnl: client_id=%s period_month=%s", client_id, period_month)
     try:
@@ -42,7 +42,7 @@ def get_performance(
     In mock mode returns realistic sample performance data.
     In live mode computes from GCS PnL data.
     """
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_PERFORMANCE, "client_id": client_id, "period_month": period_month}
     # Live implementation: compute performance metrics from PnL data
     logger.info("get_performance: client_id=%s period_month=%s", client_id, period_month)

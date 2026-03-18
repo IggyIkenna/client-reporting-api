@@ -43,7 +43,7 @@ class TestUnifiedConfigInterfaceFunctional:
 
             cfg = UnifiedCloudConfig()
             assert cfg.cloud_provider == "local"
-            assert cfg.cloud_mock_mode is True
+            assert cfg.is_mock_mode() is True
 
     @pytest.mark.integration
     def test_config_disable_auth_flag(self) -> None:

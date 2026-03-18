@@ -218,7 +218,7 @@ def get_sports_pnl(
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """Sports P&L breakdown by venue, strategy, and period."""
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_SPORTS_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_pnl: client_id=%s period_month=%s", client_id, period_month)
     return generate_sports_pnl_report(client_id=client_id, period_month=period_month)
@@ -230,7 +230,7 @@ def get_sports_clv(
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """CLV (Closing Line Value) analysis — edge per venue/strategy."""
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_CLV_DATA, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_clv: client_id=%s period_month=%s", client_id, period_month)
     return generate_clv_report(client_id=client_id, period_month=period_month)
@@ -241,7 +241,7 @@ def get_venue_performance(
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Per-venue performance metrics (ROI, volume, limiting status)."""
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_VENUE_PERFORMANCE, "client_id": client_id}
     logger.info("get_venue_performance: client_id=%s", client_id)
     return generate_venue_performance_report(client_id=client_id)
@@ -252,7 +252,7 @@ def get_sports_positions(
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Open sports positions — pending bets, exposure."""
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_POSITIONS, "client_id": client_id}
     logger.info("get_sports_positions: client_id=%s", client_id)
     return read_sports_positions(client_id=client_id)
@@ -263,7 +263,7 @@ def get_sports_risk(
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Current sports risk exposure — liability, correlation, limits."""
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_RISK, "client_id": client_id}
     logger.info("get_sports_risk: client_id=%s", client_id)
     return read_sports_risk(client_id=client_id)

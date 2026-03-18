@@ -13,12 +13,15 @@ from fastapi.testclient import TestClient
 import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 
+# Suppress cloud_mock_mode deprecation warnings from test fixture save/restore
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 @pytest.fixture(autouse=True)
 def _disable_auth_and_mock_mode() -> Generator[None]:
     """Disable API key auth and mock mode for all route tests in this module.
 
-    Tests mock generate_pnl_report directly, so cloud_mock_mode must be False
+    Tests mock generate_pnl_report directly, so is_mock_mode() must return False
     to avoid the mock-mode short-circuit in route handlers.
     """
     original_auth = _auth_module.DISABLE_AUTH
@@ -30,14 +33,20 @@ def _disable_auth_and_mock_mode() -> Generator[None]:
 
     reports_cfg = _reports_mod._cloud_cfg
     pnl_cfg = _pnl_mod._cloud_cfg
+    orig_reports_data_mode = reports_cfg.data_mode
+    orig_pnl_data_mode = pnl_cfg.data_mode
     orig_reports_mock = reports_cfg.cloud_mock_mode
     orig_pnl_mock = pnl_cfg.cloud_mock_mode
+    reports_cfg.data_mode = "real"  # type: ignore[misc]
+    pnl_cfg.data_mode = "real"  # type: ignore[misc]
     reports_cfg.cloud_mock_mode = False  # type: ignore[misc]
     pnl_cfg.cloud_mock_mode = False  # type: ignore[misc]
 
     yield
 
     _auth_module.DISABLE_AUTH = original_auth
+    reports_cfg.data_mode = orig_reports_data_mode  # type: ignore[misc]
+    pnl_cfg.data_mode = orig_pnl_data_mode  # type: ignore[misc]
     reports_cfg.cloud_mock_mode = orig_reports_mock  # type: ignore[misc]
     pnl_cfg.cloud_mock_mode = orig_pnl_mock  # type: ignore[misc]
 

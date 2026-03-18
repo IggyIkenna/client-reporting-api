@@ -33,7 +33,7 @@ def list_reports() -> list[dict[str, object]]:
     In mock mode returns seed + mutated reports (performance, risk, compliance types).
     In live mode reads from GCS report metadata.
     """
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         return get_store().list("reports")
     # GCS_READER stub — full implementation reads report metadata from GCS
     return []
@@ -46,7 +46,7 @@ def generate_report(request: GenerateReportRequest) -> dict[str, object]:
     Reads Parquet files from GCS at pnl/{period_month}/{client_id}/ and
     returns a structured report payload.
     """
-    if _cloud_cfg.cloud_mock_mode:
+    if _cloud_cfg.is_mock_mode():
         new_report: dict[str, object] = {
             **MOCK_GENERATE_RESPONSE,
             "client_id": request.client_id,
