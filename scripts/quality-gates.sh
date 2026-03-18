@@ -10,7 +10,7 @@
 SERVICE_NAME="client-reporting-api"
 SOURCE_DIR="client_reporting_api"
 MIN_COVERAGE=70
-RUN_INTEGRATION=false
+RUN_INTEGRATION=true
 PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
