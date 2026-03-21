@@ -3,8 +3,8 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -13,7 +13,11 @@ from starlette.types import ASGIApp
 from unified_trading_library import RequestAuditMiddleware
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
+from client_reporting_api.api.routes.compliance import router as compliance_router
+from client_reporting_api.api.routes.documents import router as documents_router
+from client_reporting_api.api.routes.docusign import router as docusign_router
 from client_reporting_api.api.routes.health import router as health_router
+from client_reporting_api.api.routes.invoices import router as invoices_router
 from client_reporting_api.api.routes.pnl import router as pnl_router
 from client_reporting_api.api.routes.reports import router as reports_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
@@ -75,6 +79,28 @@ app.add_middleware(PrometheusMiddleware, service_name="client-reporting-api")
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(RequestAuditMiddleware)
 
+
+# --- Standard error handler ---
+@app.exception_handler(HTTPException)
+async def standard_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Return errors in a standard envelope: {error: {code, message, details}, request_id}."""
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+    detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": f"HTTP_{exc.status_code}",
+                "message": detail.get("message", str(exc.detail))
+                if isinstance(detail, dict)
+                else str(exc.detail),
+                "details": detail if isinstance(detail, dict) else None,
+            },
+            "request_id": request_id,
+        },
+    )
+
+
 # --- Unauthenticated health / metrics endpoints ---
 app.include_router(health_router)
 
@@ -94,6 +120,10 @@ _authenticated_router.include_router(reports_router)
 _authenticated_router.include_router(pnl_router)
 _authenticated_router.include_router(alerts_router)
 _authenticated_router.include_router(sports_router)
+_authenticated_router.include_router(documents_router)
+_authenticated_router.include_router(invoices_router)
+_authenticated_router.include_router(compliance_router)
+_authenticated_router.include_router(docusign_router)
 app.include_router(_authenticated_router)
 
 
