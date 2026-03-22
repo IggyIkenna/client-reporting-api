@@ -11,7 +11,7 @@ authors = [
     { name = "Unified Trading System", email = "team@example.com" },
 ]
 dependencies = [
-    "fastapi>=0.110.0,<1.0.0",
+    "fastapi<1.0.0,>=0.115.0",
     "uvicorn[standard]>=0.27.0,<1.0.0",
     "sse-starlette>=1.6.1,<2.0.0",
     "jinja2>=3.0.0,<4.0.0",

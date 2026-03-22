@@ -29,7 +29,8 @@ class TestBigQueryEmulatorFixture:
         assert bigquery_emulator_url.startswith("http://")
 
     def test_emulator_url_contains_host_and_port(
-        self, bigquery_emulator_url: str,
+        self,
+        bigquery_emulator_url: str,
     ) -> None:
         """URL includes the expected host:port structure."""
         # Strip http://
@@ -41,7 +42,8 @@ class TestBigQueryEmulatorFixture:
         assert 1 <= port <= 65535
 
     def test_env_var_is_set_when_emulator_active(
-        self, bigquery_emulator_url: str,
+        self,
+        bigquery_emulator_url: str,
     ) -> None:
         """BIGQUERY_EMULATOR_HOST must be set when the fixture yields."""
         host = os.environ.get("BIGQUERY_EMULATOR_HOST", "")
@@ -54,7 +56,8 @@ class TestBigQueryEmulatorConnectivity:
     """Test basic connectivity to the BigQuery emulator."""
 
     def test_emulator_accepts_tcp_connection(
-        self, bigquery_emulator_url: str,
+        self,
+        bigquery_emulator_url: str,
     ) -> None:
         """The emulator accepts TCP connections on the configured port."""
         import socket
@@ -66,7 +69,8 @@ class TestBigQueryEmulatorConnectivity:
             pass  # Connection succeeded
 
     def test_emulator_responds_to_http(
-        self, bigquery_emulator_url: str,
+        self,
+        bigquery_emulator_url: str,
     ) -> None:
         """The emulator responds to an HTTP request (even if 404)."""
         import urllib.request

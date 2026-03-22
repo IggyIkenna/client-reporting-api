@@ -10,6 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
+from unified_cloud_interface import create_api_auth, create_auth_router
 from unified_trading_library import RequestAuditMiddleware
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
@@ -23,7 +24,6 @@ from client_reporting_api.api.routes.reports import router as reports_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
 from client_reporting_api.api.routes.sports import router as sports_router
 from client_reporting_api.auth import auth_cfg as _auth_cfg
-from client_reporting_api.auth import verify_api_key
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
 logger = logging.getLogger(__name__)
@@ -84,38 +84,41 @@ app.add_middleware(RequestAuditMiddleware)
 @app.exception_handler(HTTPException)
 async def standard_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Return errors in a standard envelope: {error: {code, message, details}, request_id}."""
-    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+    request_id: str = getattr(request.state, "request_id", str(uuid.uuid4()))
+    raw_detail: str | dict[str, str] = (
+        exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+    )
+    message = (
+        raw_detail.get("message", str(exc.detail))
+        if isinstance(raw_detail, dict)
+        else str(raw_detail)
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": {
                 "code": f"HTTP_{exc.status_code}",
-                "message": detail.get("message", str(exc.detail))
-                if isinstance(detail, dict)
-                else str(exc.detail),
-                "details": detail if isinstance(detail, dict) else None,
+                "message": message,
+                "details": raw_detail if isinstance(raw_detail, dict) else None,
             },
             "request_id": request_id,
         },
     )
 
 
-# --- Unauthenticated health / metrics endpoints ---
+# --- Unauthenticated: health, metrics ---
 app.include_router(health_router)
 
-# --- Unauthenticated SSE streaming endpoints ---
+# --- Unauthenticated: auth (login, me, list users) ---
+app.include_router(create_auth_router("client-reporting-api"))
+
+# --- Unauthenticated: SSE streaming ---
 app.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
 
-# --- Authenticated API routes (require API key) ---
-# Add authenticated routers here as they are created, e.g.:
-# _authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
-# _authenticated_router.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
-# app.include_router(_authenticated_router)
-
-# For now, apply auth as a global dependency since all non-health routes should
-# be protected. New route routers should be added to the authenticated router above.
-_authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
+# --- Authenticated API routes ---
+# Accepts: Bearer JWT (from /auth/login), X-API-Key (legacy), or X-Service-Token (S2S)
+_api_auth = create_api_auth("client-reporting-api")
+_authenticated_router = APIRouter(dependencies=[Depends(_api_auth)])
 _authenticated_router.include_router(reports_router)
 _authenticated_router.include_router(pnl_router)
 _authenticated_router.include_router(alerts_router)

@@ -188,6 +188,7 @@ def test_production_guard_raises_on_disable_auth(monkeypatch: pytest.MonkeyPatch
         del sys.modules["client_reporting_api"]
 
     with (
+        patch("client_reporting_api.config.get_config", return_value=mock_cfg),
         patch("unified_config_interface.UnifiedCloudConfig", return_value=mock_cfg),
         patch("unified_events_interface.setup_events"),
         patch("unified_events_interface.log_event"),
