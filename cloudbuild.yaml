@@ -9,8 +9,8 @@
 # Add "# deploy-via-dispatch" after title if deploy_via_dispatch: true in manifest.
 #
 # Variable conventions:
-#   client-reporting-api   — e.g. batch-audit-api
-#   unified-trading-system  — e.g. unified-trading-system
+#   client-reporting-api   — Docker image / service name (this repo)
+#   unified-trading-system  — Artifact Registry repository name
 
 substitutions:
   _SERVICE_NAME: "client-reporting-api"
