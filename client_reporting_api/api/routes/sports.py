@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Query
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig
 
 from client_reporting_api.core.sports_pnl_reader import (
     generate_clv_report,

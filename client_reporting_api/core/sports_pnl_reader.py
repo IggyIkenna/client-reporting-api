@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pandas as pd
-from unified_cloud_interface import get_data_source
+from unified_trading_library import get_data_source
 
 logger = logging.getLogger(__name__)
 

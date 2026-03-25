@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig
 
 
 class ClientReportingApiConfig(UnifiedCloudConfig):

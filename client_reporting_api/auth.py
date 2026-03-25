@@ -16,7 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 
 import client_reporting_api._google_auth_sync as _google_auth_sync
 from client_reporting_api.config import get_config

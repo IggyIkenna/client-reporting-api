@@ -16,7 +16,7 @@ os.environ.setdefault("MOCK_STATE_MODE", "deterministic")
 
 import pytest
 from fastapi.testclient import TestClient
-from unified_events_interface import setup_events
+from unified_trading_library import setup_events
 
 setup_events("client-reporting-api", "test")
 

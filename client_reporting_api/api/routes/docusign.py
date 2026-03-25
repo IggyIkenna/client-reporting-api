@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig
 
 from client_reporting_api.mock_state import get_store
 

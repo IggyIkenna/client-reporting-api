@@ -10,7 +10,7 @@ def test_unified_cloud_config_is_used() -> None:
         mock_cfg_cls.return_value = mock_cfg
         mock_cfg.environment = "test"
         # Verify the config class can be instantiated without error
-        from unified_config_interface import UnifiedCloudConfig
+        from unified_trading_library import UnifiedCloudConfig
 
         cfg = UnifiedCloudConfig()
         assert cfg is not None
@@ -43,7 +43,7 @@ def test_config_environment_attribute_accessible() -> None:
         mock_cfg_cls.return_value = mock_cfg
         mock_cfg.environment = "staging"
 
-        from unified_config_interface import UnifiedCloudConfig
+        from unified_trading_library import UnifiedCloudConfig
 
         _cfg = UnifiedCloudConfig()
         assert True

@@ -41,7 +41,7 @@ import socket
 from collections.abc import Generator
 
 import pytest
-from unified_events_interface import setup_events
+from unified_trading_library import setup_events
 
 logger = logging.getLogger(__name__)
 

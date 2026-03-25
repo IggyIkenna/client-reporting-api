@@ -39,7 +39,7 @@ class TestUnifiedConfigInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_config_interface import UnifiedCloudConfig
+            from unified_trading_library import UnifiedCloudConfig
 
             cfg = UnifiedCloudConfig()
             assert cfg.cloud_provider == "local"
@@ -58,7 +58,7 @@ class TestUnifiedConfigInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_config_interface import UnifiedCloudConfig
+            from unified_trading_library import UnifiedCloudConfig
 
             cfg = UnifiedCloudConfig()
             assert cfg.disable_auth is True
@@ -76,7 +76,7 @@ class TestUnifiedConfigInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_config_interface import UnifiedCloudConfig
+            from unified_trading_library import UnifiedCloudConfig
 
             cfg = UnifiedCloudConfig()
             # Should NOT raise - only production raises
@@ -95,7 +95,7 @@ class TestUnifiedEventsInterfaceFunctional:
     @pytest.mark.integration
     def test_setup_events_in_test_mode(self) -> None:
         """setup_events('test') initializes without error."""
-        from unified_events_interface import setup_events
+        from unified_trading_library import setup_events
 
         # Should not raise — test mode silences all real sinks
         setup_events("client-reporting-api-integ-test", "test")
@@ -103,7 +103,7 @@ class TestUnifiedEventsInterfaceFunctional:
     @pytest.mark.integration
     def test_log_event_callable_after_setup(self) -> None:
         """log_event can be called after setup_events without error."""
-        from unified_events_interface import log_event, setup_events
+        from unified_trading_library import log_event, setup_events
 
         setup_events("client-reporting-api-integ-test-2", "test")
         # Should not raise
@@ -126,7 +126,7 @@ class TestUnifiedEventsInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_events_interface import log_event
+            from unified_trading_library import log_event
 
             # log_event is callable (the actual auth test is in unit tests)
             assert callable(log_event)
@@ -222,7 +222,7 @@ class TestUnifiedCloudInterfaceFunctional:
     @pytest.mark.integration
     def test_get_data_source_importable(self) -> None:
         """get_data_source and DataSource are importable from UCI."""
-        from unified_cloud_interface import DataSource, get_data_source
+        from unified_trading_library import DataSource, get_data_source
 
         assert callable(get_data_source)
         assert DataSource is not None

@@ -7,8 +7,8 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from unified_cloud_interface import generate_download_url, generate_upload_url
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import generate_download_url, generate_upload_url
+from unified_trading_library import UnifiedCloudConfig
 
 from client_reporting_api.mock_state import get_store
 

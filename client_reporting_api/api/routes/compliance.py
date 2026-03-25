@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Query
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/compliance", tags=["compliance"])

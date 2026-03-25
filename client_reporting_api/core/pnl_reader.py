@@ -6,7 +6,7 @@ import logging
 from typing import cast
 
 import pandas as pd
-from unified_cloud_interface import DataSource, get_data_source
+from unified_trading_library import DataSource, get_data_source
 
 logger = logging.getLogger(__name__)
 

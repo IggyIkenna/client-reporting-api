@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig
 
 from client_reporting_api.core.pnl_reader import generate_pnl_report
 from client_reporting_api.mock_data import MOCK_GENERATE_RESPONSE

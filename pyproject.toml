@@ -20,6 +20,7 @@ dependencies = [
     "google-auth>=2.40.0,<3.0.0",
     "pyyaml>=6.0.1,<7.0.0",
     "unified-trading-library>=0.3.0,<1.0.0",
+    "unified-internal-contracts>=0.1.0,<1.0.0",
     "prometheus-client>=0.20.0,<1.0.0",
     "pytest>=9.0.1,<10.0.0",
     "pytest-asyncio>=0.25.0,<2.0.0",
@@ -71,6 +72,11 @@ max-complexity = 7
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+
+[tool.uv.sources.unified-internal-contracts]
+path = "../unified-internal-contracts"
+editable = true
 
 [tool.basedpyright]
 pythonVersion = "3.13"
