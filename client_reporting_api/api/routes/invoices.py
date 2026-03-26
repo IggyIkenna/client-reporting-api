@@ -7,8 +7,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from unified_trading_library import generate_download_url
-from unified_trading_library import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig, generate_download_url
 
 from client_reporting_api.mock_state import get_store
 
@@ -143,7 +142,9 @@ def generate_invoice(request: GenerateInvoiceRequest) -> dict[str, object]:
             "subtotal": round(subtotal, 2),
             "tax": 0.00,
             "total": round(subtotal, 2),
-            "description": f"{request.invoice_type.replace('_', ' ').title()} — {request.period_month}",
+            "description": (
+                f"{request.invoice_type.replace('_', ' ').title()} \u2014 {request.period_month}"
+            ),
             "issued_at": "2026-03-21T00:00:00Z",
             "due_date": "2026-04-20",
             "aum_basis": mock_aum,

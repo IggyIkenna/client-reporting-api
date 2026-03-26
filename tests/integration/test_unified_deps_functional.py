@@ -332,7 +332,7 @@ class TestUnifiedInternalContractsFunctional:
     @pytest.mark.integration
     def test_fee_structure_used_in_fee_calculator(self) -> None:
         """FeeCalculator uses FeeStructure from UIC to compute period fees."""
-        from unified_internal_contracts import FeeStructure
+        from unified_api_contracts.internal import FeeStructure
 
         from client_reporting_api.core.fee_calculator import FeeCalculator
 
@@ -363,7 +363,7 @@ class TestUnifiedInternalContractsFunctional:
     @pytest.mark.integration
     def test_fee_structure_with_introducer(self) -> None:
         """FeeCalculator computes introducer fee when introducer is configured."""
-        from unified_internal_contracts import FeeStructure
+        from unified_api_contracts.internal import FeeStructure
 
         from client_reporting_api.core.fee_calculator import FeeCalculator
 
@@ -396,7 +396,7 @@ class TestUnifiedInternalContractsFunctional:
     @pytest.mark.integration
     def test_client_config_and_credentials_registry_types(self) -> None:
         """ClientConfig and CredentialsRegistry TypedDicts are usable."""
-        from unified_internal_contracts import ClientConfig, CredentialsRegistry
+        from unified_api_contracts.internal import ClientConfig, CredentialsRegistry
 
         # These are TypedDicts — verify they can be used as type annotations
         config: ClientConfig = {

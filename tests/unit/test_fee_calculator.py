@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from unified_internal_contracts import FeeStructure
+from unified_api_contracts.internal import FeeStructure
 
 from client_reporting_api.core.fee_calculator import FeeCalculator
 

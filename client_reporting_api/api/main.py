@@ -10,8 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
-from unified_trading_library import create_api_auth, create_auth_router
-from unified_trading_library import RequestAuditMiddleware
+from unified_trading_library import RequestAuditMiddleware, create_api_auth, create_auth_router
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
 from client_reporting_api.api.routes.compliance import router as compliance_router

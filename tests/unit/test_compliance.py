@@ -1,4 +1,4 @@
-"""Unit tests for MiFID II compliance routes (trade reporting, best execution, positions, dashboard)."""
+"""Unit tests for MiFID II compliance routes (trade reporting, best execution, positions)."""
 
 from __future__ import annotations
 

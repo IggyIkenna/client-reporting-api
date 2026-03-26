@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from unified_trading_library import ClientDomainConfig, InstrumentDomainConfig
-from unified_trading_library import log_event
-from unified_trading_library import DomainConfigReloader
+from unified_trading_library import (
+    ClientDomainConfig,
+    DomainConfigReloader,
+    InstrumentDomainConfig,
+    log_event,
+)
 
 logger = logging.getLogger(__name__)
 
