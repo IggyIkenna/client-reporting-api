@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="session", autouse=True)
 def _init_events() -> None:
-    """Initialize unified_events_interface in test mode before any test runs.
+    """Initialize unified_trading_library.events_interface in test mode before any test runs.
 
     GoogleOAuthMiddleware calls log_event() which requires setup_events() to
     have been called first.  Mode 'test' silences all real sinks.

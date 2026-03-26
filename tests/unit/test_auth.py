@@ -189,9 +189,9 @@ def test_production_guard_raises_on_disable_auth(monkeypatch: pytest.MonkeyPatch
 
     with (
         patch("client_reporting_api.config.get_config", return_value=mock_cfg),
-        patch("unified_config_interface.UnifiedCloudConfig", return_value=mock_cfg),
-        patch("unified_events_interface.setup_events"),
-        patch("unified_events_interface.log_event"),
+        patch("unified_trading_library.config_interface.UnifiedCloudConfig", return_value=mock_cfg),
+        patch("unified_trading_library.events_interface.setup_events"),
+        patch("unified_trading_library.events_interface.log_event"),
         patch("client_reporting_api._google_auth_sync.make_http_request", return_value=MagicMock()),
         pytest.raises(RuntimeError, match="DISABLE_AUTH=true is forbidden in production"),
     ):

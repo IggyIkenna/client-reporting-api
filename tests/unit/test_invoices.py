@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 import pytest
-import unified_cloud_interface.api_auth as _uci_auth
+import unified_trading_library.cloud_interface.api_auth as _uci_auth
 from fastapi.testclient import TestClient
 
 import client_reporting_api.auth as _auth_module
