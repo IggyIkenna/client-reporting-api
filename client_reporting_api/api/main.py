@@ -10,18 +10,30 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
-from unified_trading_library import RequestAuditMiddleware, create_api_auth, create_auth_router
+from unified_trading_library import (
+    RequestAuditMiddleware,
+    create_api_auth,
+    create_auth_router,
+    setup_events,
+)
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
+from client_reporting_api.api.routes.clients import router as clients_router
 from client_reporting_api.api.routes.compliance import router as compliance_router
 from client_reporting_api.api.routes.documents import router as documents_router
 from client_reporting_api.api.routes.docusign import router as docusign_router
+from client_reporting_api.api.routes.exports import router as exports_router
 from client_reporting_api.api.routes.health import router as health_router
 from client_reporting_api.api.routes.invoices import router as invoices_router
+from client_reporting_api.api.routes.manual_entry import router as manual_entry_router
+from client_reporting_api.api.routes.performance import router as performance_router
 from client_reporting_api.api.routes.pnl import router as pnl_router
+from client_reporting_api.api.routes.reporting import router as reporting_router
 from client_reporting_api.api.routes.reports import router as reports_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
 from client_reporting_api.api.routes.sports import router as sports_router
+from client_reporting_api.api.routes.tax import router as tax_router
+from client_reporting_api.api.routes.trades import router as trades_router
 from client_reporting_api.auth import auth_cfg as _auth_cfg
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
@@ -65,6 +77,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         PROCESSING_LATENCY.observe(duration)
         return response
 
+
+# Ensure event logging is initialized before RequestAuditMiddleware
+setup_events("client-reporting-api", "local")
 
 _env = _auth_cfg.environment
 app = FastAPI(
@@ -126,6 +141,13 @@ _authenticated_router.include_router(documents_router)
 _authenticated_router.include_router(invoices_router)
 _authenticated_router.include_router(compliance_router)
 _authenticated_router.include_router(docusign_router)
+_authenticated_router.include_router(clients_router)
+_authenticated_router.include_router(performance_router)
+_authenticated_router.include_router(trades_router)
+_authenticated_router.include_router(exports_router)
+_authenticated_router.include_router(tax_router)
+_authenticated_router.include_router(manual_entry_router)
+_authenticated_router.include_router(reporting_router)
 app.include_router(_authenticated_router)
 
 

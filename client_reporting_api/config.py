@@ -12,6 +12,7 @@ class ClientReportingApiConfig(UnifiedCloudConfig):
 
     config_store_bucket: str = ""
     reports_bucket: str = ""
+    client_data_bucket: str = ""
 
     def model_post_init(self, __context: object) -> None:
         project_id = self.gcp_project_id or ""
@@ -19,6 +20,8 @@ class ClientReportingApiConfig(UnifiedCloudConfig):
             self.config_store_bucket = f"config-{project_id}"
         if not self.reports_bucket:
             self.reports_bucket = f"reports-{project_id}"
+        if not self.client_data_bucket:
+            self.client_data_bucket = f"client-reporting-data-{project_id}"
 
 
 @lru_cache(maxsize=1)

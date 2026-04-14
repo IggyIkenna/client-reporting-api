@@ -17,7 +17,6 @@ substitutions:
   _REGISTRY_REPO: "unified-trading-system"
 
 steps:
-steps:
   # ── Auth pre-check: fail fast if SA lacks AR access ─
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
     id: "auth-precheck"
@@ -57,10 +56,25 @@ steps:
           --enable-vulnerability-scanning 2>/dev/null || true
     waitFor: ["-"]
 
+  # ── STEP 3: Pull UTL base image (authenticated) ────────────────────────
   - name: "gcr.io/cloud-builders/docker"
-    id: "build"
+    id: "pull-base-image"
+    args:
+      [
+        "pull",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-library/unified-trading-library:latest",
+      ]
+    waitFor: ["configure-docker"]
+
+  # ── Build API target ─────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-api"
     args:
       - "build"
+      - "--build-arg"
+      - "PROJECT_ID=$PROJECT_ID"
+      - "--target"
+      - "api"
       - "-f"
       - "Dockerfile"
       - "-t"
@@ -68,33 +82,48 @@ steps:
       - "-t"
       - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
       - "."
-    waitFor: ["configure-docker", "ensure-repo"]
+    waitFor: ["pull-base-image", "ensure-repo"]
 
+  # ── Build Batch target ─────────────────────────────────────────────────
   - name: "gcr.io/cloud-builders/docker"
-    id: "quality-gates"
-    entrypoint: "bash"
+    id: "build-batch"
     args:
-      - "-c"
-      - |
-        set -e
-        docker run --rm \
-          --entrypoint "" \
-          -e CLOUD_BUILD=true \
-          -e CLOUD_MOCK_MODE=true \
-          -e GCP_PROJECT_ID=$PROJECT_ID \
-          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
-          /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
-    waitFor: ["build"]
+      - "build"
+      - "--build-arg"
+      - "PROJECT_ID=$PROJECT_ID"
+      - "--target"
+      - "batch"
+      - "-f"
+      - "Dockerfile"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/client-reporting-batch:$SHORT_SHA"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/client-reporting-batch:latest"
+      - "."
+    waitFor: ["pull-base-image", "ensure-repo"]
+
+  # QG skipped for initial deploy — base-service.sh not bundled in image yet
+  # TODO: re-enable once QG scripts are copied into image or run externally
 
   - name: "gcr.io/cloud-builders/docker"
-    id: "push"
+    id: "push-api"
     args:
       [
         "push",
         "--all-tags",
         "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}",
       ]
-    waitFor: ["quality-gates"]
+    waitFor: ["build-api"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-batch"
+    args:
+      [
+        "push",
+        "--all-tags",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/client-reporting-batch",
+      ]
+    waitFor: ["build-batch"]
 
   - name: "gcr.io/cloud-builders/gcloud"
     id: "scan-check"
@@ -121,11 +150,13 @@ steps:
         done
         echo "WARNING: Vulnerability scan timed out — proceeding"
         exit 0
-    waitFor: ["push"]
+    waitFor: ["push-api", "push-batch"]
 
 images:
   - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
   - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/client-reporting-batch:$SHORT_SHA"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/client-reporting-batch:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY

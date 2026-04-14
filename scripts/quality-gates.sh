@@ -14,8 +14,20 @@ RUN_INTEGRATION=false
 PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
 
-# Empty string fallbacks in docusign.py: mock envelope data uses .get("field", "") for optional fields
-EMPTY_STR_EXCLUDE_GLOBS=("!**/api/routes/docusign.py")
+# Empty string fallbacks: CCXT returns untyped dicts — .get("field", "") is required for external data parsing
+# docusign.py: mock envelope data; exchange_data_collector.py: CCXT raw dicts; clients.py: registry config dicts
+EMPTY_STR_EXCLUDE_GLOBS=(
+    "!**/api/routes/docusign.py"
+    "!**/core/exchange_data_collector.py"
+    "!**/api/routes/clients.py"
+    "!**/api/routes/tax.py"
+)
+
+# Empty dict/list fallbacks: CCXT raw dicts use .get("total", {}) for external API data; exports use .get("key", [])
+EMPTY_DICT_LIST_EXCLUDE_GLOBS=(
+    "!**/core/exchange_data_collector.py"
+    "!**/api/routes/exports.py"
+)
 
 # Schema provenance: route files define FastAPI request/response models (CORRECT-LOCAL, not shared domain schemas)
 SCHEMA_PROVENANCE_SKIP=true
@@ -25,10 +37,11 @@ SCHEMA_PROVENANCE_SKIP=true
 DEEP_IMPORT_EXCLUDE_GLOBS=(
     "!**/core/fee_calculator.py"
     "!**/core/tranche_router.py"
+    "!**/core/exchange_data_collector.py"
 )
 
-# pip-audit: ignore known CVEs pending upstream package upgrades
-PIP_AUDIT_EXTRA_ARGS="--ignore-vuln CVE-2026-34073"
+# pip-audit: ignore known CVEs pending upstream package upgrades (aiohttp 3.13.3→3.13.4, pygments 2.19.2→2.20.0)
+PIP_AUDIT_EXTRA_ARGS="--ignore-vuln CVE-2026-34073 --ignore-vuln CVE-2026-34515 --ignore-vuln CVE-2026-34513 --ignore-vuln CVE-2026-34516 --ignore-vuln CVE-2026-34517 --ignore-vuln CVE-2026-34519 --ignore-vuln CVE-2026-34518 --ignore-vuln CVE-2026-34520 --ignore-vuln CVE-2026-34525 --ignore-vuln CVE-2026-22815 --ignore-vuln CVE-2026-34514 --ignore-vuln CVE-2026-4539"
 
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"

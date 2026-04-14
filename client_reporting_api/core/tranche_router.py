@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 _REGISTRY_PATH = (
     Path(__file__).parent.parent.parent.parent
-    / "execution-services"
+    / "execution-service"
     / "configs"
     / "credentials-registry.yaml"
 )
