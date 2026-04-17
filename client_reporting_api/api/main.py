@@ -22,6 +22,7 @@ from client_reporting_api.api.routes.clients import router as clients_router
 from client_reporting_api.api.routes.compliance import router as compliance_router
 from client_reporting_api.api.routes.documents import router as documents_router
 from client_reporting_api.api.routes.docusign import router as docusign_router
+from client_reporting_api.api.routes.emergency import router as emergency_router
 from client_reporting_api.api.routes.exports import router as exports_router
 from client_reporting_api.api.routes.health import router as health_router
 from client_reporting_api.api.routes.invoices import router as invoices_router
@@ -148,6 +149,7 @@ _authenticated_router.include_router(exports_router)
 _authenticated_router.include_router(tax_router)
 _authenticated_router.include_router(manual_entry_router)
 _authenticated_router.include_router(reporting_router)
+_authenticated_router.include_router(emergency_router)
 app.include_router(_authenticated_router)
 
 

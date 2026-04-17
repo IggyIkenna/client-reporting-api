@@ -142,7 +142,14 @@ def _extract_usdt_transfer(
     direction = "deposit" if transfer_usd > 0 else "withdrawal"
     amount = Decimal(str(abs(transfer_usd)))
     return _make_record(
-        client_id, "usdt", date, venue, direction, "USDT", amount, amount,
+        client_id,
+        "usdt",
+        date,
+        venue,
+        direction,
+        "USDT",
+        amount,
+        amount,
     )
 
 
@@ -172,18 +179,35 @@ def _extract_btc_transfers(
         usd_equiv = (btc_amount * Decimal(str(btc_price))).quantize(
             Decimal("0.01"),
         )
-        records.append(_make_record(
-            client_id, "btc", date, venue, direction, "BTC",
-            btc_amount, usd_equiv,
-        ))
+        records.append(
+            _make_record(
+                client_id,
+                "btc",
+                date,
+                venue,
+                direction,
+                "BTC",
+                btc_amount,
+                usd_equiv,
+            )
+        )
 
     usdt_transfer = usdt_change if abs(usdt_change) > 500 else 0.0
     if abs(usdt_transfer) > 500:
         direction = "deposit" if usdt_transfer > 0 else "withdrawal"
         amt = Decimal(str(abs(usdt_transfer)))
-        records.append(_make_record(
-            client_id, "usdt", date, venue, direction, "USDT", amt, amt,
-        ))
+        records.append(
+            _make_record(
+                client_id,
+                "usdt",
+                date,
+                venue,
+                direction,
+                "USDT",
+                amt,
+                amt,
+            )
+        )
 
     return records
 
@@ -211,15 +235,32 @@ def _extract_day1_deposits(
 
     if btc_bal > 0.0001:
         usd_eq = Decimal(str(round(btc_bal * btc_price, 2)))
-        records.append(_make_record(
-            client_id, "btc", date, venue, "deposit",
-            "BTC", Decimal(str(btc_bal)), usd_eq,
-        ))
+        records.append(
+            _make_record(
+                client_id,
+                "btc",
+                date,
+                venue,
+                "deposit",
+                "BTC",
+                Decimal(str(btc_bal)),
+                usd_eq,
+            )
+        )
     if usdt_bal > 1:
         amt = Decimal(str(round(usdt_bal, 2)))
-        records.append(_make_record(
-            client_id, "usdt", date, venue, "deposit", "USDT", amt, amt,
-        ))
+        records.append(
+            _make_record(
+                client_id,
+                "usdt",
+                date,
+                venue,
+                "deposit",
+                "USDT",
+                amt,
+                amt,
+            )
+        )
     return records
 
 
@@ -255,9 +296,15 @@ def collect_from_equity_curve(client_id: str) -> list[TransferRecord]:
             if rec is not None:
                 records.append(rec)
         else:
-            records.extend(_extract_btc_transfers(
-                curve[i], curve[i - 1], client_id, date, venue,
-            ))
+            records.extend(
+                _extract_btc_transfers(
+                    curve[i],
+                    curve[i - 1],
+                    client_id,
+                    date,
+                    venue,
+                )
+            )
 
     return records
 

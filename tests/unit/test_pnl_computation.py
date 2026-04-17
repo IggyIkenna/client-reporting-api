@@ -11,21 +11,17 @@ Validates:
 
 from __future__ import annotations
 
-import pytest
-
 from client_reporting_api.core.backfill_store import (
     _get_equity,
-    _get_transfer,
     _is_btc_account,
     compute_monthly_returns,
     compute_performance_stats,
 )
-from client_reporting_api.core.pnl_chart_generator import compute_pnl_series
-
 
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic equity curves
 # ---------------------------------------------------------------------------
+
 
 def _usdt_curve_flat() -> list[dict[str, str | float]]:
     """USDT account, no transfers, flat equity — 0% return, 0% MaxDD."""
@@ -84,9 +80,9 @@ def _usdt_curve_with_drawdown() -> list[dict[str, str | float]]:
     return [
         {"date": "2026-01-01", "equity_usd": 100000},
         {"date": "2026-01-02", "equity_usd": 102000},  # +2%
-        {"date": "2026-01-03", "equity_usd": 96900},   # -5% from 102000
-        {"date": "2026-01-04", "equity_usd": 101745},   # +5% recovery
-        {"date": "2026-01-05", "equity_usd": 103780},   # +2%
+        {"date": "2026-01-03", "equity_usd": 96900},  # -5% from 102000
+        {"date": "2026-01-04", "equity_usd": 101745},  # +5% recovery
+        {"date": "2026-01-05", "equity_usd": 103780},  # +2%
     ]
 
 
@@ -97,12 +93,30 @@ def _btc_curve_no_transfers() -> list[dict[str, str | float]]:
     BTC price drops 10% — this should NOT appear as a loss in native-unit PNL.
     """
     return [
-        {"date": "2026-01-01", "equity_usd": 270000, "btc_balance": 3.0,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 270000},
-        {"date": "2026-01-02", "equity_usd": 243100, "btc_balance": 3.0,
-         "usdt_balance": 100, "btc_price_usd": 81000, "btc_value_usd": 243000},
-        {"date": "2026-01-03", "equity_usd": 216300, "btc_balance": 3.0,
-         "usdt_balance": 300, "btc_price_usd": 72000, "btc_value_usd": 216000},
+        {
+            "date": "2026-01-01",
+            "equity_usd": 270000,
+            "btc_balance": 3.0,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 270000,
+        },
+        {
+            "date": "2026-01-02",
+            "equity_usd": 243100,
+            "btc_balance": 3.0,
+            "usdt_balance": 100,
+            "btc_price_usd": 81000,
+            "btc_value_usd": 243000,
+        },
+        {
+            "date": "2026-01-03",
+            "equity_usd": 216300,
+            "btc_balance": 3.0,
+            "usdt_balance": 300,
+            "btc_price_usd": 72000,
+            "btc_value_usd": 216000,
+        },
     ]
 
 
@@ -115,16 +129,40 @@ def _btc_curve_with_deposit() -> list[dict[str, str | float]]:
     Day 4: 3.04 BTC (trading gain of 0.03 BTC)
     """
     return [
-        {"date": "2026-01-01", "equity_usd": 90000, "btc_balance": 1.0,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 90000,
-         "transfer_usd": 90000},
-        {"date": "2026-01-02", "equity_usd": 90900, "btc_balance": 1.01,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 90900},
-        {"date": "2026-01-03", "equity_usd": 270900, "btc_balance": 3.01,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 270900,
-         "transfer_usd": 180000},
-        {"date": "2026-01-04", "equity_usd": 273600, "btc_balance": 3.04,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 273600},
+        {
+            "date": "2026-01-01",
+            "equity_usd": 90000,
+            "btc_balance": 1.0,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 90000,
+            "transfer_usd": 90000,
+        },
+        {
+            "date": "2026-01-02",
+            "equity_usd": 90900,
+            "btc_balance": 1.01,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 90900,
+        },
+        {
+            "date": "2026-01-03",
+            "equity_usd": 270900,
+            "btc_balance": 3.01,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 270900,
+            "transfer_usd": 180000,
+        },
+        {
+            "date": "2026-01-04",
+            "equity_usd": 273600,
+            "btc_balance": 3.04,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 273600,
+        },
     ]
 
 
@@ -138,22 +176,47 @@ def _btc_curve_withdrawal_looks_like_drawdown() -> list[dict[str, str | float]]:
     Day 4: 3.05 BTC (trading gain)
     """
     return [
-        {"date": "2026-01-01", "equity_usd": 360000, "btc_balance": 4.0,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 360000,
-         "transfer_usd": 360000},
-        {"date": "2026-01-02", "equity_usd": 361800, "btc_balance": 4.02,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 361800},
-        {"date": "2026-01-03", "equity_usd": 271800, "btc_balance": 3.02,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 271800,
-         "transfer_usd": -90000},
-        {"date": "2026-01-04", "equity_usd": 274500, "btc_balance": 3.05,
-         "usdt_balance": 0, "btc_price_usd": 90000, "btc_value_usd": 274500},
+        {
+            "date": "2026-01-01",
+            "equity_usd": 360000,
+            "btc_balance": 4.0,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 360000,
+            "transfer_usd": 360000,
+        },
+        {
+            "date": "2026-01-02",
+            "equity_usd": 361800,
+            "btc_balance": 4.02,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 361800,
+        },
+        {
+            "date": "2026-01-03",
+            "equity_usd": 271800,
+            "btc_balance": 3.02,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 271800,
+            "transfer_usd": -90000,
+        },
+        {
+            "date": "2026-01-04",
+            "equity_usd": 274500,
+            "btc_balance": 3.05,
+            "usdt_balance": 0,
+            "btc_price_usd": 90000,
+            "btc_value_usd": 274500,
+        },
     ]
 
 
 # ---------------------------------------------------------------------------
 # Tests: _is_btc_account detection
 # ---------------------------------------------------------------------------
+
 
 class TestBtcDetection:
     def test_usdt_account_detected(self) -> None:
@@ -171,6 +234,7 @@ class TestBtcDetection:
 # ---------------------------------------------------------------------------
 # Tests: _get_equity
 # ---------------------------------------------------------------------------
+
 
 class TestGetEquity:
     def test_usdt_returns_equity_usd(self) -> None:
@@ -190,6 +254,7 @@ class TestGetEquity:
 # ---------------------------------------------------------------------------
 # Tests: TWR computation (USDT accounts)
 # ---------------------------------------------------------------------------
+
 
 class TestTWR:
     def test_flat_equity_zero_return(self) -> None:
@@ -226,6 +291,7 @@ class TestTWR:
 # Tests: MaxDD (transfer-adjusted)
 # ---------------------------------------------------------------------------
 
+
 class TestMaxDD:
     def test_drawdown_no_transfers(self) -> None:
         stats = compute_performance_stats(_usdt_curve_with_drawdown())
@@ -254,6 +320,7 @@ class TestMaxDD:
 # ---------------------------------------------------------------------------
 # Tests: BTC accounts — native-unit PNL
 # ---------------------------------------------------------------------------
+
 
 class TestBtcNativeUnit:
     def test_btc_price_drop_not_pnl(self) -> None:
@@ -290,6 +357,7 @@ class TestBtcNativeUnit:
 # Tests: pnl_chart_generator (MaxDD + TWR)
 # ---------------------------------------------------------------------------
 
+
 class TestPnlChartGenerator:
     def test_usdt_maxdd_in_output(self) -> None:
         """MaxDD should now be included in chart generator output."""
@@ -311,6 +379,7 @@ class TestPnlChartGenerator:
 # ---------------------------------------------------------------------------
 # Tests: Monthly returns (TWR per month)
 # ---------------------------------------------------------------------------
+
 
 class TestMonthlyReturns:
     def test_monthly_return_with_transfer(self) -> None:
@@ -341,6 +410,7 @@ class TestMonthlyReturns:
 # Tests: Volatility and Sharpe
 # ---------------------------------------------------------------------------
 
+
 class TestVolatilityMetrics:
     def test_volatility_computed(self) -> None:
         stats = compute_performance_stats(_usdt_curve_with_drawdown())
@@ -365,6 +435,7 @@ class TestVolatilityMetrics:
 # ---------------------------------------------------------------------------
 # Tests: Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_two_point_curve(self) -> None:

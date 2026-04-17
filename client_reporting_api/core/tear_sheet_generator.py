@@ -54,8 +54,7 @@ _COLOURS = [
 
 _TearSheetData = dict[
     str,
-    list[float] | list[str] | dict[str, float | str]
-    | list[dict[str, str | float]] | bool,
+    list[float] | list[str] | dict[str, float | str] | list[dict[str, str | float]] | bool,
 ]
 
 
@@ -93,11 +92,7 @@ def _compute_daily_series(
         if i > 0:
             eq_prev = _get_equity(curve[i - 1], is_btc)
             xfer = _get_transfer(point, curve[i - 1], is_btc, first_date)
-            day_ret = (
-                (eq - xfer) / eq_prev - 1.0
-                if eq_prev > 0 and eq > 0
-                else 0.0
-            )
+            day_ret = (eq - xfer) / eq_prev - 1.0 if eq_prev > 0 and eq > 0 else 0.0
 
             daily_returns.append(day_ret)
             twr_val = twr_equity_series[-1] * (1.0 + day_ret)

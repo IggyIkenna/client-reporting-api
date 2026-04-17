@@ -55,25 +55,25 @@ each perspective is valid. Method 3 exists specifically for GP's invoicing model
 
 ### At HWM (no seed needed)
 
-| Client | Venue | Currency | Notes |
-|--------|-------|----------|-------|
-| **PR** | OKX | USDT | Best performer. HWM bumped to $335,070 on Apr 9 invoice. |
-| **NN** | OKX | USDT | HWM bumped to $111,986 on Apr 9 invoice. |
-| **ET** | Binance | USDT | HWM bumped to $537,939 on Apr 9 invoice. Blue Coast introducer. |
-| **STD** | OKX | USDT | HWM bumped to $1,012,861 on Apr 9 invoice. Largest AUM. |
-| **ODUM_PROP** | Binance | USDT | Reference/prop account. No fees. ~49 days track record. TWR recovery 2.82% ($51). |
+| Client        | Venue   | Currency | Notes                                                                             |
+| ------------- | ------- | -------- | --------------------------------------------------------------------------------- |
+| **PR**        | OKX     | USDT     | Best performer. HWM bumped to $335,070 on Apr 9 invoice.                          |
+| **NN**        | OKX     | USDT     | HWM bumped to $111,986 on Apr 9 invoice.                                          |
+| **ET**        | Binance | USDT     | HWM bumped to $537,939 on Apr 9 invoice. Blue Coast introducer.                   |
+| **STD**       | OKX     | USDT     | HWM bumped to $1,012,861 on Apr 9 invoice. Largest AUM.                           |
+| **ODUM_PROP** | Binance | USDT     | Reference/prop account. No fees. ~49 days track record. TWR recovery 2.82% ($51). |
 
 ### Underwater — Equity HWM Seeds
 
 These accounts had historical peaks before our equity curve data starts.
 Seeds extracted from `invoice_state._HWM_SEED` as of 2026-02-17/19.
 
-| Client | Venue | Currency | HWM Seed | TWR Recovery | Notional Recovery |
-|--------|-------|----------|----------|--------------|-------------------|
-| **SL** | OKX | USDT | $650,000 | 318.55% | $492,861 (216.8%) |
-| **SL2** | OKX | BTC | 3.216 BTC | 430.29% | 2.578 BTC (125.5%) |
-| **ANU** | OKX | BTC | 1.01 BTC | 53.13% | 0.350 BTC (53.1%) |
-| **IK** | OKX | USDT | $89,000 | 73.86% | $37,809 (73.9%) |
+| Client  | Venue | Currency | HWM Seed  | TWR Recovery | Notional Recovery  |
+| ------- | ----- | -------- | --------- | ------------ | ------------------ |
+| **SL**  | OKX   | USDT     | $650,000  | 318.55%      | $492,861 (216.8%)  |
+| **SL2** | OKX   | BTC      | 3.216 BTC | 430.29%      | 2.578 BTC (125.5%) |
+| **ANU** | OKX   | BTC      | 1.01 BTC  | 53.13%       | 0.350 BTC (53.1%)  |
+| **IK**  | OKX   | USDT     | $89,000   | 73.86%       | $37,809 (73.9%)    |
 
 - SL/SL2: Same person (Shaun Lim), two accounts — USDT and BTC share classes
 - ANU/IK: TWR and Notional agree closely (no large transfers distorting)
@@ -82,16 +82,17 @@ Seeds extracted from `invoice_state._HWM_SEED` as of 2026-02-17/19.
 
 ### GP — PnL-Based Recovery (Special Case)
 
-| Field | Value |
-|-------|-------|
-| Venue | OKX |
-| Currency | BTC account, but P&L tracked in USDT |
-| HWM Model | `pnl_based` (not equity-based) |
-| PnL Recovery Seed | $75,000 USDT (was $80K, $5K credited Mar 2026) |
-| Tracking Start | 2026-03-02 (after last USDT sweep of -$4,989.45) |
-| Current Recovery | ~$70,464 (16.2% of equity) |
+| Field             | Value                                            |
+| ----------------- | ------------------------------------------------ |
+| Venue             | OKX                                              |
+| Currency          | BTC account, but P&L tracked in USDT             |
+| HWM Model         | `pnl_based` (not equity-based)                   |
+| PnL Recovery Seed | $75,000 USDT (was $80K, $5K credited Mar 2026)   |
+| Tracking Start    | 2026-03-02 (after last USDT sweep of -$4,989.45) |
+| Current Recovery  | ~$70,464 (16.2% of equity)                       |
 
 **Why GP is different:**
+
 - BTC balance changes are ALL transfers (no BTC trading)
 - Only USDT trading generates P&L
 - Recovery = $75K - cumulative USDT P&L since tracking start
@@ -108,20 +109,20 @@ change so only actual trading P&L counts.
 
 IK is a single OKX sub-account shared by three investors:
 
-| Investor | Weight |
-|----------|--------|
-| Jihane | 25.344% |
-| Amaka | 21.6% |
-| IK | 53.056% |
+| Investor | Weight  |
+| -------- | ------- |
+| Jihane   | 25.344% |
+| Amaka    | 21.6%   |
+| IK       | 53.056% |
 
 P&L and fees split proportionally by these weights.
 
 ### Fund-of-Fund Clients (Manual Entry)
 
-| Client | Currency | Odum Fee | Notes |
-|--------|----------|----------|-------|
-| YOAV | BTC | 20% | NAV entered manually each period |
-| GUY_ASRAF | BTC | 20% | NAV entered manually each period |
+| Client    | Currency | Odum Fee | Notes                            |
+| --------- | -------- | -------- | -------------------------------- |
+| YOAV      | BTC      | 20%      | NAV entered manually each period |
+| GUY_ASRAF | BTC      | 20%      | NAV entered manually each period |
 
 No exchange API. No trader fee (0%). DeFi BTC yield strategy.
 
@@ -131,29 +132,29 @@ No exchange API. No trader fee (0%). DeFi BTC yield strategy.
 
 ### 4-Tier HWM Model
 
-| Tier | Beneficiary | Typical % | Calculated On |
-|------|-------------|-----------|---------------|
-| Trader Fee | Desk trader | 10% | PnL above trader HWM |
-| Odum Fee | Odum Capital | 20-35% | PnL above Odum HWM |
-| Introducer Fee | Introducer | 5-15% of Odum fee | Triggered only if introducer configured |
-| Server Cost | Infrastructure | $50/month | Only when account is underwater |
+| Tier           | Beneficiary    | Typical %         | Calculated On                           |
+| -------------- | -------------- | ----------------- | --------------------------------------- |
+| Trader Fee     | Desk trader    | 10%               | PnL above trader HWM                    |
+| Odum Fee       | Odum Capital   | 20-35%            | PnL above Odum HWM                      |
+| Introducer Fee | Introducer     | 5-15% of Odum fee | Triggered only if introducer configured |
+| Server Cost    | Infrastructure | $50/month         | Only when account is underwater         |
 
 ### Per-Client Fee Rates
 
-| Client | Odum % | Trader % | Introducer | Introducer % |
-|--------|--------|----------|------------|--------------|
-| PR | 34% | 10% | Max (Maxim Shilo) | 15% of Odum |
-| NN | 30% | 10% | — | — |
-| ET | 30% | 10% | Blue Coast | 5% of Odum |
-| STD | 35% | 10% | — | — |
-| GP | 30% | 10% | — | — |
-| SL | 30% | 10% | — | — |
-| SL2 | 30% | 10% | — | — |
-| ANU | 30% | 10% | — | — |
-| IK | 35% | 10% | — | — |
-| YOAV | 20% | 0% | — | — |
-| GUY_ASRAF | 20% | 0% | — | — |
-| ODUM_PROP | 0% | 0% | — | — |
+| Client    | Odum % | Trader % | Introducer        | Introducer % |
+| --------- | ------ | -------- | ----------------- | ------------ |
+| PR        | 34%    | 10%      | Max (Maxim Shilo) | 15% of Odum  |
+| NN        | 30%    | 10%      | —                 | —            |
+| ET        | 30%    | 10%      | Blue Coast        | 5% of Odum   |
+| STD       | 35%    | 10%      | —                 | —            |
+| GP        | 30%    | 10%      | —                 | —            |
+| SL        | 30%    | 10%      | —                 | —            |
+| SL2       | 30%    | 10%      | —                 | —            |
+| ANU       | 30%    | 10%      | —                 | —            |
+| IK        | 35%    | 10%      | —                 | —            |
+| YOAV      | 20%    | 0%       | —                 | —            |
+| GUY_ASRAF | 20%    | 0%       | —                 | —            |
+| ODUM_PROP | 0%     | 0%       | —                 | —            |
 
 ### Dual HWM for Fees
 
@@ -171,11 +172,11 @@ that period.
 
 ### States
 
-| Status | Meaning | Action |
-|--------|---------|--------|
-| ISSUED | Invoice sent, awaiting payment | Client pays |
-| PAID | Payment received and confirmed | HWM bumped |
-| VOIDED | Cancelled/refunded | Credits created |
+| Status | Meaning                        | Action          |
+| ------ | ------------------------------ | --------------- |
+| ISSUED | Invoice sent, awaiting payment | Client pays     |
+| PAID   | Payment received and confirmed | HWM bumped      |
+| VOIDED | Cancelled/refunded             | Credits created |
 
 ### Generation Flow
 
@@ -189,24 +190,24 @@ that period.
 
 ### Latest Invoice Run (Apr 9, 2026)
 
-| Invoice | Client | Total | PnL Above HWM |
-|---------|--------|-------|----------------|
-| INV-2026-PR-002 | PR | $2,954.60 | $8,690 |
-| INV-2026-NN-002 | NN | $1,075.80 | $3,586 |
-| INV-2026-ET-002 | ET | $5,681.70 | $18,939 |
-| INV-2026-STD-002 | STD | $4,458.65 | $12,739 |
-| INT-MAX-002 | PR (introducer) | $443.00 | 15% of Odum |
-| INT-BC-001 | ET (introducer) | $284.00 | 5% of Odum |
+| Invoice          | Client          | Total     | PnL Above HWM |
+| ---------------- | --------------- | --------- | ------------- |
+| INV-2026-PR-002  | PR              | $2,954.60 | $8,690        |
+| INV-2026-NN-002  | NN              | $1,075.80 | $3,586        |
+| INV-2026-ET-002  | ET              | $5,681.70 | $18,939       |
+| INV-2026-STD-002 | STD             | $4,458.65 | $12,739       |
+| INT-MAX-002      | PR (introducer) | $443.00   | 15% of Odum   |
+| INT-BC-001       | ET (introducer) | $284.00   | 5% of Odum    |
 
 ### Refund History
 
-| Client | Voided Invoices | Refunded Total | Trader Credits |
-|--------|-----------------|----------------|----------------|
-| GP | INV-2025-007, INV-2025-017 | $3,888 | -$1,501.70 |
-| SL | INV-2025-003, INV-2025-008 | $21,757 | -$3,949.93 |
-| SL2 | INV-2025-004 | $8,308 | -$1,660.70 |
-| ANU | INV-2025-006, INV-2025-009 | $1,517 | -$309.90 |
-| IK | (none voided) | $0 | -$1,241.18 |
+| Client | Voided Invoices            | Refunded Total | Trader Credits |
+| ------ | -------------------------- | -------------- | -------------- |
+| GP     | INV-2025-007, INV-2025-017 | $3,888         | -$1,501.70     |
+| SL     | INV-2025-003, INV-2025-008 | $21,757        | -$3,949.93     |
+| SL2    | INV-2025-004               | $8,308         | -$1,660.70     |
+| ANU    | INV-2025-006, INV-2025-009 | $1,517         | -$309.90       |
+| IK     | (none voided)              | $0             | -$1,241.18     |
 
 ---
 
@@ -230,11 +231,11 @@ Local copies live in `data/backfill/{client_id}/` for development.
 
 ### Scripts
 
-| Script | What It Does | When to Run |
-|--------|-------------|-------------|
-| `backfill_history.py` | Full historical pull from exchange API (CCXT). Rebuilds all JSONs from scratch. ~3 min/client. | Initial setup, or when data needs full rebuild |
-| `daily_update.py` | Incremental update. Appends new equity points and trades. ~30s/client. | Hourly via cron or Cloud Scheduler |
-| `generate_full_audit.py` | Generates audit HTML + tear sheets for all 10 accounts using production code paths. | Ad-hoc, for validation/review |
+| Script                   | What It Does                                                                                   | When to Run                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `backfill_history.py`    | Full historical pull from exchange API (CCXT). Rebuilds all JSONs from scratch. ~3 min/client. | Initial setup, or when data needs full rebuild |
+| `daily_update.py`        | Incremental update. Appends new equity points and trades. ~30s/client.                         | Hourly via cron or Cloud Scheduler             |
+| `generate_full_audit.py` | Generates audit HTML + tear sheets for all 10 accounts using production code paths.            | Ad-hoc, for validation/review                  |
 
 ### Running Locally
 
@@ -256,12 +257,13 @@ python scripts/generate_full_audit.py
 
 Two Cloud Run targets built from the same repo:
 
-| Target | Image | Entry Point | Purpose |
-|--------|-------|-------------|---------|
-| `client-reporting-api` | `client-reporting-api:latest` | `client-reporting` (FastAPI on :8080) | API server for UI |
-| `client-reporting-batch` | `client-reporting-batch:latest` | `client-reporting-manage update` | Scheduled data refresh |
+| Target                   | Image                           | Entry Point                           | Purpose                |
+| ------------------------ | ------------------------------- | ------------------------------------- | ---------------------- |
+| `client-reporting-api`   | `client-reporting-api:latest`   | `client-reporting` (FastAPI on :8080) | API server for UI      |
+| `client-reporting-batch` | `client-reporting-batch:latest` | `client-reporting-manage update`      | Scheduled data refresh |
 
 **Cloud Run Jobs:**
+
 - `{env}-client-reporting-update` — hourly (`5 * * * *`)
 - `{env}-client-reporting-daily-snapshot` — daily (`15 0 * * *`)
 
@@ -277,6 +279,7 @@ client-reporting-manage onboard --client-id X --venue okx ...
 ### Credentials
 
 Exchange API keys stored in Secret Manager:
+
 - `exec-{client_id}-{venue}-api-key`
 - `exec-{client_id}-{venue}-api-secret`
 - `exec-{client_id}-{venue}-passphrase` (OKX only)

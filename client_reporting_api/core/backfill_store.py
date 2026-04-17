@@ -305,7 +305,9 @@ def compute_performance_stats(
                         start_usdt = usdt_bal
                     else:
                         # Detect USDT transfers: large USDT jumps on transfer days
-                        prev_usdt = float(prev_point.get("usdt_balance", 0)) if prev_point else usdt_bal
+                        prev_usdt = (
+                            float(prev_point.get("usdt_balance", 0)) if prev_point else usdt_bal
+                        )
                         usdt_change = usdt_bal - prev_usdt
                         if point.get("transfer_usd") is not None and abs(usdt_change) > 500:
                             usdt_transfers += usdt_change

@@ -36,9 +36,7 @@ def _tmp_data_dir(tmp_path: Path) -> Path:
     (client_dir / "summary.json").write_text(json.dumps({"venue": "okx"}))
 
     # empty transfers.json
-    (client_dir / "transfers.json").write_text(
-        json.dumps({"deposits": [], "withdrawals": []})
-    )
+    (client_dir / "transfers.json").write_text(json.dumps({"deposits": [], "withdrawals": []}))
 
     return tmp_path
 
@@ -72,9 +70,7 @@ def _btc_data_dir(tmp_path: Path) -> Path:
     ]
     (client_dir / "equity_curve.json").write_text(json.dumps(curve))
     (client_dir / "summary.json").write_text(json.dumps({"venue": "okx"}))
-    (client_dir / "transfers.json").write_text(
-        json.dumps({"deposits": [], "withdrawals": []})
-    )
+    (client_dir / "transfers.json").write_text(json.dumps({"deposits": [], "withdrawals": []}))
 
     return tmp_path
 
