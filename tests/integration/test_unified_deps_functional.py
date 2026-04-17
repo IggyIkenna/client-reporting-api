@@ -7,7 +7,7 @@ Exercises actual code paths for every unified-* dep used by client-reporting-api
                              setup_tracing
   - unified-cloud-interface: get_data_source, DataSource (pnl_reader, sports_pnl_reader)
   - unified-internal-contracts: FeeStructure, ClientConfig, CredentialsRegistry
-  - unified-events-interface: setup_events, log_event
+  - unified-trading-library: setup_events, log_event
 
 All tests run credential-free (CLOUD_PROVIDER=local CLOUD_MOCK_MODE=true).
 """
@@ -85,7 +85,7 @@ class TestUnifiedConfigInterfaceFunctional:
 
 
 # ---------------------------------------------------------------------------
-# unified-events-interface: setup_events, log_event
+# unified-trading-library: setup_events, log_event
 # ---------------------------------------------------------------------------
 
 
