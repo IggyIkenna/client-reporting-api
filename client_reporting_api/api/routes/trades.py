@@ -6,6 +6,7 @@ In live mode, pulls real trades from OKX/Binance via ExchangeDataCollector.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Query
@@ -115,8 +116,6 @@ def _backfill_trades(client_id: str) -> list[dict[str, str | float | None]]:
         notional = cost_val if cost_val else round(qty * price, 2)
         ts_val = t.get("timestamp")
         ts_ms = int(ts_val) if ts_val is not None else 0
-        from datetime import UTC, datetime
-
         ts_str = datetime.fromtimestamp(ts_ms / 1000, tz=UTC).isoformat() if ts_ms else ""
         trades.append(
             {

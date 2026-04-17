@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import cast
+from typing import ClassVar, cast
 
 import ccxt
 from unified_api_contracts.internal import (
@@ -111,7 +111,16 @@ class ExchangeDataCollector:
         return exchange
 
     # Stablecoins: 1:1 with USD, no ticker lookup needed
-    _STABLECOINS = {"USDT", "USDC", "BUSD", "DAI", "TUSD", "USDP", "FDUSD", "USD"}
+    _STABLECOINS: ClassVar[set[str]] = {
+        "USDT",
+        "USDC",
+        "BUSD",
+        "DAI",
+        "TUSD",
+        "USDP",
+        "FDUSD",
+        "USD",
+    }
 
     @staticmethod
     def _get_usd_price(
@@ -133,6 +142,45 @@ class ExchangeDataCollector:
         return 0.0
 
     @staticmethod
+    def _usd_price_for(currency: str, exchange: ccxt.Exchange | None) -> float:
+        """Resolve a USD-denominated spot price for one currency (1.0 for stables)."""
+        if currency in ExchangeDataCollector._STABLECOINS:
+            return 1.0
+        if exchange is None:
+            return 1.0  # Fallback if no exchange
+        return ExchangeDataCollector._get_usd_price(exchange, currency)
+
+    @staticmethod
+    def _project_asset(
+        currency: str,
+        total_val: float | None,
+        free_raw: dict[str, float | None],
+        used_raw: dict[str, float | None],
+        exchange: ccxt.Exchange | None,
+    ) -> tuple[AssetBalanceSummary, Decimal, Decimal, Decimal] | None:
+        """Build an ``AssetBalanceSummary`` and its USD-denominated free/locked/total.
+
+        Returns ``None`` when the asset has no non-zero total.
+        """
+        if total_val is None or float(total_val) == 0:
+            return None
+        fv = float(free_raw.get(currency, 0) or 0)
+        uv = float(used_raw.get(currency, 0) or 0)
+        tv = float(total_val)
+        usd_price = ExchangeDataCollector._usd_price_for(currency, exchange)
+        total_usd = Decimal(str(tv * usd_price))
+        free_usd = Decimal(str(fv * usd_price))
+        locked_usd = Decimal(str(uv * usd_price))
+        summary = AssetBalanceSummary(
+            currency=currency,
+            free=Decimal(str(fv)),
+            locked=Decimal(str(uv)),
+            total=Decimal(str(tv)),
+            usd_value=total_usd,
+        )
+        return summary, total_usd, free_usd, locked_usd
+
+    @staticmethod
     def _parse_balances(
         balance_raw: dict[str, dict[str, float | None]],
         exchange: ccxt.Exchange | None = None,
@@ -141,18 +189,9 @@ class ExchangeDataCollector:
 
         Converts non-stablecoin assets (BTC, ETH, etc.) to USD using live ticker prices.
         """
-        total_info = cast(
-            dict[str, float | None],
-            balance_raw.get("total", {}),
-        )
-        free_raw = cast(
-            dict[str, float | None],
-            balance_raw.get("free", {}),
-        )
-        used_raw = cast(
-            dict[str, float | None],
-            balance_raw.get("used", {}),
-        )
+        total_info = cast(dict[str, float | None], balance_raw.get("total", {}))
+        free_raw = cast(dict[str, float | None], balance_raw.get("free", {}))
+        used_raw = cast(dict[str, float | None], balance_raw.get("used", {}))
 
         skip = {"info", "free", "used", "total", "timestamp", "datetime"}
         total_usd = Decimal("0")
@@ -161,33 +200,18 @@ class ExchangeDataCollector:
         assets: list[AssetBalanceSummary] = []
 
         for cur, total_val in total_info.items():
-            if cur in skip or total_val is None or float(total_val) == 0:
+            if cur in skip:
                 continue
-            fv = float(free_raw.get(cur, 0) or 0)
-            uv = float(used_raw.get(cur, 0) or 0)
-            tv = float(total_val)
-
-            # Convert to USD: stablecoins 1:1, others via ticker
-            if cur in ExchangeDataCollector._STABLECOINS:
-                usd_price = 1.0
-            elif exchange is not None:
-                usd_price = ExchangeDataCollector._get_usd_price(exchange, cur)
-            else:
-                usd_price = 1.0  # Fallback if no exchange
-
-            usd_val = Decimal(str(tv * usd_price))
-            total_usd += usd_val
-            free_usd += Decimal(str(fv * usd_price))
-            locked_usd += Decimal(str(uv * usd_price))
-            assets.append(
-                AssetBalanceSummary(
-                    currency=cur,
-                    free=Decimal(str(fv)),
-                    locked=Decimal(str(uv)),
-                    total=Decimal(str(tv)),
-                    usd_value=usd_val,
-                )
+            projected = ExchangeDataCollector._project_asset(
+                cur, total_val, free_raw, used_raw, exchange
             )
+            if projected is None:
+                continue
+            summary, tu, fu, lu = projected
+            total_usd += tu
+            free_usd += fu
+            locked_usd += lu
+            assets.append(summary)
         return total_usd, free_usd, locked_usd, assets
 
     @staticmethod
@@ -266,6 +290,34 @@ class ExchangeDataCollector:
             )
             return None
 
+    @staticmethod
+    def _symbols_from_open_positions(exchange: ccxt.Exchange) -> set[str]:
+        """Return symbols of currently-open positions, ignoring fetch errors."""
+        out: set[str] = set()
+        try:
+            positions = exchange.fetch_positions()
+        except ccxt.BaseError:
+            return out
+        for pos in positions:
+            sym = pos.get("symbol")
+            if sym and float(pos.get("contracts", 0) or 0) != 0:
+                out.add(str(sym))
+        return out
+
+    @staticmethod
+    def _symbols_from_okx_swap_scan(exchange: ccxt.Exchange) -> set[str]:
+        """Pull symbols from a recent OKX SWAP-only trade scan."""
+        out: set[str] = set()
+        try:
+            recent = exchange.fetch_my_trades(None, limit=50, params={"instType": "SWAP"})
+        except ccxt.BaseError:
+            return out
+        for t in recent:
+            sym = t.get("symbol")
+            if sym:
+                out.add(str(sym))
+        return out
+
     def _get_traded_symbols(
         self,
         exchange: ccxt.Exchange,
@@ -276,33 +328,10 @@ class ExchangeDataCollector:
         We discover symbols from open positions + core pairs.
         """
         symbols: set[str] = set()
-        try:
-            positions = exchange.fetch_positions()
-            for pos in positions:
-                sym = pos.get("symbol")
-                if sym and float(pos.get("contracts", 0) or 0) != 0:
-                    symbols.add(str(sym))
-        except ccxt.BaseError:
-            pass
-
+        symbols |= self._symbols_from_open_positions(exchange)
         if exchange.id == "okx":
-            # Also do a quick instType=SWAP scan
-            try:
-                recent = exchange.fetch_my_trades(
-                    None,
-                    limit=50,
-                    params={"instType": "SWAP"},
-                )
-                for t in recent:
-                    sym = t.get("symbol")
-                    if sym:
-                        symbols.add(str(sym))
-            except ccxt.BaseError:
-                pass
-
-        # Always include core pairs for trade history
-        for pair in ("BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"):
-            symbols.add(pair)
+            symbols |= self._symbols_from_okx_swap_scan(exchange)
+        symbols |= {"BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"}
         return list(symbols)
 
     @staticmethod

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ client_name }} — {{ month_label }} Performance Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #fff; color: #1a1a2e; font-size: 12px; }
+  .page { max-width: 800px; margin: 0 auto; padding: 40px; }
+
+  /* Header */
+  .report-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff; padding: 32px 40px; border-radius: 8px 8px 0 0;
+    position: relative;
+  }
+  .report-header::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #e94560, #0f3460, #e94560);
+  }
+  .report-header h1 { font-size: 22px; font-weight: 700; }
+  .report-header .subtitle { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+  .report-header .logo { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 8px; letter-spacing: 2px; text-transform: uppercase; }
+
+  /* Content */
+  .content { border: 1px solid #e9ecef; border-top: none; border-radius: 0 0 8px 8px; padding: 24px 40px; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat { text-align: center; padding: 12px; background: #f8f9fa; border-radius: 6px; }
+  .stat .label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #6c757d; }
+  .stat .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .positive { color: #28a745; }
+  .negative { color: #dc3545; }
+
+  /* Charts */
+  .chart-section { margin-bottom: 24px; }
+  .chart-section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #6c757d; margin-bottom: 8px; }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { text-align: left; padding: 8px 6px; border-bottom: 2px solid #1a1a2e; color: #6c757d; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 6px; border-bottom: 1px solid #f0f0f0; font-variant-numeric: tabular-nums; }
+  .right { text-align: right; }
+  tfoot td { font-weight: 700; border-top: 2px solid #1a1a2e; }
+
+  /* Footer */
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e9ecef; text-align: center; color: #adb5bd; font-size: 10px; }
+
+  @media print {
+    .page { padding: 20px; max-width: none; }
+    .report-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .stat { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="report-header">
+    <h1>{{ client_name }}</h1>
+    <div class="subtitle">Monthly Performance Report — {{ month_label }}</div>
+    <div class="logo">Odum Research Ltd &bull; Mean Reversion Grid Strategy</div>
+  </div>
+
+  <div class="content">
+    <!-- Performance Summary -->
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="label">Starting Equity</div>
+        <div class="value">${{ '{:,.0f}'.format(start_equity) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Ending Equity</div>
+        <div class="value">${{ '{:,.0f}'.format(end_equity) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Month PnL</div>
+        <div class="value {{ 'positive' if month_pnl >= 0 else 'negative' }}">${{ '{:,.0f}'.format(month_pnl) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Return</div>
+        <div class="value {{ 'positive' if month_return >= 0 else 'negative' }}">{{ '{:.1f}'.format(month_return) }}%</div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="label">Trading Volume</div>
+        <div class="value">${{ '{:,.0f}'.format(month_volume) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Trades</div>
+        <div class="value">{{ '{:,}'.format(month_trades) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Net Transfers</div>
+        <div class="value">${{ '{:,.0f}'.format(month_transfers) }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Trading Days</div>
+        <div class="value">{{ trading_days }}</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="chart-row">
+      <div class="chart-section">
+        <h3>Equity Curve</h3>
+        <canvas id="equityChart" height="160"></canvas>
+      </div>
+      <div class="chart-section">
+        <h3>Daily PnL</h3>
+        <canvas id="dailyPnlChart" height="160"></canvas>
+      </div>
+    </div>
+
+    <!-- Coin Breakdown -->
+    <div class="chart-section">
+      <h3>Coin-Level PnL Breakdown</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Coin</th>
+            <th class="right">Realized</th>
+            <th class="right">Fees</th>
+            <th class="right">Funding</th>
+            <th class="right">Net PnL</th>
+            <th class="right">Volume</th>
+            <th class="right">Trades</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in coins %}
+          <tr>
+            <td><strong>{{ c.symbol }}</strong></td>
+            <td class="right {{ 'positive' if c.realized >= 0 else 'negative' }}">${{ '{:,.2f}'.format(c.realized) }}</td>
+            <td class="right">${{ '{:,.2f}'.format(c.fees) }}</td>
+            <td class="right {{ 'positive' if c.funding >= 0 else 'negative' }}">${{ '{:,.2f}'.format(c.funding) }}</td>
+            <td class="right {{ 'positive' if c.net >= 0 else 'negative' }}"><strong>${{ '{:,.2f}'.format(c.net) }}</strong></td>
+            <td class="right">${{ '{:,.0f}'.format(c.volume) }}</td>
+            <td class="right">{{ c.trades }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>TOTAL</td>
+            <td class="right">${{ '{:,.2f}'.format(total_realized) }}</td>
+            <td class="right">${{ '{:,.2f}'.format(total_fees) }}</td>
+            <td class="right">${{ '{:,.2f}'.format(total_funding) }}</td>
+            <td class="right"><strong>${{ '{:,.2f}'.format(total_net) }}</strong></td>
+            <td class="right">${{ '{:,.0f}'.format(total_volume) }}</td>
+            <td class="right">{{ total_trades }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    {% if transfers %}
+    <div class="chart-section">
+      <h3>Transfers</h3>
+      <table>
+        <thead><tr><th>Date</th><th class="right">Amount</th><th>Type</th></tr></thead>
+        <tbody>
+        {% for t in transfers %}
+        <tr>
+          <td>{{ t.date }}</td>
+          <td class="right {{ 'positive' if t.amount > 0 else 'negative' }}">
+            {{ '$' if t.amount >= 0 else '-$' }}{{ '{:,.0f}'.format(t.amount if t.amount >= 0 else -t.amount) }}
+          </td>
+          <td>{{ 'Deposit' if t.amount > 0 else 'Withdrawal' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="footer">
+    <p>Odum Research Ltd &bull; 9 Appold Street, London EC2A 2AP</p>
+    <p>Generated {{ generated_at }} &bull; Confidential</p>
+  </div>
+</div>
+
+<script>
+Chart.defaults.font.family = 'Inter';
+Chart.defaults.font.size = 10;
+
+new Chart(document.getElementById('equityChart'), {
+  type: 'line',
+  data: {
+    labels: {{ equity_dates | tojson }},
+    datasets: [{
+      data: {{ equity_values | tojson }},
+      borderColor: '#1a1a2e', fill: false, tension: 0.3, pointRadius: 0, borderWidth: 1.5,
+    }],
+  },
+  options: { responsive: true, plugins: { legend: { display: false } },
+    scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } },
+              y: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'K' } } } }
+});
+
+const dpnl = {{ daily_pnl_values | tojson }};
+new Chart(document.getElementById('dailyPnlChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ equity_dates | tojson }},
+    datasets: [{
+      data: dpnl,
+      backgroundColor: dpnl.map(v => v >= 0 ? '#28a74588' : '#dc354588'),
+      borderColor: dpnl.map(v => v >= 0 ? '#28a745' : '#dc3545'),
+      borderWidth: 1,
+    }],
+  },
+  options: { responsive: true, plugins: { legend: { display: false } },
+    scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } },
+              y: { ticks: { callback: v => '$' + v.toLocaleString() } } } }
+});
+</script>
+</body>
+</html>

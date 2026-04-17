@@ -58,6 +58,58 @@ def _build_client_entry(
     }
 
 
+def _filter_clients(
+    clients_cfg: dict[str, object],
+    registry: dict[str, object],
+    organisation_id: str | None,
+    strategy_id: str | None,
+) -> list[dict[str, str | bool]]:
+    """Build the filtered client entry list for ``list_clients``."""
+    clients: list[dict[str, str | bool]] = []
+    for cid, cfg in clients_cfg.items():
+        if not isinstance(cfg, dict):
+            continue
+        entry = _build_client_entry(cid, cfg, registry)
+        if organisation_id and entry.get("organisation_id") != organisation_id:
+            continue
+        if strategy_id and entry.get("strategy_id") != strategy_id:
+            continue
+        clients.append(entry)
+    return clients
+
+
+def _organisation_list(registry: dict[str, object]) -> list[dict[str, str]]:
+    """Project the registry organisations dict to a UI-friendly list."""
+    orgs_raw = registry.get("organisations", {})
+    if not isinstance(orgs_raw, dict):
+        return []
+    return [
+        {
+            "id": oid,
+            "name": str(oinfo.get("name", oid)),
+            "type": str(oinfo.get("type", "client")),
+        }
+        for oid, oinfo in orgs_raw.items()
+        if isinstance(oinfo, dict)
+    ]
+
+
+def _strategy_list(registry: dict[str, object]) -> list[dict[str, str]]:
+    """Project the registry strategies dict to a UI-friendly list."""
+    strats_raw = registry.get("strategies", {})
+    if not isinstance(strats_raw, dict):
+        return []
+    return [
+        {
+            "id": sid,
+            "name": str(sinfo.get("name", sid)),
+            "description": str(sinfo.get("description", "")),
+        }
+        for sid, sinfo in strats_raw.items()
+        if isinstance(sinfo, dict)
+    ]
+
+
 @router.get("")
 def list_clients(
     organisation_id: str | None = Query(None, description="Filter by organisation"),
@@ -72,49 +124,13 @@ def list_clients(
 
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
-
-    clients: list[dict[str, str | bool]] = []
-    for cid, cfg in clients_cfg.items():
-        if not isinstance(cfg, dict):
-            continue
-        entry = _build_client_entry(cid, cfg, registry)
-        if organisation_id and entry.get("organisation_id") != organisation_id:
-            continue
-        if strategy_id and entry.get("strategy_id") != strategy_id:
-            continue
-        clients.append(entry)
-
-    # Build org and strategy lists for UI grouping
-    orgs_raw = registry.get("organisations", {})
-    org_list: list[dict[str, str]] = []
-    if isinstance(orgs_raw, dict):
-        for oid, oinfo in orgs_raw.items():
-            if isinstance(oinfo, dict):
-                org_list.append(
-                    {
-                        "id": oid,
-                        "name": str(oinfo.get("name", oid)),
-                        "type": str(oinfo.get("type", "client")),
-                    }
-                )
-
-    strats_raw = registry.get("strategies", {})
-    strat_list: list[dict[str, str]] = []
-    if isinstance(strats_raw, dict):
-        for sid, sinfo in strats_raw.items():
-            if isinstance(sinfo, dict):
-                strat_list.append(
-                    {
-                        "id": sid,
-                        "name": str(sinfo.get("name", sid)),
-                        "description": str(sinfo.get("description", "")),
-                    }
-                )
+    if not isinstance(clients_cfg, dict):
+        clients_cfg = {}
 
     return {
-        "clients": clients,
-        "organisations": org_list,
-        "strategies": strat_list,
+        "clients": _filter_clients(clients_cfg, registry, organisation_id, strategy_id),
+        "organisations": _organisation_list(registry),
+        "strategies": _strategy_list(registry),
     }
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 
 import pytest
@@ -15,7 +16,32 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 @pytest.fixture(autouse=True)
 def _enable_mock_mode() -> Generator[None]:
-    """Enable mock mode and disable auth for route tests."""
+    """Enable mock mode and disable auth for route tests.
+
+    The route-level FastAPI auth dependency built by
+    ``unified_trading_library.create_api_auth`` instantiates a fresh
+    ``UnifiedCloudConfig`` per request, so we must set the underlying env
+    vars (DISABLE_AUTH / DATA_MODE) in addition to flipping the
+    module-level ``DISABLE_AUTH`` constant for the local middleware.
+    """
+    original_env = {
+        "DISABLE_AUTH": os.environ.get("DISABLE_AUTH"),
+        "DATA_MODE": os.environ.get("DATA_MODE"),
+        "CLOUD_MOCK_MODE": os.environ.get("CLOUD_MOCK_MODE"),
+    }
+    os.environ["DISABLE_AUTH"] = "true"
+    os.environ["DATA_MODE"] = "mock"
+    os.environ["CLOUD_MOCK_MODE"] = "true"
+
+    # UTL caches the auth config tuple via @lru_cache. Clear the cache so the
+    # new env vars are picked up by the route-level dependency. The cache lives
+    # on a module-private function; reach it via the same import the dependency
+    # itself uses (the public ``create_api_auth`` symbol).
+    import importlib
+
+    _utl_api_auth = importlib.import_module("unified_trading_library.cloud_interface.api_auth")
+    _utl_api_auth._get_auth_config.cache_clear()
+
     original_auth = _auth_module.DISABLE_AUTH
     _auth_module.DISABLE_AUTH = True
 
@@ -46,6 +72,12 @@ def _enable_mock_mode() -> Generator[None]:
     for cfg, dm, cm in originals:
         cfg.data_mode = dm  # type: ignore[misc]
         cfg.cloud_mock_mode = cm  # type: ignore[misc]
+    for key, val in original_env.items():
+        if val is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = val
+    _utl_api_auth._get_auth_config.cache_clear()
 
 
 @pytest.fixture()
@@ -61,9 +93,12 @@ class TestClients:
         resp = client.get("/api/v1/clients")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
-        assert len(data) >= 5
-        assert all("id" in c and "name" in c for c in data)
+        # Endpoint returns {"clients": [...], "organisations": [...], "strategies": [...]}
+        assert isinstance(data, dict)
+        clients_list = data["clients"]
+        assert isinstance(clients_list, list)
+        assert len(clients_list) >= 5
+        assert all("id" in c and "name" in c for c in clients_list)
 
     def test_get_client_found(self, client: TestClient) -> None:
         resp = client.get("/api/v1/clients/PR")

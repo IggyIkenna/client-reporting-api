@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -264,8 +265,6 @@ def export_tear_sheet(
     path = generate_tear_sheet(ids, title=title)
     if not path:
         return HTMLResponse(content="<h1>No data available</h1>", status_code=404)
-
-    from pathlib import Path
 
     html = Path(path).read_text(encoding="utf-8")
     return HTMLResponse(content=html)

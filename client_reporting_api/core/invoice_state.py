@@ -19,6 +19,7 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 from unified_api_contracts.internal import (
     HWMState,
@@ -93,7 +94,8 @@ _HWM_SEED: dict[str, dict[str, Decimal | str]] = {
         "hwm_model": "pnl_based",
         "pnl_reset_date": "2026-02-19",
         "pnl_recovery_seed": Decimal("75000"),  # was 80K, 5K USDT credited Mar 2026
-        "pnl_tracking_start": "2026-03-02",  # after last known USDT sweep; $75K accounts for everything before
+        # after last known USDT sweep; $75K accounts for everything before
+        "pnl_tracking_start": "2026-03-02",
     },
     "SL": {
         "trader_hwm": Decimal("650000"),
@@ -155,7 +157,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-02",
         "status": "PAID",
         "total": Decimal("7817.21"),
-        "notes": "Inception to Feb 17 2026: $19,543.02 profit above $306,836.98 HWM × 40%. Paid.",
+        "notes": "Inception to Feb 17 2026: $19,543.02 profit above $306,836.98 HWM x 40%. Paid.",
     },
     # GP refunded invoices
     {
@@ -221,7 +223,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-02",
         "status": "PAID",
         "total": Decimal("5180"),
-        "notes": "Inception to Feb 17 2026: $14,800 profit above $500K HWM × 35%. Paid.",
+        "notes": "Inception to Feb 17 2026: $14,800 profit above $500K HWM x 35%. Paid.",
     },
     # ET Invoice #25
     {
@@ -230,7 +232,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-02",
         "status": "PAID",
         "total": Decimal("5700"),
-        "notes": "Inception to Feb 17 2026: $19,000 profit above $500K HWM × 30%. Paid.",
+        "notes": "Inception to Feb 17 2026: $19,000 profit above $500K HWM x 30%. Paid.",
     },
     # Introducer invoice — Max for PR
     {
@@ -239,7 +241,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-02",
         "status": "PAID",
         "total": Decimal("2782.80"),
-        "notes": "Introducer fee 15% × $18,552 Odum invoices. Paid Feb 20 2026 (€2,360.76).",
+        "notes": "Introducer fee 15% x $18,552 Odum invoices. Paid Feb 20 2026 (€2,360.76).",
     },
     # NN Feb invoice (sent but unpaid — HWM moved to $108,400)
     {
@@ -248,7 +250,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-02",
         "status": "ISSUED",
         "total": Decimal("2520"),
-        "notes": "30% × $8,400 PnL above $100,000 HWM. Sent Feb 17 2026. Unpaid.",
+        "notes": "30% x $8,400 PnL above $100,000 HWM. Sent Feb 17 2026. Unpaid.",
     },
     # ── April 9 2026 invoice run — ISSUED (sent, not yet paid) ──
     {
@@ -257,7 +259,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("2954.60"),
-        "notes": "34% × $8,690 PnL above $326,380 HWM. Sent Apr 9 2026.",
+        "notes": "34% x $8,690 PnL above $326,380 HWM. Sent Apr 9 2026.",
     },
     {
         "invoice_id": "INV-2026-NN-002",
@@ -265,7 +267,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("1075.80"),
-        "notes": "30% × $3,586 PnL above $108,400 HWM. Sent Apr 9 2026.",
+        "notes": "30% x $3,586 PnL above $108,400 HWM. Sent Apr 9 2026.",
     },
     {
         "invoice_id": "INV-2026-ET-002",
@@ -273,7 +275,10 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("5681.70"),
-        "notes": "30% × $18,939 PnL above $519,000 HWM (deposits $1.5M, withdrawal $19K offset). Sent Apr 9 2026.",
+        "notes": (
+            "30% x $18,939 PnL above $519,000 HWM "
+            "(deposits $1.5M, withdrawal $19K offset). Sent Apr 9 2026."
+        ),
     },
     {
         "invoice_id": "INV-2026-STD-002",
@@ -281,7 +286,10 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("4458.65"),
-        "notes": "35% × $12,739 PnL above $514,800 HWM (deposit $500K, withdrawal $14.8K offset). Sent Apr 9 2026.",
+        "notes": (
+            "35% x $12,739 PnL above $514,800 HWM "
+            "(deposit $500K, withdrawal $14.8K offset). Sent Apr 9 2026."
+        ),
     },
     # Introducer — Max for PR (Apr 9)
     {
@@ -290,7 +298,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("443"),
-        "notes": "Introducer fee 15% × $2,955 Odum invoice. Sent Apr 9 2026.",
+        "notes": "Introducer fee 15% x $2,955 Odum invoice. Sent Apr 9 2026.",
     },
     # Introducer — Blue Coast for ET (Apr 9)
     {
@@ -299,7 +307,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("284"),
-        "notes": "Introducer fee 5% × $5,682 Odum invoice. Sent Apr 9 2026.",
+        "notes": "Introducer fee 5% x $5,682 Odum invoice. Sent Apr 9 2026.",
     },
 ]
 
@@ -346,7 +354,7 @@ _TRADER_PAYMENTS_SEED: list[dict[str, str | Decimal]] = [
         "date": "2026-04-09",
         "amount": Decimal("359"),
         "status": "ISSUED",
-        "notes": "10% × $3,586 PnL from trader HWM $108,400",
+        "notes": "10% x $3,586 PnL from trader HWM $108,400",
     },
     {"client_id": "ET", "date": "2026-04-09", "amount": Decimal("1894"), "status": "ISSUED"},
     {"client_id": "STD", "date": "2026-04-09", "amount": Decimal("1274"), "status": "ISSUED"},
@@ -558,6 +566,59 @@ class InvoiceStateManager:
                 total += credits
         return total  # negative = trader owes Odum
 
+    @staticmethod
+    def _load_equity_curve(client_id: str) -> list[dict[str, float | str]] | None:
+        """Load and parse a client's equity_curve.json, or None on missing/error."""
+        equity_path = _DATA_DIR / client_id / "equity_curve.json"
+        if not equity_path.exists():
+            return None
+        try:
+            with open(equity_path) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    @staticmethod
+    def _net_usdt_moved_after(curve: list[dict[str, float | str]], tracking_start: str) -> Decimal:
+        """Sum USDT transfers detected after ``tracking_start``.
+
+        We treat a row as a USDT transfer when ``transfer_usd`` is set AND the
+        USDT balance jumps by more than a small noise threshold (>$500) since
+        the previous row. BTC-balance changes are recorded but do not affect
+        the USDT-only sum returned here.
+        """
+        net_usdt_moved = Decimal("0")
+        for i in range(1, len(curve)):
+            date_str = str(curve[i].get("date", ""))
+            if date_str <= tracking_start:
+                continue
+            if curve[i].get("transfer_usd") is None:
+                continue
+            prev_usdt = Decimal(str(curve[i - 1].get("usdt_balance", 0)))
+            curr_usdt = Decimal(str(curve[i].get("usdt_balance", 0)))
+            usdt_jump = curr_usdt - prev_usdt
+            if abs(usdt_jump) > 500:
+                net_usdt_moved += usdt_jump
+        return net_usdt_moved
+
+    def _compute_pnl_based_recovery(
+        self, client_id: str, seed: dict[str, Decimal | str]
+    ) -> Decimal:
+        """Recovery for accounts using the PnL-based HWM model (e.g. GP).
+
+        PnL = current USDT balance, offset by any post-``tracking_start`` USDT
+        transfers (deposits/withdrawals are not trading PnL). Recovery is the
+        residual gap between the recovery seed and that genuine PnL.
+        """
+        recovery_seed = Decimal(str(seed.get("pnl_recovery_seed", 0)))
+        curve = self._load_equity_curve(client_id)
+        if not curve:
+            return recovery_seed
+        current_usdt = Decimal(str(curve[-1].get("usdt_balance", 0)))
+        net_usdt_moved = self._net_usdt_moved_after(curve, str(seed.get("pnl_tracking_start", "")))
+        usdt_pnl = current_usdt - net_usdt_moved
+        return max(Decimal("0"), recovery_seed - usdt_pnl)
+
     def _compute_recovery(
         self,
         client_id: str,
@@ -571,154 +632,107 @@ class InvoiceStateManager:
         Others use simple gap: recovery = HWM - current_equity.
         """
         if seed.get("hwm_model") == "pnl_based":
-            # GP: PnL = USDT trading growth only.
-            # All BTC balance changes are transfers (no BTC trading).
-            # BTC price appreciation is NOT PnL.
-            # Use client-confirmed USDT transfer amounts (not snapshot residual)
-            # to avoid misattributing trading income on transfer days.
-            recovery_seed = Decimal(str(seed.get("pnl_recovery_seed", 0)))
-            equity_path = _DATA_DIR / client_id / "equity_curve.json"
-            if not equity_path.exists():
-                return recovery_seed
-            try:
-                with open(equity_path) as f:
-                    curve = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                return recovery_seed
-
-            current_usdt = Decimal(str(curve[-1].get("usdt_balance", 0)))
-
-            # PnL = current USDT in the account.
-            # The recovery seed ($75K) already accounts for all historical
-            # USDT swept out before the tracking start date.
-            # For future USDT transfers after tracking_start, we offset
-            # so only genuine trading growth counts (not deposits/withdrawals).
-            tracking_start = str(seed.get("pnl_tracking_start", ""))
-            net_usdt_moved = Decimal("0")
-            for i in range(1, len(curve)):
-                date_str = str(curve[i].get("date", ""))
-                if date_str <= tracking_start:
-                    continue
-                prev_usdt_bal = Decimal(str(curve[i - 1].get("usdt_balance", 0)))
-                curr_usdt_bal = Decimal(str(curve[i].get("usdt_balance", 0)))
-                prev_btc_bal = Decimal(str(curve[i - 1].get("btc_balance", 0)))
-                curr_btc_bal = Decimal(str(curve[i].get("btc_balance", 0)))
-                # A USDT transfer happened if BTC didn't change but USDT
-                # jumped by more than normal daily trading income, OR if
-                # a transfer_usd was detected AND BTC didn't change
-                if curve[i].get("transfer_usd") is not None and prev_btc_bal == curr_btc_bal:
-                    # BTC didn't move — entire transfer is USDT
-                    # But this could be a false positive from BTC price swing
-                    # Only count if USDT jump is large (>$500)
-                    usdt_jump = curr_usdt_bal - prev_usdt_bal
-                    if abs(usdt_jump) > 500:
-                        net_usdt_moved += usdt_jump
-                elif curve[i].get("transfer_usd") is not None and prev_btc_bal != curr_btc_bal:
-                    # BTC moved (BTC transfer) — check if USDT also had
-                    # an abnormal jump beyond daily trading income
-                    usdt_jump = curr_usdt_bal - prev_usdt_bal
-                    if abs(usdt_jump) > 500:
-                        net_usdt_moved += usdt_jump
-
-            usdt_pnl = current_usdt - net_usdt_moved
-            return max(Decimal("0"), recovery_seed - usdt_pnl)
-
-        # Standard: gap to HWM
+            return self._compute_pnl_based_recovery(client_id, seed)
         return max(Decimal("0"), hwm.odum_hwm - live_equity)
 
-    def compute_current_fees(self, client_id: str) -> dict[str, Decimal | str | bool] | None:
-        """Compute current fee position using seed HWM + live equity (the trickle).
-
-        Returns fee breakdown or None if client not found.
-        """
-        hwm = self.get_hwm_state(client_id)
-        if hwm is None:
-            return None
-
-        cfg = get_client_config(client_id)
-        if cfg is None:
-            return None
-
+    def _underwater_fee_block(
+        self,
+        client_id: str,
+        cfg: dict[str, object],
+        hwm: HWMState,
+        seed: dict[str, Decimal | str] | None,
+        live_equity: Decimal,
+        live_equity_usd: Decimal | None,
+        currency: str,
+    ) -> dict[str, Decimal | str | bool]:
+        """Build the fee summary for an underwater (or prop) account."""
         is_underwater = bool(cfg.get("is_underwater", False))
+        result: dict[str, Decimal | str | bool] = {
+            "client_id": client_id,
+            "currency": currency,
+            "current_equity": live_equity,
+            "current_equity_usd": live_equity_usd,
+            "is_underwater": is_underwater,
+            "trader_hwm": hwm.trader_hwm,
+            "odum_hwm": hwm.odum_hwm,
+            "trader_credits": hwm.trader_credits,
+            "server_cost": Decimal("50") if is_underwater else Decimal("0"),
+            "trader_fee": Decimal("0"),
+            "odum_fee": Decimal("0"),
+            "introducer_fee": Decimal("0"),
+            "status": "UNDERWATER" if is_underwater else "PROP",
+        }
+        if is_underwater and seed is not None:
+            result["recovery_required"] = self._compute_recovery(client_id, live_equity, hwm, seed)
+        return result
+
+    @staticmethod
+    def _apply_trader_credits(
+        trader_fee: Decimal,
+        trader_already_paid: Decimal,
+        trader_credits: Decimal,
+    ) -> tuple[Decimal, Decimal]:
+        """Return (net_trader_fee, credit_applied) after deducting paid + credits."""
+        net = max(Decimal("0"), trader_fee - trader_already_paid)
+        credit_applied = Decimal("0")
+        if trader_credits < 0:
+            credit_applied = min(net, abs(trader_credits))
+            net = net - credit_applied
+        return net, credit_applied
+
+    def _compute_at_hwm_fees(
+        self,
+        client_id: str,
+        cfg: dict[str, object],
+        hwm: HWMState,
+        seed: dict[str, Decimal | str] | None,
+        live_equity: Decimal,
+    ) -> dict[str, Decimal | str]:
+        """Compute the raw fee scalars used by ``_at_hwm_fee_block``."""
         odum_fee_pct = Decimal(str(cfg.get("odum_fee_pct", 0)))
         trader_fee_pct = Decimal(str(cfg.get("trader_fee_pct", 0)))
         introducer_fee_pct = Decimal(str(cfg.get("introducer_fee_pct", 0)))
         introducer_id = str(cfg.get("introducer_id", ""))
 
-        # Determine account currency (BTC or USDT)
-        seed = _HWM_SEED.get(client_id)
-        currency = str(seed.get("currency", "USDT")) if seed else "USDT"
-
-        # Live equity in account currency (BTC for BTC class, USD for USDT class)
-        live_equity = self.get_live_equity(client_id)
-        # USD equity for display
-        live_equity_usd = self.get_live_equity_usd(client_id)
-
-        if live_equity is None:
-            return {
-                "client_id": client_id,
-                "currency": currency,
-                "status": "NO_LIVE_DATA",
-                "is_underwater": is_underwater,
-                "trader_hwm": hwm.trader_hwm,
-                "odum_hwm": hwm.odum_hwm,
-                "trader_credits": hwm.trader_credits,
-            }
-
-        # Compute fees against HWMs (all in account currency)
-        if is_underwater or cfg.get("odum_fee_pct", 0) == 0:
-            result: dict[str, Decimal | str | bool] = {
-                "client_id": client_id,
-                "currency": currency,
-                "current_equity": live_equity,
-                "current_equity_usd": live_equity_usd,
-                "is_underwater": is_underwater,
-                "trader_hwm": hwm.trader_hwm,
-                "odum_hwm": hwm.odum_hwm,
-                "trader_credits": hwm.trader_credits,
-                "server_cost": Decimal("50") if is_underwater else Decimal("0"),
-                "trader_fee": Decimal("0"),
-                "odum_fee": Decimal("0"),
-                "introducer_fee": Decimal("0"),
-                "status": "UNDERWATER" if is_underwater else "PROP",
-            }
-            if is_underwater and seed is not None:
-                recovery = self._compute_recovery(client_id, live_equity, hwm, seed)
-                result["recovery_required"] = recovery
-            return result
-
-        # PnL in account currency (BTC growth for BTC class, USD growth for USDT class)
-        # Subtract deposits since HWM — deposits aren't trading PnL
-        # Computed automatically from equity_curve.json transfer entries
         deposits_since = self.compute_deposits_since_hwm(client_id)
-
-        # Same HWM for everyone — trader, Odum, introducer all use odum_hwm
         pnl = max(Decimal("0"), live_equity - hwm.odum_hwm - deposits_since)
 
         odum_fee = pnl * odum_fee_pct
         trader_fee = pnl * trader_fee_pct
-
-        intro_fee = Decimal("0")
-        if introducer_fee_pct and introducer_id:
-            intro_fee = odum_fee * introducer_fee_pct
-
-        # Net trader fee = gross fee on PnL since HWM, minus what trader
-        # has already been paid on that same PnL.
-        # Payments before the last HWM bump covered old PnL — the HWM
-        # bump already accounts for them. Only sum payments since the
-        # odum_hwm was last set. Stored as "since_hwm" date on each payment,
-        # or we use a per-client "trader_paid_since_hwm" in seed.
+        intro_fee = (
+            odum_fee * introducer_fee_pct if introducer_fee_pct and introducer_id else Decimal("0")
+        )
         trader_already_paid = (
             Decimal(str(seed.get("trader_paid_since_hwm", 0))) if seed else Decimal("0")
         )
-        net_trader_fee = max(Decimal("0"), trader_fee - trader_already_paid)
+        net_trader_fee, credit_applied = self._apply_trader_credits(
+            trader_fee, trader_already_paid, hwm.trader_credits
+        )
+        return {
+            "deposits_since": deposits_since,
+            "pnl": pnl,
+            "odum_fee": odum_fee,
+            "trader_fee": trader_fee,
+            "intro_fee": intro_fee,
+            "trader_already_paid": trader_already_paid,
+            "net_trader_fee": net_trader_fee,
+            "credit_applied": credit_applied,
+            "introducer_id": introducer_id,
+        }
 
-        # Apply trader credits (deduct from net fee)
-        credit_applied = Decimal("0")
-        if hwm.trader_credits < 0:
-            credit_applied = min(net_trader_fee, abs(hwm.trader_credits))
-            net_trader_fee = net_trader_fee - credit_applied
-
+    def _at_hwm_fee_block(
+        self,
+        client_id: str,
+        cfg: dict[str, object],
+        hwm: HWMState,
+        seed: dict[str, Decimal | str] | None,
+        live_equity: Decimal,
+        live_equity_usd: Decimal | None,
+        currency: str,
+    ) -> dict[str, Decimal | str | bool]:
+        """Build the fee summary for an at-HWM (potentially earning) account."""
+        f = self._compute_at_hwm_fees(client_id, cfg, hwm, seed, live_equity)
+        pnl = cast(Decimal, f["pnl"])
         return {
             "client_id": client_id,
             "currency": currency,
@@ -727,81 +741,122 @@ class InvoiceStateManager:
             "is_underwater": False,
             "trader_hwm": hwm.trader_hwm,
             "odum_hwm": hwm.odum_hwm,
-            "effective_hwm": hwm.odum_hwm + deposits_since,
-            "deposits_since_hwm": deposits_since,
+            "effective_hwm": hwm.odum_hwm + cast(Decimal, f["deposits_since"]),
+            "deposits_since_hwm": f["deposits_since"],
             "pnl": pnl,
-            "pnl_above_trader_hwm": pnl,  # same as pnl (unified HWM)
-            "pnl_above_odum_hwm": pnl,  # same as pnl (unified HWM)
-            "trader_fee_gross": trader_fee,
-            "trader_already_paid": trader_already_paid,
+            "pnl_above_trader_hwm": pnl,
+            "pnl_above_odum_hwm": pnl,
+            "trader_fee_gross": f["trader_fee"],
+            "trader_already_paid": f["trader_already_paid"],
             "trader_credits": hwm.trader_credits,
-            "credit_applied": credit_applied,
-            "trader_fee_net": net_trader_fee,
-            "odum_fee": odum_fee,
-            "introducer_id": introducer_id,
-            "introducer_fee": intro_fee,
+            "credit_applied": f["credit_applied"],
+            "trader_fee_net": f["net_trader_fee"],
+            "odum_fee": f["odum_fee"],
+            "introducer_id": f["introducer_id"],
+            "introducer_fee": f["intro_fee"],
             "server_cost": Decimal("0"),
-            "total_due": odum_fee + intro_fee,
+            "total_due": cast(Decimal, f["odum_fee"]) + cast(Decimal, f["intro_fee"]),
             "status": "AT_HWM" if pnl > 0 else "BELOW_HWM",
         }
+
+    def compute_current_fees(self, client_id: str) -> dict[str, Decimal | str | bool] | None:
+        """Compute current fee position using seed HWM + live equity (the trickle).
+
+        Returns fee breakdown or None if client not found.
+        """
+        hwm = self.get_hwm_state(client_id)
+        cfg = get_client_config(client_id)
+        if hwm is None or cfg is None:
+            return None
+
+        seed = _HWM_SEED.get(client_id)
+        currency = str(seed.get("currency", "USDT")) if seed else "USDT"
+        live_equity = self.get_live_equity(client_id)
+        live_equity_usd = self.get_live_equity_usd(client_id)
+
+        if live_equity is None:
+            return {
+                "client_id": client_id,
+                "currency": currency,
+                "status": "NO_LIVE_DATA",
+                "is_underwater": bool(cfg.get("is_underwater", False)),
+                "trader_hwm": hwm.trader_hwm,
+                "odum_hwm": hwm.odum_hwm,
+                "trader_credits": hwm.trader_credits,
+            }
+
+        if cfg.get("is_underwater", False) or cfg.get("odum_fee_pct", 0) == 0:
+            return self._underwater_fee_block(
+                client_id, cfg, hwm, seed, live_equity, live_equity_usd, currency
+            )
+        return self._at_hwm_fee_block(
+            client_id, cfg, hwm, seed, live_equity, live_equity_usd, currency
+        )
+
+    @staticmethod
+    def _fund_of_fund_entry(
+        client_id: str, cfg: dict[str, object]
+    ) -> dict[str, Decimal | str | bool]:
+        """Build the dashboard entry for a fund-of-fund client (manual data)."""
+        return {
+            "client_id": client_id,
+            "full_name": str(cfg.get("full_name", "")),
+            "strategy_id": str(cfg.get("strategy_id", "")),
+            "data_source": "manual",
+            "status": "FUND_OF_FUND",
+        }
+
+    def _classify_client_for_dashboard(
+        self,
+        client_id: str,
+        cfg: dict[str, object],
+        buckets: dict[str, list[dict[str, Decimal | str | bool]]],
+    ) -> None:
+        """Compute fees + place a single client into the correct dashboard bucket."""
+        fees = self.compute_current_fees(client_id)
+        if fees is None:
+            return
+        fees["full_name"] = str(cfg.get("full_name", ""))
+        fees["venue"] = str(cfg.get("venue", ""))
+        fees["currency"] = str(cfg.get("currency", ""))
+        status = str(fees.get("status", ""))
+        if status == "PROP":
+            buckets["prop"].append(fees)
+        elif status == "UNDERWATER":
+            buckets["underwater"].append(fees)
+        else:
+            buckets["at_hwm"].append(fees)
 
     def get_dashboard_summary(self) -> dict[str, list[dict[str, Decimal | str | bool]]]:
         """Get full dashboard: all clients with fees, grouped by status."""
         registry = load_registry()
         clients = registry.get("clients", {})
 
-        at_hwm: list[dict[str, Decimal | str | bool]] = []
-        underwater: list[dict[str, Decimal | str | bool]] = []
-        fund_of_fund: list[dict[str, Decimal | str | bool]] = []
-        prop: list[dict[str, Decimal | str | bool]] = []
+        buckets: dict[str, list[dict[str, Decimal | str | bool]]] = {
+            "at_hwm": [],
+            "underwater": [],
+            "fund_of_fund": [],
+            "prop": [],
+        }
 
         for client_id, cfg in clients.items():
             if not cfg.get("is_active", False):
                 continue
-
-            tranche = cfg.get("tranche", "")
-            if tranche == "fund_of_fund":
-                fund_of_fund.append(
-                    {
-                        "client_id": client_id,
-                        "full_name": str(cfg.get("full_name", "")),
-                        "strategy_id": str(cfg.get("strategy_id", "")),
-                        "data_source": "manual",
-                        "status": "FUND_OF_FUND",
-                    }
-                )
+            if cfg.get("tranche", "") == "fund_of_fund":
+                buckets["fund_of_fund"].append(self._fund_of_fund_entry(client_id, cfg))
                 continue
+            self._classify_client_for_dashboard(client_id, cfg, buckets)
 
-            fees = self.compute_current_fees(client_id)
-            if fees is None:
-                continue
-
-            full_name = str(cfg.get("full_name", ""))
-            fees["full_name"] = full_name
-            fees["venue"] = str(cfg.get("venue", ""))
-            fees["currency"] = str(cfg.get("currency", ""))
-
-            status = str(fees.get("status", ""))
-            if status == "PROP":
-                prop.append(fees)
-            elif status == "UNDERWATER":
-                underwater.append(fees)
-            elif status in ("AT_HWM", "BELOW_HWM"):
-                at_hwm.append(fees)
-            else:
-                at_hwm.append(fees)
-
+        underwater_count = len(buckets["underwater"])
+        at_hwm_count = len(buckets["at_hwm"])
         return {
-            "at_hwm": at_hwm,
-            "underwater": underwater,
-            "fund_of_fund": fund_of_fund,
-            "prop": prop,
+            **buckets,
             "totals": [
                 {
                     "total_trader_credits": self.get_total_trader_credits(),
-                    "total_server_costs_monthly": Decimal("50") * len(underwater),
-                    "underwater_count": Decimal(str(len(underwater))),
-                    "at_hwm_count": Decimal(str(len(at_hwm))),
+                    "total_server_costs_monthly": Decimal("50") * underwater_count,
+                    "underwater_count": Decimal(str(underwater_count)),
+                    "at_hwm_count": Decimal(str(at_hwm_count)),
                 },
             ],
         }

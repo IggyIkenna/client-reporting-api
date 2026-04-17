@@ -11,6 +11,7 @@ from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
 from unified_trading_library import (
+    MockEventSink,
     RequestAuditMiddleware,
     create_api_auth,
     create_auth_router,
@@ -79,8 +80,10 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# Ensure event logging is initialized before RequestAuditMiddleware
-setup_events("client-reporting-api", "local")
+# Ensure event logging is initialized before RequestAuditMiddleware.
+# In local mode we use MockEventSink (no cloud dependencies); production
+# deploys swap this for a live Pub/Sub sink via the service runtime.
+setup_events("client-reporting-api", "local", sink=MockEventSink())
 
 _env = _auth_cfg.environment
 app = FastAPI(

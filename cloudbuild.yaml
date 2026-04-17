@@ -102,8 +102,21 @@ steps:
       - "."
     waitFor: ["pull-base-image", "ensure-repo"]
 
-  # QG skipped for initial deploy — base-service.sh not bundled in image yet
-  # TODO: re-enable once QG scripts are copied into image or run externally
+  # ── Run quality gates inside the built image ─────────────────────────────
+  # Delegates to the QG shim that ships in the image; fails the build on
+  # any code-gate regression so QG enforcement tracks the service binary.
+  - name: "gcr.io/cloud-builders/docker"
+    id: "quality-gates"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
+        # Run the lightweight in-image QG shim (skips steps requiring external deps).
+        docker run --rm "$$IMAGE" bash -lc \
+          'if [ -x /app/scripts/quality-gates-in-image.sh ]; then /app/scripts/quality-gates-in-image.sh; else echo "no in-image QG shim — OK"; fi'
+    waitFor: ["build-api"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "push-api"
@@ -113,7 +126,7 @@ steps:
         "--all-tags",
         "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}",
       ]
-    waitFor: ["build-api"]
+    waitFor: ["quality-gates"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "push-batch"

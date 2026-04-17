@@ -62,7 +62,9 @@ CLIENT_DETAILS: dict[str, dict[str, str]] = {
         "company_name": "Eqvilent Trading Limited",
         "contact_name": "Andrey Vlasov",
         "email": "andrey.vlasov@eqvilent.com",
-        "address": "Intershore Chambers, P.O.Box 4342, Road Town, Tortola, VG1110, British Virgin Islands",
+        "address": (
+            "Intershore Chambers, P.O.Box 4342, Road Town, Tortola, VG1110, British Virgin Islands"
+        ),
     },
     "STD": {
         "company_name": "Steady Hash",
@@ -130,467 +132,8 @@ class InvoiceData:
 
 # ── HTML Template ──
 
-_INVOICE_TEMPLATE = Template("""\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ inv.invoice_id }} — {{ inv.client_name }}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: #1a1a2e;
-    background: #f8f9fa;
-    line-height: 1.6;
-  }
-
-  .invoice-container {
-    max-width: 800px;
-    margin: 40px auto;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-    overflow: hidden;
-  }
-
-  /* Header */
-  .invoice-header {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    color: #fff;
-    padding: 48px 48px 36px;
-    position: relative;
-  }
-
-  .invoice-header::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #e94560, #0f3460, #e94560);
-  }
-
-  .header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 32px;
-  }
-
-  .company-name {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-  }
-
-  .company-subtitle {
-    font-size: 13px;
-    color: rgba(255,255,255,0.6);
-    margin-top: 4px;
-  }
-
-  .invoice-badge {
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 8px;
-    padding: 12px 20px;
-    text-align: right;
-  }
-
-  .invoice-badge .label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: rgba(255,255,255,0.6);
-  }
-
-  .invoice-badge .value {
-    font-size: 18px;
-    font-weight: 600;
-    margin-top: 2px;
-  }
-
-  .header-meta {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-  }
-
-  .meta-item .label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: rgba(255,255,255,0.5);
-  }
-
-  .meta-item .value {
-    font-size: 15px;
-    font-weight: 500;
-    margin-top: 2px;
-  }
-
-  /* Parties section */
-  .parties {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 40px;
-    padding: 32px 48px;
-    border-bottom: 1px solid #e9ecef;
-  }
-
-  .party .party-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: #6c757d;
-    font-weight: 600;
-    margin-bottom: 12px;
-  }
-
-  .party .party-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1a1a2e;
-    margin-bottom: 4px;
-  }
-
-  .party .party-detail {
-    font-size: 13px;
-    color: #495057;
-    line-height: 1.5;
-  }
-
-  .status-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .status-issued { background: #fff3cd; color: #856404; }
-  .status-paid { background: #d4edda; color: #155724; }
-
-  /* Body */
-  .invoice-body { padding: 40px 48px; }
-
-  .section { margin-bottom: 36px; }
-
-  .section-title {
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: #6c757d;
-    font-weight: 600;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #f0f0f0;
-  }
-
-  /* HWM breakdown */
-  .hwm-breakdown {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 24px;
-    border: 1px solid #e9ecef;
-  }
-
-  .hwm-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    font-size: 14px;
-  }
-
-  .hwm-row .label { color: #495057; }
-  .hwm-row .value { font-weight: 500; font-variant-numeric: tabular-nums; }
-
-  .hwm-row.subtotal {
-    border-top: 1px solid #dee2e6;
-    margin-top: 8px;
-    padding-top: 12px;
-  }
-
-  .hwm-row.profit {
-    border-top: 2px solid #1a1a2e;
-    margin-top: 12px;
-    padding-top: 14px;
-    font-size: 16px;
-    font-weight: 600;
-  }
-
-  .hwm-row.profit .value { color: #28a745; }
-  .hwm-row.negative .value { color: #dc3545; }
-
-  .calculation {
-    font-size: 13px;
-    color: #6c757d;
-    margin-top: 4px;
-    font-style: italic;
-  }
-
-  /* Line items table */
-  .items-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .items-table th {
-    text-align: left;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #6c757d;
-    padding: 12px 0;
-    border-bottom: 2px solid #1a1a2e;
-  }
-
-  .items-table th:last-child { text-align: right; }
-
-  .items-table td {
-    padding: 14px 0;
-    font-size: 14px;
-    border-bottom: 1px solid #f0f0f0;
-  }
-
-  .items-table td:last-child {
-    text-align: right;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .items-table .total-row td {
-    border-top: 2px solid #1a1a2e;
-    border-bottom: none;
-    padding-top: 16px;
-    font-size: 18px;
-    font-weight: 700;
-  }
-
-  /* Payment details */
-  .payment-box {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 8px;
-    padding: 24px;
-    border: 1px solid #dee2e6;
-  }
-
-  .payment-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 0;
-    font-size: 14px;
-  }
-
-  .payment-row .label {
-    color: #6c757d;
-    font-weight: 500;
-  }
-
-  .payment-row .value {
-    font-weight: 500;
-    word-break: break-all;
-  }
-
-  .address-value {
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 13px;
-    background: #fff;
-    padding: 8px 12px;
-    border-radius: 6px;
-    border: 1px solid #dee2e6;
-    margin-top: 8px;
-    word-break: break-all;
-    letter-spacing: 0.3px;
-  }
-
-  .payment-note {
-    font-size: 12px;
-    color: #6c757d;
-    margin-top: 12px;
-    font-style: italic;
-  }
-
-  /* Footer */
-  .invoice-footer {
-    padding: 24px 48px;
-    background: #f8f9fa;
-    border-top: 1px solid #e9ecef;
-    font-size: 12px;
-    color: #6c757d;
-    text-align: center;
-  }
-
-  /* Print styles */
-  @media print {
-    body { background: #fff; }
-    .invoice-container {
-      box-shadow: none;
-      margin: 0;
-      border-radius: 0;
-    }
-  }
-</style>
-</head>
-<body>
-<div class="invoice-container">
-
-  <!-- Header -->
-  <div class="invoice-header">
-    <div class="header-top">
-      <div>
-        <div class="company-name">{{ inv.payment_info.company_name }}</div>
-        <div class="company-subtitle">Digital Asset Management</div>
-      </div>
-      <div class="invoice-badge">
-        <div class="label">Invoice</div>
-        <div class="value">{{ inv.invoice_id }}</div>
-      </div>
-    </div>
-    <div class="header-meta">
-      <div class="meta-item">
-        <div class="label">Bill To</div>
-        <div class="value">{{ inv.client_name }}</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">Invoice Date</div>
-        <div class="value">{{ inv.invoice_date }}</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">Status</div>
-        <div class="value">
-          <span class="status-badge status-{{ inv.status|lower }}">{{ inv.status }}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Parties -->
-  <div class="parties">
-    <div class="party">
-      <div class="party-label">From</div>
-      <div class="party-name">{{ odum.name }}</div>
-      <div class="party-detail">{{ odum.email }}</div>
-      <div class="party-detail">{{ odum.address_line1 }}</div>
-      <div class="party-detail">{{ odum.address_line2 }}</div>
-      <div class="party-detail">{{ odum.region }}, {{ odum.country }}</div>
-    </div>
-    <div class="party">
-      <div class="party-label">Billed To</div>
-      <div class="party-name">{{ inv.bill_to_company or inv.client_name }}</div>
-      {% if inv.bill_to_contact %}<div class="party-detail">{{ inv.bill_to_contact }}</div>{% endif %}
-      {% if inv.bill_to_email %}<div class="party-detail">{{ inv.bill_to_email }}</div>{% endif %}
-      {% if inv.bill_to_address %}<div class="party-detail">{{ inv.bill_to_address }}</div>{% endif %}
-    </div>
-  </div>
-
-  <!-- Body -->
-  <div class="invoice-body">
-
-    <!-- HWM Breakdown -->
-    <div class="section">
-      <div class="section-title">Performance Calculation</div>
-      <div class="hwm-breakdown">
-        <div class="hwm-row">
-          <span class="label">Previous High-Water Mark</span>
-          <span class="value">{{ fmt(inv.previous_hwm) }} {{ inv.currency }}</span>
-        </div>
-        {% if inv.deposits_since_hwm > 0 %}
-        <div class="hwm-row">
-          <span class="label">+ Deposits since HWM</span>
-          <span class="value">+{{ fmt(inv.deposits_since_hwm) }}</span>
-        </div>
-        {% endif %}
-        {% if inv.withdrawals_since_hwm > 0 %}
-        <div class="hwm-row">
-          <span class="label">− Withdrawals since HWM</span>
-          <span class="value">−{{ fmt(inv.withdrawals_since_hwm) }}</span>
-        </div>
-        {% endif %}
-        {% if inv.deposits_since_hwm > 0 or inv.withdrawals_since_hwm > 0 %}
-        <div class="hwm-row subtotal">
-          <span class="label">Effective HWM (adjusted for transfers)</span>
-          <span class="value">{{ fmt(inv.effective_hwm) }} {{ inv.currency }}</span>
-        </div>
-        {% endif %}
-        <div class="hwm-row">
-          <span class="label">Current Balance</span>
-          <span class="value">{{ fmt(inv.current_balance) }} {{ inv.currency }}</span>
-        </div>
-        <div class="hwm-row profit">
-          <span class="label">Profit above HWM</span>
-          <span class="value">{{ fmt(inv.profit) }} {{ inv.currency }}</span>
-        </div>
-        <div class="calculation">
-          {{ fmt(inv.current_balance) }} − {{ fmt(inv.effective_hwm) }} = {{ fmt(inv.profit) }}
-        </div>
-      </div>
-    </div>
-
-    <!-- Line Items -->
-    <div class="section">
-      <div class="section-title">Invoice Details</div>
-      <table class="items-table">
-        <thead>
-          <tr>
-            <th>Description</th>
-            <th>Amount ({{ inv.currency }})</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in inv.line_items %}
-          <tr>
-            <td>{{ item.description }}</td>
-            <td>{{ fmt(item.amount) }}</td>
-          </tr>
-          {% endfor %}
-          <tr class="total-row">
-            <td>Total Due</td>
-            <td>{{ fmt(inv.total_due) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Payment Details -->
-    <div class="section">
-      <div class="section-title">Payment Details</div>
-      <div class="payment-box">
-        <div class="payment-row">
-          <span class="label">Currency</span>
-          <span class="value">{{ inv.payment_info.currency }}</span>
-        </div>
-        <div class="payment-row">
-          <span class="label">Network</span>
-          <span class="value">{{ inv.payment_info.network }}</span>
-        </div>
-        <div class="payment-row">
-          <span class="label">Send to</span>
-        </div>
-        <div class="address-value">{{ inv.payment_info.deposit_address }}</div>
-        <div class="payment-note">{{ inv.payment_info.notes }}</div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Footer -->
-  <div class="invoice-footer">
-    {{ inv.payment_info.company_name }} &middot; Invoice {{ inv.invoice_id }} &middot; Generated {{ now }}
-  </div>
-
-</div>
-</body>
-</html>
-""")
+_TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "invoice.html"
+_INVOICE_TEMPLATE = Template(_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 def _fmt(value: Decimal) -> str:
@@ -663,7 +206,9 @@ def _build_invoice(
         total_due=total_due,
         line_items=[
             InvoiceLineItem(
-                description=f"{fee_label} — {int(fee_rate_pct * 100)}% × {_fmt(profit)} profit above HWM",
+                description=(
+                    f"{fee_label} — {int(fee_rate_pct * 100)}% x {_fmt(profit)} profit above HWM"
+                ),
                 amount=total_due,
             ),
         ],
@@ -708,7 +253,7 @@ def _build_trader_invoice(
         total_due=total_due,
         line_items=[
             InvoiceLineItem(
-                description=f"Trader Fee — 10% × {_fmt(profit)} profit above trader HWM",
+                description=f"Trader Fee — 10% x {_fmt(profit)} profit above trader HWM",
                 amount=total_due,
             ),
         ],
@@ -752,7 +297,10 @@ def _build_introducer_invoice(
         total_due=total_due,
         line_items=[
             InvoiceLineItem(
-                description=f"Introducer Fee — {int(rate_pct * 100)}% × {_fmt(odum_invoice_amount)} Odum invoice for {client_id}",
+                description=(
+                    f"Introducer Fee — {int(rate_pct * 100)}% x "
+                    f"{_fmt(odum_invoice_amount)} Odum invoice for {client_id}"
+                ),
                 amount=total_due,
             ),
         ],
@@ -782,12 +330,9 @@ INTRODUCER_DETAILS: dict[str, dict[str, str]] = {
 }
 
 
-def get_all_2026_invoices() -> list[InvoiceData]:
-    """All 2026 invoices — odum, trader, introducer — Feb + April runs."""
+def _february_2026_odum_invoices() -> list[InvoiceData]:
+    """Odum performance-fee invoices for the Feb 17, 2026 run."""
     return [
-        # ════════════════════════════════════════════════════
-        # February 17, 2026 — Odum invoices
-        # ════════════════════════════════════════════════════
         _build_invoice(
             "INV-2026-PR-001",
             "PR",
@@ -841,7 +386,12 @@ def get_all_2026_invoices() -> list[InvoiceData]:
             fee_rate_pct=Decimal("0.35"),
             fee_label="Performance Fee (35%)",
         ),
-        # ── Feb 2026 — Trader payments ──
+    ]
+
+
+def _february_2026_trader_invoices() -> list[InvoiceData]:
+    """Trader payments for the Feb 17, 2026 run."""
+    return [
         _build_trader_invoice(
             "TRD-2026-PR-001",
             "PR",
@@ -890,7 +440,12 @@ def get_all_2026_invoices() -> list[InvoiceData]:
             profit=Decimal("11400"),
             fee_rate_pct=Decimal("0.10"),
         ),
-        # ── Feb 2026 — Introducer invoices ──
+    ]
+
+
+def _february_2026_introducer_invoices() -> list[InvoiceData]:
+    """Introducer invoices for the Feb 2026 run."""
+    return [
         _build_introducer_invoice(
             "INT-MAX-001",
             "PR",
@@ -914,9 +469,12 @@ def get_all_2026_invoices() -> list[InvoiceData]:
             rate_pct=Decimal("0.05"),
             introducer_details=INTRODUCER_DETAILS["bluecoast"],
         ),
-        # ════════════════════════════════════════════════════
-        # April 9, 2026 — Odum invoices
-        # ════════════════════════════════════════════════════
+    ]
+
+
+def _april_2026_odum_invoices() -> list[InvoiceData]:
+    """Odum performance-fee invoices for the April 9, 2026 run."""
+    return [
         _build_invoice(
             "INV-2026-PR-002",
             "PR",
@@ -973,7 +531,12 @@ def get_all_2026_invoices() -> list[InvoiceData]:
             deposits=Decimal("500122"),
             withdrawals=Decimal("14800"),
         ),
-        # ── Apr 2026 — Trader payments ──
+    ]
+
+
+def _april_2026_trader_invoices() -> list[InvoiceData]:
+    """Trader payments for the April 9, 2026 run."""
+    return [
         _build_trader_invoice(
             "TRD-2026-PR-002",
             "PR",
@@ -1022,7 +585,12 @@ def get_all_2026_invoices() -> list[InvoiceData]:
             profit=Decimal("12739"),
             fee_rate_pct=Decimal("0.10"),
         ),
-        # ── Apr 2026 — Introducer invoices ──
+    ]
+
+
+def _april_2026_introducer_invoices() -> list[InvoiceData]:
+    """Introducer invoices for the April 2026 run."""
+    return [
         _build_introducer_invoice(
             "INT-MAX-002",
             "PR",
@@ -1045,6 +613,18 @@ def get_all_2026_invoices() -> list[InvoiceData]:
             rate_pct=Decimal("0.05"),
             introducer_details=INTRODUCER_DETAILS["bluecoast"],
         ),
+    ]
+
+
+def get_all_2026_invoices() -> list[InvoiceData]:
+    """All 2026 invoices — odum, trader, introducer — Feb + April runs."""
+    return [
+        *_february_2026_odum_invoices(),
+        *_february_2026_trader_invoices(),
+        *_february_2026_introducer_invoices(),
+        *_april_2026_odum_invoices(),
+        *_april_2026_trader_invoices(),
+        *_april_2026_introducer_invoices(),
     ]
 
 
@@ -1074,7 +654,10 @@ def get_invoice_html_path(invoice_id: str) -> Path | None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    generated = generate_all_invoices()
-    for p in generated:
-        print(f"  {p}")
-    print(f"\nGenerated {len(generated)} invoices. Open in browser to preview/print to PDF.")
+    _main_logger = logging.getLogger(__name__)
+    _generated = generate_all_invoices()
+    for _p in _generated:
+        _main_logger.info("  %s", _p)
+    _main_logger.info(
+        "Generated %d invoices. Open in browser to preview/print to PDF.", len(_generated)
+    )

@@ -9,8 +9,8 @@ Generates self-contained HTML tear sheets with:
 - Transfer-adjusted metrics throughout
 - CSV download for daily data
 
-Usage:
-    from client_reporting_api.core.tear_sheet_generator import generate_tear_sheet
+Usage example (import ``generate_tear_sheet`` from this module):
+
     path = generate_tear_sheet(["PR", "ODUM_PROP"])
 """
 
@@ -790,5 +790,6 @@ new Chart(sharpeCtx, {
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     # Default: generate for PR (best performing) and ODUM_PROP (longest track)
-    path = generate_tear_sheet(["PR", "ODUM_PROP"])
-    print(f"Generated: {path}")
+    _logger = logging.getLogger(__name__)
+    _path = generate_tear_sheet(["PR", "ODUM_PROP"])
+    _logger.info("Generated: %s", _path)

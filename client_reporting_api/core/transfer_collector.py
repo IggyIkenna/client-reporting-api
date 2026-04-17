@@ -165,20 +165,20 @@ def _extract_btc_transfers(
         return []
 
     records: list[TransferRecord] = []
-    btc_change = float(point.get("btc_balance", 0)) - float(
-        prev_point.get("btc_balance", 0),
+    # Use Decimal arithmetic to preserve exact balance values from the
+    # equity curve — float subtraction produces 0.9999...8-style noise.
+    btc_change = Decimal(str(point.get("btc_balance", 0))) - Decimal(
+        str(prev_point.get("btc_balance", 0))
     )
-    usdt_change = float(point.get("usdt_balance", 0)) - float(
-        prev_point.get("usdt_balance", 0),
+    usdt_change = Decimal(str(point.get("usdt_balance", 0))) - Decimal(
+        str(prev_point.get("usdt_balance", 0))
     )
-    btc_price = float(point.get("btc_price_usd", 1))
+    btc_price = Decimal(str(point.get("btc_price_usd", 1)))
 
-    if abs(btc_change) > 0.0001:
+    if abs(btc_change) > Decimal("0.0001"):
         direction = "deposit" if btc_change > 0 else "withdrawal"
-        btc_amount = Decimal(str(abs(btc_change)))
-        usd_equiv = (btc_amount * Decimal(str(btc_price))).quantize(
-            Decimal("0.01"),
-        )
+        btc_amount = abs(btc_change)
+        usd_equiv = (btc_amount * btc_price).quantize(Decimal("0.01"))
         records.append(
             _make_record(
                 client_id,
@@ -192,10 +192,10 @@ def _extract_btc_transfers(
             )
         )
 
-    usdt_transfer = usdt_change if abs(usdt_change) > 500 else 0.0
-    if abs(usdt_transfer) > 500:
+    usdt_transfer = usdt_change if abs(usdt_change) > Decimal("500") else Decimal("0")
+    if abs(usdt_transfer) > Decimal("500"):
         direction = "deposit" if usdt_transfer > 0 else "withdrawal"
-        amt = Decimal(str(abs(usdt_transfer)))
+        amt = abs(usdt_transfer)
         records.append(
             _make_record(
                 client_id,

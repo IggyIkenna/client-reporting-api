@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from unified_trading_library import UnifiedCloudConfig
 
 
@@ -13,6 +14,12 @@ class ClientReportingApiConfig(UnifiedCloudConfig):
     config_store_bucket: str = ""
     reports_bucket: str = ""
     client_data_bucket: str = ""
+
+    # Cloud Run / Cloud Run Jobs runtime indicators (populated by the
+    # runtime, read here instead of via raw os.environ). Empty when not
+    # running under Cloud Run.
+    k_service: str = Field(default="", alias="K_SERVICE")
+    cloud_run_job: str = Field(default="", alias="CLOUD_RUN_JOB")
 
     def model_post_init(self, __context: object) -> None:
         project_id = self.gcp_project_id or ""

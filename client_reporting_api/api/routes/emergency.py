@@ -14,7 +14,10 @@ from decimal import Decimal
 import ccxt
 from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel, Field
-from unified_trading_library import UnifiedCloudConfig
+from unified_trading_library import (  # pyright: ignore[reportPrivateImportUsage]
+    UnifiedCloudConfig,
+    get_secret,
+)
 
 from client_reporting_api.core.exchange_data_collector import _create_exchange
 from client_reporting_api.core.tranche_router import get_client_config
@@ -30,7 +33,7 @@ _cloud_cfg = UnifiedCloudConfig()
 # ---------------------------------------------------------------------------
 
 
-class CloseAllRequest(BaseModel):
+class CloseAllRequest(BaseModel):  # CORRECT-LOCAL: FastAPI request schema
     """Request body for emergency close-all."""
 
     rationale: str = Field(
@@ -39,7 +42,7 @@ class CloseAllRequest(BaseModel):
     dry_run: bool = Field(default=True, description="If true, preview only - no orders placed")
 
 
-class CloseAllPositionResult(BaseModel):
+class CloseAllPositionResult(BaseModel):  # CORRECT-LOCAL: FastAPI response schema
     """Result for a single position in the close-all response."""
 
     instrument: str
@@ -50,7 +53,7 @@ class CloseAllPositionResult(BaseModel):
     error: str | None = None
 
 
-class CloseAllResponse(BaseModel):
+class CloseAllResponse(BaseModel):  # CORRECT-LOCAL: FastAPI response schema
     """Response body for emergency close-all."""
 
     client_id: str
@@ -91,8 +94,6 @@ def _get_trading_exchange(client_id: str) -> ccxt.Exchange | None:
     Trading secrets follow the naming pattern:
         trade-{client_lower}-{venue}-api-key / api-secret / passphrase
     """
-    from unified_trading_library import get_secret
-
     config = get_client_config(client_id)
     if config is None:
         return None
