@@ -117,10 +117,10 @@ commentary can be injected into the executive summary template via the
 | pyyaml                     | Credentials registry parsing     |
 | unified-trading-library    | setup_tracing                    |
 | unified-config-interface   | UnifiedCloudConfig               |
-| unified-events-interface   | setup_events                     |
+| unified-trading-library    | setup_events                     |
 | unified-internal-contracts | FeeStructure and domain types    |
 
 ## Tier Classification
 
 T3 service — depends on T0 (unified-internal-contracts), T1
-(unified-config-interface, unified-events-interface, unified-trading-library).
+(unified-config-interface, unified-trading-library, unified-trading-library).
