@@ -19,6 +19,7 @@ from unified_trading_library import (
 )
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
+from client_reporting_api.api.routes.allocators import router as allocators_router
 from client_reporting_api.api.routes.clients import router as clients_router
 from client_reporting_api.api.routes.compliance import router as compliance_router
 from client_reporting_api.api.routes.documents import router as documents_router
@@ -132,6 +133,12 @@ app.include_router(create_auth_router("client-reporting-api"))
 
 # --- Unauthenticated: SSE streaming ---
 app.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
+
+# --- Allocator-facing routes (enforce auth per-route via create_api_auth dep) ---
+# Each allocator route already depends on AuthContext to perform entitlement
+# checks against the path ``client_id``. Mount at the root (no extra auth
+# wrapper) so the per-route dep is the single auth gate.
+app.include_router(allocators_router)
 
 # --- Authenticated API routes ---
 # Accepts: Bearer JWT (from /auth/login), X-API-Key (legacy), or X-Service-Token (S2S)
