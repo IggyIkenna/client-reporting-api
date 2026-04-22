@@ -6,16 +6,21 @@ import csv
 import io
 import logging
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
-from unified_trading_library import UnifiedCloudConfig
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.backfill_store import (
     _get_equity,
     _get_transfer,
     _is_btc_account,
     get_equity_curve,
+)
+from client_reporting_api.core.entitlement import (
+    _enforce_entitlement,
+    require_internal,
 )
 from client_reporting_api.core.mock_performance_data import (
     MOCK_COIN_BREAKDOWN,
@@ -29,6 +34,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/exports", tags=["exports"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _csv_stream(rows: list[dict[str, object]], fieldnames: list[str]) -> io.StringIO:
@@ -44,9 +51,11 @@ def _csv_stream(rows: list[dict[str, object]], fieldnames: list[str]) -> io.Stri
 
 @router.get("/trades")
 def export_trades_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download full trade history as CSV."""
+    _enforce_entitlement(auth, client_id)
     fields = [
         "trade_id",
         "venue",
@@ -72,9 +81,11 @@ def export_trades_csv(
 
 @router.get("/daily-summary")
 def export_daily_summary_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download daily P&L summary as CSV."""
+    _enforce_entitlement(auth, client_id)
     summary = get_mock_performance_summary(client_id)
     monthly = summary.get("monthly_returns", [])
 
@@ -89,9 +100,11 @@ def export_daily_summary_csv(
 
 @router.get("/hourly-snapshots")
 def export_hourly_snapshots_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download hourly equity snapshots as CSV."""
+    _enforce_entitlement(auth, client_id)
     summary = get_mock_performance_summary(client_id)
     curve = summary.get("equity_curve", [])
 
@@ -106,9 +119,11 @@ def export_hourly_snapshots_csv(
 
 @router.get("/coin-breakdown")
 def export_coin_breakdown_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download per-coin P&L breakdown as CSV."""
+    _enforce_entitlement(auth, client_id)
     fields = [
         "symbol",
         "quantity",
@@ -132,6 +147,7 @@ def export_coin_breakdown_csv(
 
 @router.get("/daily-equity")
 def export_daily_equity_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download daily equity curve with TWR metrics as CSV.
@@ -139,6 +155,7 @@ def export_daily_equity_csv(
     Includes: date, equity, TWR index, drawdown %, daily return, cumulative transfers.
     Uses transfer-adjusted metrics from canonical transfer store.
     """
+    _enforce_entitlement(auth, client_id)
     curve = get_equity_curve(client_id)
     if not curve:
         buf = io.StringIO("No data\n")
@@ -206,9 +223,11 @@ def export_daily_equity_csv(
 
 @router.get("/transfers")
 def export_transfers_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download canonical transfer history as CSV."""
+    _enforce_entitlement(auth, client_id)
     records = get_transfers(client_id)
     fields = [
         "transfer_id",
@@ -247,6 +266,7 @@ def export_transfers_csv(
 
 @router.get("/tear-sheet")
 def export_tear_sheet(
+    auth: AuthDep,
     client_ids: str = Query(
         ...,
         description="Comma-separated client IDs (e.g. 'PR,ODUM_PROP')",
@@ -260,7 +280,13 @@ def export_tear_sheet(
 
     Includes: equity curves, monthly returns, Sharpe/Sortino/Calmar,
     drawdown series, rolling metrics, CSV download buttons.
+
+    Cross-client tear sheets accept a list of client IDs and are used
+    for internal / IR reporting; require ``is_internal``. External
+    callers must use the per-client export endpoints that apply
+    ``_enforce_entitlement``.
     """
+    require_internal(auth)
     ids = [cid.strip() for cid in client_ids.split(",") if cid.strip()]
     path = generate_tear_sheet(ids, title=title)
     if not path:

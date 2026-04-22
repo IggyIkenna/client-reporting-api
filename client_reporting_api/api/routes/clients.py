@@ -7,10 +7,15 @@ Internal users see all clients; external users see only their org.
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
-from unified_trading_library import UnifiedCloudConfig
+from fastapi import APIRouter, Depends, HTTPException, Query
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
+from client_reporting_api.core.entitlement import (
+    _enforce_entitlement,
+    require_internal,
+)
 from client_reporting_api.core.mock_performance_data import MOCK_CLIENTS
 from client_reporting_api.core.tranche_router import load_registry
 
@@ -18,6 +23,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/clients", tags=["clients"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _build_client_entry(
@@ -112,13 +119,17 @@ def _strategy_list(registry: dict[str, object]) -> list[dict[str, str]]:
 
 @router.get("")
 def list_clients(
+    auth: AuthDep,
     organisation_id: str | None = Query(None, description="Filter by organisation"),
     strategy_id: str | None = Query(None, description="Filter by strategy"),
 ) -> dict[str, list[dict[str, str | bool]] | list[dict[str, str]]]:
     """Return all active clients with org/strategy grouping.
 
-    Internal users see all; pass organisation_id to filter for a specific org.
+    Listing every client is a cross-tenant operation so the endpoint is
+    internal-only. External callers should use ``GET /api/v1/clients/{client_id}``
+    for their own client — that route runs ``_enforce_entitlement``.
     """
+    require_internal(auth)
     if _cloud_cfg.is_mock_mode():
         return {"clients": MOCK_CLIENTS, "organisations": [], "strategies": []}
 
@@ -135,8 +146,9 @@ def list_clients(
 
 
 @router.get("/{client_id}")
-def get_client(client_id: str) -> dict[str, str | bool]:
+def get_client(client_id: str, auth: AuthDep) -> dict[str, str | bool]:
     """Return config for a single client."""
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         for c in MOCK_CLIENTS:
             if c["id"] == client_id:

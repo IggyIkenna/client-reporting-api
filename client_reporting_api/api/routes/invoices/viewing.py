@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.core.dashboard_generator import (
     generate_all_dashboards,
     generate_dashboard,
+)
+from client_reporting_api.core.entitlement import (
+    _enforce_entitlement,
+    require_internal,
 )
 from client_reporting_api.core.invoice_generator import (
     generate_all_invoices,
@@ -25,6 +31,9 @@ from client_reporting_api.core.trade_analytics import CLIENT_IDS
 
 router = APIRouter()
 
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
+
 _DATA_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent / "data"
 _CHARTS_DIR = _DATA_ROOT / "charts"
 _DASH_DIR = _DATA_ROOT / "dashboards"
@@ -33,8 +42,12 @@ _CHART_CLIENT_IDS = ("PR", "NN", "ET", "STD", "GP", "SL", "SL2", "ANU", "IK", "O
 
 
 @router.get("/view/{invoice_id}", response_class=HTMLResponse)
-def view_invoice_html(invoice_id: str) -> HTMLResponse:
-    """Serve a generated invoice as HTML (viewable in browser, printable to PDF)."""
+def view_invoice_html(invoice_id: str, auth: AuthDep) -> HTMLResponse:
+    """Serve a generated invoice as HTML (viewable in browser, printable to PDF).
+
+    Internal-only — invoice rendering exposes per-client billing data.
+    """
+    require_internal(auth)
     path = get_invoice_html_path(invoice_id)
     if path is None:
         generate_all_invoices()
@@ -55,11 +68,21 @@ def _invoice_type_for(invoice_id: str) -> str:
 
 @router.get("/all")
 def list_all_invoices(
+    auth: AuthDep,
     client_id: str | None = Query(None, description="Filter by client"),
     invoice_type: str | None = Query(None, description="Filter: odum, trader, introducer"),
     status: str | None = Query(None, description="Filter: ISSUED, PAID, VOIDED"),
 ) -> list[dict[str, object]]:
-    """List all 2026 invoices with optional filters (returns metadata only)."""
+    """List all 2026 invoices with optional filters (returns metadata only).
+
+    External callers MUST scope by their own ``client_id`` (matched via
+    :func:`_enforce_entitlement`). Internal callers may omit / vary it.
+    """
+    if not auth.is_internal:
+        # External: client_id is mandatory and must match caller.
+        if client_id is None:
+            require_internal(auth)  # raises 403 with the right message
+        _enforce_entitlement(auth, client_id or "")
     all_invoices = get_all_2026_invoices()
 
     results: list[dict[str, object]] = []
@@ -95,8 +118,12 @@ def list_all_invoices(
 
 
 @router.post("/generate-all")
-def regenerate_all_invoices() -> dict[str, object]:
-    """Regenerate all invoice HTML files from current data."""
+def regenerate_all_invoices(auth: AuthDep) -> dict[str, object]:
+    """Regenerate all invoice HTML files from current data.
+
+    Bulk regeneration is an ops action — internal-only.
+    """
+    require_internal(auth)
     paths = generate_all_invoices()
     return {
         "generated": len(paths),
@@ -105,8 +132,9 @@ def regenerate_all_invoices() -> dict[str, object]:
 
 
 @router.get("/charts/{client_id}", response_class=HTMLResponse)
-def view_pnl_chart(client_id: str) -> HTMLResponse:
+def view_pnl_chart(client_id: str, auth: AuthDep) -> HTMLResponse:
     """Serve interactive PnL chart for a client."""
+    _enforce_entitlement(auth, client_id)
     chart_path = _CHARTS_DIR / f"{client_id.upper()}_pnl.html"
     if not chart_path.exists():
         result = generate_pnl_chart(client_id.upper())
@@ -117,8 +145,12 @@ def view_pnl_chart(client_id: str) -> HTMLResponse:
 
 
 @router.get("/charts")
-def list_charts() -> list[dict[str, str]]:
-    """List available PnL charts for all clients."""
+def list_charts(auth: AuthDep) -> list[dict[str, str]]:
+    """List available PnL charts for all clients.
+
+    Cross-client listing — internal-only.
+    """
+    require_internal(auth)
     if not _CHARTS_DIR.exists():
         generate_all_charts()
     results: list[dict[str, str]] = []
@@ -132,8 +164,9 @@ def list_charts() -> list[dict[str, str]]:
 
 
 @router.get("/dashboards/{client_id}", response_class=HTMLResponse)
-def view_dashboard(client_id: str) -> HTMLResponse:
+def view_dashboard(client_id: str, auth: AuthDep) -> HTMLResponse:
     """Serve the comprehensive performance dashboard for a client."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     dash_path = _DASH_DIR / f"{cid}_dashboard.html"
     if not dash_path.exists():
@@ -145,8 +178,12 @@ def view_dashboard(client_id: str) -> HTMLResponse:
 
 
 @router.get("/dashboards")
-def list_dashboards() -> list[dict[str, str]]:
-    """List available performance dashboards."""
+def list_dashboards(auth: AuthDep) -> list[dict[str, str]]:
+    """List available performance dashboards.
+
+    Cross-client listing — internal-only.
+    """
+    require_internal(auth)
     results: list[dict[str, str]] = []
     for cid in CLIENT_IDS:
         dash_path = _DASH_DIR / f"{cid}_dashboard.html"
@@ -158,15 +195,20 @@ def list_dashboards() -> list[dict[str, str]]:
 
 
 @router.post("/dashboards/generate-all")
-def regenerate_all_dashboards() -> dict[str, object]:
-    """Regenerate all dashboards from latest data."""
+def regenerate_all_dashboards(auth: AuthDep) -> dict[str, object]:
+    """Regenerate all dashboards from latest data.
+
+    Bulk regeneration is an ops action — internal-only.
+    """
+    require_internal(auth)
     paths = generate_all_dashboards()
     return {"generated": len(paths), "dashboards": [str(p) for p in paths]}
 
 
 @router.get("/reports/{client_id}/{year}/{month}", response_class=HTMLResponse)
-def view_monthly_report(client_id: str, year: int, month: int) -> HTMLResponse:
+def view_monthly_report(client_id: str, year: int, month: int, auth: AuthDep) -> HTMLResponse:
     """Serve monthly PnL report as printable HTML (PDF-ready via browser print)."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     month_str = f"{year}-{month:02d}"
     report_path = _REPORTS_DIR / f"{cid}_{month_str}_report.html"
@@ -179,8 +221,9 @@ def view_monthly_report(client_id: str, year: int, month: int) -> HTMLResponse:
 
 
 @router.get("/reports/{client_id}")
-def list_monthly_reports(client_id: str) -> list[dict[str, str]]:
+def list_monthly_reports(client_id: str, auth: AuthDep) -> list[dict[str, str]]:
     """List available monthly reports for a client."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     results: list[dict[str, str]] = []
     if _REPORTS_DIR.exists():

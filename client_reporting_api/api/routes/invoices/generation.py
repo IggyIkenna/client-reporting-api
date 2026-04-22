@@ -5,9 +5,14 @@ from __future__ import annotations
 import logging
 import uuid
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
-from unified_trading_library import generate_download_url
+from fastapi import APIRouter, Depends, HTTPException, Query
+from unified_trading_library import (
+    AuthContext,
+    create_api_auth,
+    generate_download_url,
+)
 
 from client_reporting_api.api.routes.invoices._shared import (
     GenerateInvoiceRequest,
@@ -15,11 +20,18 @@ from client_reporting_api.api.routes.invoices._shared import (
     state_mgr,
     store,
 )
+from client_reporting_api.core.entitlement import (
+    _enforce_entitlement,
+    require_internal,
+)
 from client_reporting_api.core.tranche_router import load_registry
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _build_mock_invoice(request: GenerateInvoiceRequest, invoice_id: str) -> dict[str, object]:
@@ -98,8 +110,12 @@ def _build_live_invoice_line_items(
 
 
 @router.post("/generate")
-def generate_invoice(request: GenerateInvoiceRequest) -> dict[str, object]:
-    """Create an invoice from template for a given org/period."""
+def generate_invoice(request: GenerateInvoiceRequest, auth: AuthDep) -> dict[str, object]:
+    """Create an invoice from template for a given org/period.
+
+    Invoice generation is a billing-ops action — internal-only.
+    """
+    require_internal(auth)
     invoice_id = f"INV-{uuid.uuid4().hex[:8].upper()}"
 
     if cloud_cfg.is_mock_mode():
@@ -131,9 +147,16 @@ def generate_invoice(request: GenerateInvoiceRequest) -> dict[str, object]:
 
 @router.get("/")
 def list_invoices(
+    auth: AuthDep,
     org_id: str = Query(..., description="Organisation identifier"),
 ) -> list[dict[str, object]]:
-    """List invoices for an organisation."""
+    """List invoices for an organisation.
+
+    External callers MUST pass their own ``org_id`` (matched via
+    :func:`_enforce_entitlement`); internal callers may pass any
+    ``org_id`` to inspect another org's invoice history.
+    """
+    _enforce_entitlement(auth, org_id)
     if cloud_cfg.is_mock_mode():
         all_invoices = store.list("invoices")
         return [inv for inv in all_invoices if inv.get("org_id") == org_id]
@@ -153,8 +176,15 @@ def list_invoices(
 
 
 @router.get("/{invoice_id}")
-def get_invoice(invoice_id: str) -> dict[str, object]:
-    """Get invoice details by ID."""
+def get_invoice(invoice_id: str, auth: AuthDep) -> dict[str, object]:
+    """Get invoice details by ID.
+
+    Invoices are looked up by opaque ``invoice_id`` so an external caller
+    cannot derive a valid ID for someone else's invoice; even so, the
+    payload exposes ``org_id`` and ``client_id`` so we restrict to
+    internal callers until per-org invoice scoping is added.
+    """
+    require_internal(auth)
     if cloud_cfg.is_mock_mode():
         inv = store.get("invoices", invoice_id)
         if inv is None:
@@ -169,8 +199,12 @@ def get_invoice(invoice_id: str) -> dict[str, object]:
 
 
 @router.get("/{invoice_id}/download")
-def download_invoice(invoice_id: str) -> dict[str, object]:
-    """Get a pre-signed download URL for the invoice PDF."""
+def download_invoice(invoice_id: str, auth: AuthDep) -> dict[str, object]:
+    """Get a pre-signed download URL for the invoice PDF.
+
+    Internal-only — see :func:`get_invoice`.
+    """
+    require_internal(auth)
     if cloud_cfg.is_mock_mode():
         inv = store.get("invoices", invoice_id)
         if inv is None:

@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
 
+from fastapi import APIRouter, Depends
+from unified_trading_library import AuthContext, create_api_auth
+
+from client_reporting_api.core.entitlement import require_internal
 from client_reporting_api.core.tranche_router import load_registry
 
 router = APIRouter()
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _client_entry_for_listing(
@@ -73,8 +80,12 @@ def _project_strats_for_listing(strats_raw: object) -> list[dict[str, object]]:
 
 
 @router.get("/clients")
-def get_clients() -> dict[str, list[dict[str, object]]]:
-    """Return all clients, organisations, and strategies from credentials-registry."""
+def get_clients(auth: AuthDep) -> dict[str, list[dict[str, object]]]:
+    """Return all clients, organisations, and strategies from credentials-registry.
+
+    Cross-tenant listing — internal-only.
+    """
+    require_internal(auth)
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
     orgs_raw = registry.get("organisations", {})

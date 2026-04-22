@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, Query
-from unified_trading_library import UnifiedCloudConfig
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.backfill_store import (
     compute_monthly_returns,
@@ -18,6 +19,7 @@ from client_reporting_api.core.backfill_store import (
     get_backfill_summary,
     get_equity_curve,
 )
+from client_reporting_api.core.entitlement import _enforce_entitlement
 from client_reporting_api.core.live_data_provider import get_collector
 from client_reporting_api.core.mock_performance_data import (
     MOCK_BALANCE_BREAKDOWN,
@@ -31,6 +33,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/performance", tags=["performance"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _decimal_to_float(val: Decimal) -> float:
@@ -40,9 +44,11 @@ def _decimal_to_float(val: Decimal) -> float:
 
 @router.get("/summary")
 def get_performance_summary(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return full performance summary with equity curve, monthly returns, and stats."""
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return get_mock_performance_summary(client_id)
 
@@ -82,9 +88,11 @@ def get_performance_summary(
 
 @router.get("/positions")
 def get_open_positions(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return current open positions with unrealized P&L."""
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {"client_id": client_id, "positions": MOCK_POSITIONS}
 
@@ -114,9 +122,11 @@ def get_open_positions(
 
 @router.get("/balances")
 def get_balance_breakdown(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return per-asset balance breakdown with USD values."""
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {"client_id": client_id, **MOCK_BALANCE_BREAKDOWN}
 
@@ -144,6 +154,7 @@ def get_balance_breakdown(
 
 @router.get("/coin-breakdown")
 def get_coin_breakdown(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return per-coin P&L breakdown from real bills ledger + trades.
@@ -152,6 +163,7 @@ def get_coin_breakdown(
     buy/sell split, avg holding time, round trips.
     Validated: sum(coin.net_pnl) == total_net_pnl.
     """
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {"client_id": client_id, "coins": MOCK_COIN_BREAKDOWN}
 

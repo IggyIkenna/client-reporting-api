@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import (
     _load_json,
     _resolve_client_ids,
     state_mgr,
 )
+from client_reporting_api.core.entitlement import require_internal
 from client_reporting_api.core.tranche_router import load_registry
 
 router = APIRouter()
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _trade_to_settlement(trade: dict[str, object], venue: str) -> dict[str, object]:
@@ -56,9 +63,16 @@ def _invoices_simple() -> list[dict[str, object]]:
 
 @router.get("/settlements")
 def get_settlements(
+    auth: AuthDep,
     client_ids: str = Query(default="", description="Comma-separated client IDs"),
 ) -> dict[str, object]:
-    """Return settlement/reconciliation data from real trade history."""
+    """Return settlement/reconciliation data from real trade history.
+
+    Cross-client aggregate (no per-call ``client_id`` scope means an
+    empty string pulls all clients via ``_resolve_client_ids``) —
+    internal-only to avoid data leakage.
+    """
+    require_internal(auth)
     ids = _resolve_client_ids(client_ids)
     settlements: list[dict[str, object]] = []
     for cid in ids:

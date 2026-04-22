@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import _load_json
 from client_reporting_api.core.backfill_store import (
@@ -13,11 +15,15 @@ from client_reporting_api.core.backfill_store import (
     get_backfill_summary,
     get_equity_curve,
 )
+from client_reporting_api.core.entitlement import _enforce_entitlement
 from client_reporting_api.core.hwm_seeds import get_hwm_seed, get_pnl_recovery_seed
 from client_reporting_api.core.pnl_chart_generator import CLIENT_NAMES, compute_pnl_series
 from client_reporting_api.core.trade_analytics import compute_coin_breakdown
 
 router = APIRouter(prefix="/performance")
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _build_equity_curve_ui(ec: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -62,9 +68,11 @@ def _build_monthly_returns_ui(monthly: list[dict[str, object]]) -> list[dict[str
 
 @router.get("/summary")
 def get_performance_summary(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return full performance summary with real equity curve, monthly returns, stats."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ec = get_equity_curve(cid)
     if not ec:
@@ -102,9 +110,11 @@ def get_performance_summary(
 
 @router.get("/coin-breakdown")
 def get_coin_breakdown(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return real coin-level PnL breakdown from bills ledger + trades."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ta = compute_coin_breakdown(cid)
     coins = [
@@ -143,9 +153,11 @@ def _project_position(p: dict[str, object]) -> dict[str, object]:
 
 @router.get("/positions")
 def get_positions(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return current open positions from backfill data."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     positions = _load_json(cid, "positions.json") or []
     return {"client_id": cid, "positions": [_project_position(p) for p in positions]}
@@ -167,9 +179,11 @@ def _balance_row(ccy: str, info: dict[str, object]) -> tuple[dict[str, str], flo
 
 @router.get("/balances")
 def get_balances(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return balance breakdown from backfill data."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     balance_data = _load_json(cid, "balance.json")
     if not balance_data:

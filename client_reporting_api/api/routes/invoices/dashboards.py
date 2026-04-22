@@ -8,24 +8,38 @@ to floats via ``decimal_safe`` for JSON serialisation.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.invoices._shared import decimal_safe, state_mgr
+from client_reporting_api.core.entitlement import (
+    _enforce_entitlement,
+    require_internal,
+)
 
 router = APIRouter(prefix="/dashboard")
 
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
+
 
 @router.get("/fees")
-def fee_dashboard() -> dict[str, object]:
-    """Full fee dashboard: all clients grouped by status with current fees."""
+def fee_dashboard(auth: AuthDep) -> dict[str, object]:
+    """Full fee dashboard: all clients grouped by status with current fees.
+
+    Cross-client aggregate — internal-only.
+    """
+    require_internal(auth)
     summary = state_mgr.get_dashboard_summary()
     return decimal_safe(summary)
 
 
 @router.get("/fees/{client_id}")
-def client_fee_detail(client_id: str) -> dict[str, object]:
+def client_fee_detail(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Detailed fee breakdown for a single client."""
+    _enforce_entitlement(auth, client_id)
     fees = state_mgr.compute_current_fees(client_id.upper())
     if fees is None:
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
@@ -69,8 +83,12 @@ def _performance_fee_rows(
 
 
 @router.get("/trader-payment")
-def trader_payment_summary() -> dict[str, object]:
-    """Generate trader payment summary: at-HWM clients + underwater server costs."""
+def trader_payment_summary(auth: AuthDep) -> dict[str, object]:
+    """Generate trader payment summary: at-HWM clients + underwater server costs.
+
+    Cross-client operational aggregate — internal-only.
+    """
+    require_internal(auth)
     summary = state_mgr.get_dashboard_summary()
     at_hwm = summary.get("at_hwm", [])
     underwater = summary.get("underwater", [])
@@ -95,8 +113,9 @@ def trader_payment_summary() -> dict[str, object]:
 
 
 @router.get("/hwm/{client_id}")
-def get_hwm_state(client_id: str) -> dict[str, object]:
+def get_hwm_state(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Get current HWM state for a client."""
+    _enforce_entitlement(auth, client_id)
     state = state_mgr.get_hwm_state(client_id.upper())
     if state is None:
         raise HTTPException(status_code=404, detail=f"No HWM state for {client_id}")
@@ -104,8 +123,12 @@ def get_hwm_state(client_id: str) -> dict[str, object]:
 
 
 @router.get("/introducers")
-def list_introducers() -> dict[str, object]:
-    """List all introducer balances."""
+def list_introducers(auth: AuthDep) -> dict[str, object]:
+    """List all introducer balances.
+
+    Cross-client operational view — internal-only.
+    """
+    require_internal(auth)
     result: dict[str, object] = {}
     for client_id in ("PR", "ET"):
         intro = state_mgr.get_introducer_state(client_id)

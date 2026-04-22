@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import _load_json
+from client_reporting_api.core.entitlement import _enforce_entitlement
 
 router = APIRouter()
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _apply_filters(
@@ -51,6 +58,7 @@ def _project_trade(t: dict[str, object]) -> tuple[dict[str, object], float, floa
 
 @router.get("/trades")
 def get_trades(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client ID"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -58,6 +66,7 @@ def get_trades(
     side: str = Query(default=""),
 ) -> dict[str, object]:
     """Return paginated trade history from backfill data."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     trades = _load_json(cid, "trades.json") or []
     trades.sort(key=lambda t: t.get("timestamp", 0) or 0, reverse=True)

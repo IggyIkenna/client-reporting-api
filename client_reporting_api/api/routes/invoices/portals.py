@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.invoices._shared import decimal_safe, state_mgr
+from client_reporting_api.core.entitlement import require_internal
 
 router = APIRouter(prefix="/portal")
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _admin_at_hwm_rows(at_hwm: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -89,8 +95,12 @@ def _introducer_summary_rows() -> list[dict[str, object]]:
 
 
 @router.get("/admin")
-def portal_admin() -> dict[str, object]:
-    """Admin view: full visibility — HWM, PnL, fees, recovery state."""
+def portal_admin(auth: AuthDep) -> dict[str, object]:
+    """Admin view: full visibility — HWM, PnL, fees, recovery state.
+
+    Internal-only.
+    """
+    require_internal(auth)
     summary = state_mgr.get_dashboard_summary()
     at_hwm = summary.get("at_hwm", [])
     underwater = summary.get("underwater", [])
@@ -132,8 +142,12 @@ def _trader_fee_row(c: dict[str, object]) -> dict[str, object] | None:
 
 
 @router.get("/trader")
-def portal_trader() -> dict[str, object]:
-    """Trader view: PnL per client + 10% fee. No Odum fees, no introducer info."""
+def portal_trader(auth: AuthDep) -> dict[str, object]:
+    """Trader view: PnL per client + 10% fee. No Odum fees, no introducer info.
+
+    Internal-only (trader-portal is a support view accessed via admin creds).
+    """
+    require_internal(auth)
     summary = state_mgr.get_dashboard_summary()
     at_hwm = summary.get("at_hwm", [])
     underwater = summary.get("underwater", [])
@@ -198,8 +212,12 @@ def _introducer_client_row(client_id: str, introducer_id: str) -> dict[str, obje
 
 
 @router.get("/introducer/{introducer_id}")
-def portal_introducer(introducer_id: str) -> dict[str, object]:
-    """Introducer view: clients they introduced + their share of the performance fee."""
+def portal_introducer(introducer_id: str, auth: AuthDep) -> dict[str, object]:
+    """Introducer view: clients they introduced + their share of the performance fee.
+
+    Internal-only (introducer-portal is a support view accessed via admin creds).
+    """
+    require_internal(auth)
     linked_clients: list[dict[str, object]] = []
     for client_id in ("PR", "ET", "NN", "STD"):
         row = _introducer_client_row(client_id, introducer_id)

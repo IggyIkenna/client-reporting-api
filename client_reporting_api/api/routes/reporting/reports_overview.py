@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import (
     _load_json,
@@ -15,11 +17,15 @@ from client_reporting_api.core.backfill_store import (
     compute_performance_stats,
     get_equity_curve,
 )
+from client_reporting_api.core.entitlement import require_internal
 from client_reporting_api.core.hwm_seeds import get_hwm_seed, get_pnl_recovery_seed
 from client_reporting_api.core.pnl_chart_generator import CLIENT_NAMES, compute_pnl_series
 from client_reporting_api.core.tranche_router import load_registry
 
 router = APIRouter()
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 _REPORTS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / "reports"
 
@@ -120,9 +126,14 @@ def _client_transfers(cid: str) -> list[dict[str, object]]:
 
 @router.get("/reports")
 def get_reports_overview(
+    auth: AuthDep,
     client_ids: str = Query(default="", description="Comma-separated client IDs"),
 ) -> dict[str, object]:
-    """Aggregate portfolio / monthly reports / invoices / balances / transfers for the UI."""
+    """Aggregate portfolio / monthly reports / invoices / balances / transfers for the UI.
+
+    Cross-client aggregate — internal-only.
+    """
+    require_internal(auth)
     ids = _resolve_client_ids(client_ids)
     portfolio = [entry for cid in ids if (entry := _portfolio_entry(cid))]
     account_balances = [entry for cid in ids if (entry := _account_balance_entry(cid))]

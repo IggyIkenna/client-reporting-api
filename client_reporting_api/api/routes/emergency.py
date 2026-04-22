@@ -10,15 +10,19 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Annotated
 
 import ccxt
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 from unified_trading_library import (  # pyright: ignore[reportPrivateImportUsage]
+    AuthContext,
     UnifiedCloudConfig,
+    create_api_auth,
     get_secret,
 )
 
+from client_reporting_api.core.entitlement import require_internal
 from client_reporting_api.core.exchange_data_collector import _create_exchange
 from client_reporting_api.core.tranche_router import get_client_config
 
@@ -26,6 +30,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/emergency", tags=["emergency"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 # ---------------------------------------------------------------------------
@@ -151,15 +157,21 @@ def _fetch_open_positions(
 
 @router.post("/close-all/{client_id}", response_model=CloseAllResponse)
 def close_all_positions(
+    auth: AuthDep,
     client_id: str = Path(..., description="Client identifier"),
     body: CloseAllRequest = ...,  # type: ignore[assignment]
 ) -> CloseAllResponse:
     """Emergency close-all positions for a client.
 
+    Internal-only: trading actions are never reachable by external client
+    API keys regardless of ``client_id``. Ops / support initiates via
+    admin credentials.
+
     - Guard: returns 403 if the client does not have trading keys.
     - dry_run=true (default): lists positions that WOULD be closed.
     - dry_run=false: submits market close orders via CCXT.
     """
+    require_internal(auth)
     now = datetime.now(tz=UTC)
 
     # --- Audit log: every attempt ---

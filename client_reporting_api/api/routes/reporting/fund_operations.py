@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import _resolve_client_ids
 from client_reporting_api.core.backfill_store import get_equity_curve
+from client_reporting_api.core.entitlement import require_internal
 from client_reporting_api.core.pnl_chart_generator import CLIENT_NAMES, compute_pnl_series
 from client_reporting_api.core.tranche_router import load_registry
 
 router = APIRouter()
+
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _investor_row(cid: str, cfg: dict[str, object], net_deposits: float) -> dict[str, object]:
@@ -117,9 +124,14 @@ def _walk_clients_for_fund_ops(
 
 @router.get("/fund-operations")
 def get_fund_operations(
+    auth: AuthDep,
     client_ids: str = Query(default="", description="Comma-separated client IDs"),
 ) -> dict[str, object]:
-    """Return real investor register + capital accounts + distribution waterfall."""
+    """Return real investor register + capital accounts + distribution waterfall.
+
+    Cross-client aggregate — internal-only.
+    """
+    require_internal(auth)
     ids = _resolve_client_ids(client_ids)
     registry = load_registry()
     clients_cfg = registry.get("clients", {})

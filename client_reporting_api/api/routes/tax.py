@@ -7,18 +7,22 @@ import io
 import logging
 from collections import defaultdict
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from unified_trading_library import UnifiedCloudConfig
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
+from client_reporting_api.core.entitlement import _enforce_entitlement
 from client_reporting_api.core.mock_performance_data import MOCK_TRADES
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/tax", tags=["tax"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 class TaxLot(
@@ -167,10 +171,12 @@ def _build_annual_summary(
 
 @router.get("/annual-summary")
 def get_annual_tax_summary(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     tax_year: int = Query(2025, description="Tax year to report on"),
 ) -> AnnualTaxSummary:
     """Return FIFO cost-basis tax lots and summary for a tax year."""
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _build_annual_summary(client_id, tax_year, MOCK_TRADES)
 
@@ -192,10 +198,12 @@ def get_annual_tax_summary(
 
 @router.get("/annual-summary/csv")
 def export_annual_tax_csv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     tax_year: int = Query(2025, description="Tax year to report on"),
 ) -> StreamingResponse:
     """Download FIFO tax lots as CSV for a given tax year."""
+    _enforce_entitlement(auth, client_id)
     summary = _build_annual_summary(client_id, tax_year, MOCK_TRADES)
 
     fields = [

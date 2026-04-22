@@ -8,11 +8,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, Query
-from unified_trading_library import UnifiedCloudConfig
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.backfill_store import get_backfill_trades
+from client_reporting_api.core.entitlement import _enforce_entitlement
 from client_reporting_api.core.live_data_provider import get_collector
 from client_reporting_api.core.mock_performance_data import MOCK_TRADES
 
@@ -20,6 +22,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/trades", tags=["trades"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 def _decimal_to_float(val: Decimal) -> float:
@@ -29,6 +33,7 @@ def _decimal_to_float(val: Decimal) -> float:
 
 @router.get("")
 def get_trade_history(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     symbol: str | None = Query(None, description="Filter by symbol"),
     side: str | None = Query(None, description="Filter by side (BUY or SELL)"),
@@ -36,6 +41,7 @@ def get_trade_history(
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> dict[str, object]:
     """Return paginated trade history with fills, fees, and P&L."""
+    _enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_trades(client_id, symbol, side, limit, offset)
 

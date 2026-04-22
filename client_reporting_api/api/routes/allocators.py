@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from unified_api_contracts import (
     AllocatorCashAccountView,
     AllocatorRedemption,
@@ -27,6 +27,7 @@ from unified_api_contracts import (
 )
 from unified_trading_library import AuthContext, create_api_auth
 
+from client_reporting_api.core.entitlement import _enforce_entitlement
 from client_reporting_api.core.fund_admin_provider import (
     FundAdminProvider,
     get_fund_admin_provider,
@@ -46,27 +47,6 @@ _require_auth = create_api_auth("client-reporting-api")
 # standard FastAPI dep-injection flow.
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 ProviderDep = Annotated[FundAdminProvider, Depends(get_fund_admin_provider)]
-
-
-def _enforce_entitlement(auth: AuthContext, client_id: str) -> None:
-    """Reject with 403 when the caller's entitled client does not match.
-
-    Internal callers (admin / S2S / local dev) bypass the check — they
-    need cross-client visibility for reconciliation and support.
-    ``AuthContext.org_id`` is the entitled client id for external users.
-    """
-    if auth.is_internal:
-        return
-    if auth.org_id != client_id:
-        logger.warning(
-            "Entitlement denied: caller_org=%s path_client=%s",
-            auth.org_id,
-            client_id,
-        )
-        raise HTTPException(
-            status_code=403,
-            detail="Not entitled to read this allocator",
-        )
 
 
 @router.get("/{client_id}/subscriptions", response_model=list[AllocatorSubscription])

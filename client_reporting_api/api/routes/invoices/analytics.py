@@ -5,12 +5,18 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.core.backfill_store import (
     compute_performance_stats,
     get_equity_curve,
+)
+from client_reporting_api.core.entitlement import (
+    _enforce_entitlement,
+    require_internal,
 )
 from client_reporting_api.core.trade_analytics import (
     CLIENT_IDS,
@@ -20,12 +26,16 @@ from client_reporting_api.core.trade_analytics import (
 
 router = APIRouter()
 
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
+
 _BACKFILL_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / "backfill"
 
 
 @router.get("/analytics/{client_id}")
-def get_trade_analytics(client_id: str) -> dict[str, object]:
+def get_trade_analytics(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Coin-level PnL, volume, holding time breakdown for a client."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ta = compute_coin_breakdown(cid)
     return asdict(ta)
@@ -33,9 +43,14 @@ def get_trade_analytics(client_id: str) -> dict[str, object]:
 
 @router.get("/analytics")
 def get_aggregated_analytics(
+    auth: AuthDep,
     client_ids: str = Query(default="", description="Comma-separated client IDs (empty = all)"),
 ) -> dict[str, object]:
-    """Get aggregated trade analytics across clients."""
+    """Get aggregated trade analytics across clients.
+
+    Cross-client aggregate — internal-only.
+    """
+    require_internal(auth)
     ids = (
         [c.strip().upper() for c in client_ids.split(",") if c.strip()]
         if client_ids
@@ -46,8 +61,9 @@ def get_aggregated_analytics(
 
 
 @router.get("/performance/{client_id}")
-def get_performance_stats(client_id: str) -> dict[str, object]:
+def get_performance_stats(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Full performance stats: Sharpe, Sortino, Calmar, max drawdown, win rate, etc."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ec = get_equity_curve(cid)
     if not ec:
@@ -73,6 +89,7 @@ def _filter_orders_in_place(
 @router.get("/orders/{client_id}")
 def get_orders(
     client_id: str,
+    auth: AuthDep,
     symbol: str = Query(default="", description="Filter by symbol (partial match)"),
     side: str = Query(default="", description="Filter by side (buy/sell)"),
     status: str = Query(default="", description="Filter by status"),
@@ -80,6 +97,7 @@ def get_orders(
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, object]:
     """Browse orders for a client with pagination and filters."""
+    _enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     orders_path = _BACKFILL_ROOT / cid / "orders.json"
     if not orders_path.exists():
