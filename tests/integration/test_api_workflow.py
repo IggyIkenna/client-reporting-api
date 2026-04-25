@@ -64,6 +64,27 @@ class TestHealthWorkflow:
 
 
 # ---------------------------------------------------------------------------
+# Investor relations (portal metadata)
+# ---------------------------------------------------------------------------
+
+
+class TestInvestorRelationsArchiveMetadata:
+    """GET /api/reporting/investor-relations/archive-metadata."""
+
+    def test_archive_metadata_returns_payload(self, client: TestClient) -> None:
+        """Returns versioned JSON for portal IR deck merge."""
+        resp = client.get("/api/reporting/investor-relations/archive-metadata")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("version") == 1
+        assert isinstance(body.get("presentations"), list)
+        assert len(body["presentations"]) >= 1
+        first = body["presentations"][0]
+        assert first.get("id") == "archive-readiness-snapshot"
+        assert "title" in first
+
+
+# ---------------------------------------------------------------------------
 # Reports workflow
 # ---------------------------------------------------------------------------
 

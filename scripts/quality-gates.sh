@@ -118,6 +118,9 @@ HARDCODED_PROTO_EXCLUDE_GLOBS=(
 # pip-audit: ignore known CVEs pending upstream package upgrades (aiohttp 3.13.3→3.13.4, pygments 2.19.2→2.20.0)
 PIP_AUDIT_EXTRA_ARGS="--ignore-vuln CVE-2026-34073 --ignore-vuln CVE-2026-34515 --ignore-vuln CVE-2026-34513 --ignore-vuln CVE-2026-34516 --ignore-vuln CVE-2026-34517 --ignore-vuln CVE-2026-34519 --ignore-vuln CVE-2026-34518 --ignore-vuln CVE-2026-34520 --ignore-vuln CVE-2026-34525 --ignore-vuln CVE-2026-22815 --ignore-vuln CVE-2026-34514 --ignore-vuln CVE-2026-4539"
 
+# Type check + pytest + codex often exceed 300s on large trees locally.
+MAX_DURATION=600
+
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
 

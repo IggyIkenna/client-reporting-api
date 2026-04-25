@@ -12,6 +12,9 @@ from client_reporting_api.api.routes.reporting.clients_listing import router as 
 from client_reporting_api.api.routes.reporting.fund_operations import (
     router as fund_operations_router,
 )
+from client_reporting_api.api.routes.reporting.investor_relations_archive import (
+    router as investor_relations_archive_router,
+)
 from client_reporting_api.api.routes.reporting.invoices_listing import (
     router as invoices_listing_router,
 )
@@ -24,6 +27,7 @@ from client_reporting_api.api.routes.reporting.settlements import router as sett
 from client_reporting_api.api.routes.reporting.trades import router as trades_router
 
 router = APIRouter(prefix="/api/reporting", tags=["reporting"])
+router.include_router(investor_relations_archive_router)
 router.include_router(clients_router)
 router.include_router(performance_router)
 router.include_router(trades_router)

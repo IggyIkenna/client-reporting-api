@@ -296,7 +296,7 @@ class TestCashAccountView:
         )
         assert response.status_code == 200
         view = AllocatorCashAccountView.model_validate(response.json())
-        assert view.movements == []
+        assert len(view.movements) == 0
         assert view.current_balance_usd == Decimal("0")
         assert view.last_settlement_timestamp is None
 

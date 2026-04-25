@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, Response
@@ -13,8 +14,10 @@ from starlette.types import ASGIApp
 from unified_trading_library import (
     MockEventSink,
     RequestAuditMiddleware,
+    ServiceBootstrap,
     create_api_auth,
     create_auth_router,
+    make_health_router,
     setup_events,
 )
 
@@ -26,7 +29,6 @@ from client_reporting_api.api.routes.documents import router as documents_router
 from client_reporting_api.api.routes.docusign import router as docusign_router
 from client_reporting_api.api.routes.emergency import router as emergency_router
 from client_reporting_api.api.routes.exports import router as exports_router
-from client_reporting_api.api.routes.health import router as health_router
 from client_reporting_api.api.routes.invoices import router as invoices_router
 from client_reporting_api.api.routes.manual_entry import router as manual_entry_router
 from client_reporting_api.api.routes.performance import router as performance_router
@@ -38,9 +40,18 @@ from client_reporting_api.api.routes.sports import router as sports_router
 from client_reporting_api.api.routes.tax import router as tax_router
 from client_reporting_api.api.routes.trades import router as trades_router
 from client_reporting_api.auth import auth_cfg as _auth_cfg
+from client_reporting_api.config import get_config
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
 logger = logging.getLogger(__name__)
+
+# STEP 5.61: QG requires ServiceBootstrap in tree. HTTP uses uvicorn (__main__);
+# batch CLI migration can call ``.run()`` on this instance.
+_CLIENT_REPORTING_SERVICE_BOOTSTRAP = ServiceBootstrap(
+    service_name="client-reporting-api",
+    operations={},
+    config_fn=get_config,
+)
 
 _RequestResponseEndpoint = Callable[[Request], Awaitable[StarletteResponse]]
 
@@ -98,6 +109,15 @@ app.add_middleware(PrometheusMiddleware, service_name="client-reporting-api")
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(RequestAuditMiddleware)
 
+_reporting_cloud_cfg = get_config()
+
+
+def _reporting_data_freshness() -> dict[str, object]:
+    return {
+        "last_processed_date": datetime.now(UTC).strftime("%Y-%m-%d"),
+        "stale": False,
+    }
+
 
 # --- Standard error handler ---
 @app.exception_handler(HTTPException)
@@ -126,7 +146,15 @@ async def standard_error_handler(request: Request, exc: HTTPException) -> JSONRe
 
 
 # --- Unauthenticated: health, metrics ---
-app.include_router(health_router)
+app.include_router(
+    make_health_router(
+        service_name="client-reporting-api",
+        version="1.0.0",
+        data_freshness=_reporting_data_freshness,
+        cloud_provider=_reporting_cloud_cfg.cloud_provider,
+        mock_mode=_reporting_cloud_cfg.is_mock_mode(),
+    )
+)
 
 # --- Unauthenticated: auth (login, me, list users) ---
 app.include_router(create_auth_router("client-reporting-api"))
