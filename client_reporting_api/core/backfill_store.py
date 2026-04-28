@@ -189,56 +189,37 @@ def _compute_daily_returns(
 
 
 def _twr_equity_series(daily_returns: list[float]) -> list[float]:
-    """Build the chain-linked TWR equity series starting at 1.0."""
-    twr_equity = [1.0]
-    for dr in daily_returns:
-        twr_equity.append(twr_equity[-1] * (1.0 + dr))
-    return twr_equity
+    """Chain-linked TWR equity series starting at 1.0. Delegates to the UTL
+    SSOT — same formula every consumer uses."""
+    from unified_trading_library.performance_metrics import twr_equity_curve
+
+    return twr_equity_curve(daily_returns)
 
 
 def _max_drawdown_stats(twr_equity: list[float]) -> tuple[float, int]:
     """Return (max drawdown fraction, longest drawdown duration in days)."""
-    peak = twr_equity[0] if twr_equity else 1.0
-    max_dd = 0.0
-    max_dd_duration = 0
-    in_dd = False
-    current_dd_start = 0
-    for idx, eq in enumerate(twr_equity):
-        if eq >= peak:
-            peak = eq
-            if in_dd:
-                duration = idx - current_dd_start
-                if duration > max_dd_duration:
-                    max_dd_duration = duration
-                in_dd = False
-        else:
-            if not in_dd:
-                in_dd = True
-                current_dd_start = idx
-            dd = (peak - eq) / peak if peak > 0 else 0
-            if dd > max_dd:
-                max_dd = dd
-    if in_dd:
-        duration = len(twr_equity) - 1 - current_dd_start
-        if duration > max_dd_duration:
-            max_dd_duration = duration
-    return max_dd, max_dd_duration
+    from unified_trading_library.performance_metrics import max_drawdown
+
+    stats = max_drawdown(twr_equity)
+    return stats.max_drawdown_pct, stats.longest_drawdown_days
 
 
 def _risk_ratios(daily_returns: list[float]) -> tuple[float, float, float]:
-    """Return (annualised Sharpe, annualised Sortino, annualised volatility pct)."""
-    if not daily_returns:
-        return 0.0, 0.0, 0.0
-    mean_ret = sum(daily_returns) / len(daily_returns)
-    variance = sum((r - mean_ret) ** 2 for r in daily_returns) / len(daily_returns)
-    std_ret = variance**0.5
-    sharpe = (mean_ret / std_ret) * (365**0.5) if std_ret > 0 else 0.0
+    """Return (annualised Sharpe, annualised Sortino, annualised volatility pct).
 
-    downside_var = sum(min(0, r) ** 2 for r in daily_returns) / len(daily_returns)
-    downside_std = downside_var**0.5
-    sortino = (mean_ret / downside_std) * (365**0.5) if downside_std > 0 else 0.0
+    Delegates to ``unified_trading_library.performance_metrics`` — the SSOT
+    every consumer (CRA reports, tear sheets, future risk dashboards) speaks
+    so a 5% Sharpe on the dashboard means the same thing as on the tear sheet.
+    """
+    from unified_trading_library.performance_metrics import (
+        annualised_volatility,
+        sharpe_ratio,
+        sortino_ratio,
+    )
 
-    volatility = std_ret * (365**0.5) * 100
+    sharpe = sharpe_ratio(daily_returns)
+    sortino = sortino_ratio(daily_returns)
+    volatility = annualised_volatility(daily_returns) * 100.0
     return sharpe, sortino, volatility
 
 
@@ -406,9 +387,10 @@ def compute_performance_stats(
     sharpe, sortino, volatility = _risk_ratios(daily_returns)
 
     days = len(equities)
-    annualized_return = (
-        (twr_product ** (365 / days) - 1.0) * 100 if days > 1 and twr_product > 0 else 0.0
-    )
+    # UTL SSOT for annualised TWR — same conventions across the system.
+    from unified_trading_library.performance_metrics import twr_annualised_return
+
+    annualized_return = twr_annualised_return(daily_returns) * 100.0 if days > 1 else 0.0
     total_deposits, total_withdrawals = _total_capital_flows(equity_curve, is_btc, first_date)
     calmar = annualized_return / (max_dd * 100) if max_dd > 0 and annualized_return != 0 else 0.0
     simple_return_pct = sum(daily_returns) * 100

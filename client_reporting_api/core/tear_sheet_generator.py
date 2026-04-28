@@ -122,14 +122,16 @@ def _append_rolling(
     rolling_vol: list[float | None],
     window: int = 30,
 ) -> None:
-    """Append rolling Sharpe and volatility values."""
+    """Append rolling Sharpe and volatility values via UTL SSOT."""
     if len(daily_returns) >= window:
+        from unified_trading_library.performance_metrics import (
+            annualised_volatility,
+            sharpe_ratio,
+        )
+
         recent = daily_returns[-window:]
-        mean_r = sum(recent) / window
-        var_r = sum((r - mean_r) ** 2 for r in recent) / window
-        std_r = var_r**0.5
-        sharpe = (mean_r / std_r * (365**0.5)) if std_r > 0 else 0.0
-        vol = std_r * (365**0.5) * 100
+        sharpe = sharpe_ratio(recent)
+        vol = annualised_volatility(recent) * 100.0
         rolling_sharpe.append(round(sharpe, 2))
         rolling_vol.append(round(vol, 2))
     else:
