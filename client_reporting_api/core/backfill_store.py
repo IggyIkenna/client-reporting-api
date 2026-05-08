@@ -191,14 +191,14 @@ def _compute_daily_returns(
 def _twr_equity_series(daily_returns: list[float]) -> list[float]:
     """Chain-linked TWR equity series starting at 1.0. Delegates to the UTL
     SSOT — same formula every consumer uses."""
-    from unified_trading_library.performance_metrics import twr_equity_curve
+    from unified_trading_library import twr_equity_curve
 
     return twr_equity_curve(daily_returns)
 
 
 def _max_drawdown_stats(twr_equity: list[float]) -> tuple[float, int]:
     """Return (max drawdown fraction, longest drawdown duration in days)."""
-    from unified_trading_library.performance_metrics import max_drawdown
+    from unified_trading_library import max_drawdown
 
     stats = max_drawdown(twr_equity)
     return stats.max_drawdown_pct, stats.longest_drawdown_days
@@ -211,7 +211,7 @@ def _risk_ratios(daily_returns: list[float]) -> tuple[float, float, float]:
     every consumer (CRA reports, tear sheets, future risk dashboards) speaks
     so a 5% Sharpe on the dashboard means the same thing as on the tear sheet.
     """
-    from unified_trading_library.performance_metrics import (
+    from unified_trading_library import (
         annualised_volatility,
         sharpe_ratio,
         sortino_ratio,
@@ -388,7 +388,7 @@ def compute_performance_stats(
 
     days = len(equities)
     # UTL SSOT for annualised TWR — same conventions across the system.
-    from unified_trading_library.performance_metrics import twr_annualised_return
+    from unified_trading_library import twr_annualised_return
 
     annualized_return = twr_annualised_return(daily_returns) * 100.0 if days > 1 else 0.0
     total_deposits, total_withdrawals = _total_capital_flows(equity_curve, is_btc, first_date)

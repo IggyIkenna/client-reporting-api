@@ -124,7 +124,7 @@ def _append_rolling(
 ) -> None:
     """Append rolling Sharpe and volatility values via UTL SSOT."""
     if len(daily_returns) >= window:
-        from unified_trading_library.performance_metrics import (
+        from unified_trading_library import (
             annualised_volatility,
             sharpe_ratio,
         )
