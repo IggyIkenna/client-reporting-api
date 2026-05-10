@@ -11,7 +11,7 @@ existing ``/api/v1/clients`` listing.
 Data source for this phase is the in-memory ``FundAdminProvider``.
 Wiring the real HTTP client (+ circuit breaker) to
 ``fund-administration-service`` is tracked as a Phase-5/6 follow-up in
-``unified-trading-pm/plans/active/fund_administration_service_and_pooled_subscription_redemption_2026_04_20.plan.md``.
+``unified-trading-pm/plans/active/fund_administration_service_and_pooled_subscription_redemption_2026_04_20.md``.
 """
 
 from __future__ import annotations
