@@ -384,5 +384,5 @@ class TestTransferRecordSchema:
             status="ok",
             timestamp=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        with pytest.raises(Exception):  # noqa: B017 — ValidationError or similar
+        with pytest.raises(Exception):
             record.amount = Decimal("9999")

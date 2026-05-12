@@ -13,7 +13,6 @@ Outputs:
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from datetime import UTC, datetime
@@ -321,9 +320,9 @@ def _build_summary_table(all_data: dict[str, dict]) -> str:
 
         rows.append(f"""\
     <tr>
-      <td>{d['name']}</td>
+      <td>{d["name"]}</td>
       <td>{cid}</td>
-      <td>{d['denomination']}</td>
+      <td>{d["denomination"]}</td>
       <td>{days}</td>
       <td>{unit}{_fmt(first_eq, is_btc)}</td>
       <td>{unit}{_fmt(last_eq, is_btc)}</td>
@@ -383,7 +382,7 @@ def _build_client_section(cid: str, d: dict) -> str:
 
     parts.append(f"""\
   <div class="client-section">
-  <h2>{d['name']} ({cid}) — {denom} Account</h2>
+  <h2>{d["name"]} ({cid}) — {denom} Account</h2>
 """)
 
     # Stats grid
@@ -418,7 +417,7 @@ def _build_client_section(cid: str, d: dict) -> str:
         pnl_rec_card = (
             f'    <div class="stat"><div class="label">PnL Recovery (USD)</div>'
             f'<div class="value neg" style="font-size:13px;">'
-            f'${pnl_rec_usd:,.0f} ({pnl_rec_usd_pct:.1f}%)'
+            f"${pnl_rec_usd:,.0f} ({pnl_rec_usd_pct:.1f}%)"
             f" — seed ${pnl_seed_usd:,.0f}</div></div>\n"
         )
 
@@ -459,11 +458,11 @@ def _build_client_section(cid: str, d: dict) -> str:
             ret = float(f.get("daily_return_pct", 0))
             parts.append(f"""\
       <tr class="flag">
-        <td>{f.get('date', '')}</td>
+        <td>{f.get("date", "")}</td>
         <td class="warn">{ret:+.2f}%</td>
-        <td>{unit}{f.get('equity', 0)}</td>
-        <td>{unit}{f.get('prev_equity', 0)}</td>
-        <td>{unit}{f.get('detected_transfer', 0)}</td>
+        <td>{unit}{f.get("equity", 0)}</td>
+        <td>{unit}{f.get("prev_equity", 0)}</td>
+        <td>{unit}{f.get("detected_transfer", 0)}</td>
       </tr>
 """)
         parts.append("    </tbody></table>\n")
@@ -483,8 +482,8 @@ def _build_client_section(cid: str, d: dict) -> str:
         for t in transfers:
             parts.append(f"""\
       <tr class="xfer-row">
-        <td>{t.timestamp.strftime('%Y-%m-%d')}</td>
-        <td class="{'pos' if t.direction == 'deposit' else 'neg'}">{t.direction.upper()}</td>
+        <td>{t.timestamp.strftime("%Y-%m-%d")}</td>
+        <td class="{"pos" if t.direction == "deposit" else "neg"}">{t.direction.upper()}</td>
         <td>{t.currency}</td>
         <td>{t.amount}</td>
         <td>${float(t.usd_amount):,.2f}</td>
@@ -498,14 +497,16 @@ def _build_client_section(cid: str, d: dict) -> str:
         nd = d["net_deposits"]
         parts.append(f"""\
   <div class="summary-grid" style="max-width:600px;">
-    <div class="stat"><div class="label">Total Deposits USD</div><div class="value pos">${float(nd.get('total_deposits_usd', 0)):,.0f}</div></div>
-    <div class="stat"><div class="label">Total Withdrawals USD</div><div class="value neg">${float(nd.get('total_withdrawals_usd', 0)):,.0f}</div></div>
-    <div class="stat"><div class="label">Net Deposits USD</div><div class="value">${float(nd.get('net_deposits_usd', 0)):,.0f}</div></div>
-    <div class="stat"><div class="label">Primary Currency</div><div class="value">{nd.get('primary_currency', 'N/A')}</div></div>
+    <div class="stat"><div class="label">Total Deposits USD</div><div class="value pos">${float(nd.get("total_deposits_usd", 0)):,.0f}</div></div>
+    <div class="stat"><div class="label">Total Withdrawals USD</div><div class="value neg">${float(nd.get("total_withdrawals_usd", 0)):,.0f}</div></div>
+    <div class="stat"><div class="label">Net Deposits USD</div><div class="value">${float(nd.get("net_deposits_usd", 0)):,.0f}</div></div>
+    <div class="stat"><div class="label">Primary Currency</div><div class="value">{nd.get("primary_currency", "N/A")}</div></div>
   </div>
 """)
     else:
-        parts.append("  <h3>Canonical Transfers</h3>\n  <p style='color:var(--muted);'>No transfers detected (initial deposit on first day is implicit).</p>\n")
+        parts.append(
+            "  <h3>Canonical Transfers</h3>\n  <p style='color:var(--muted);'>No transfers detected (initial deposit on first day is implicit).</p>\n"
+        )
 
     # Monthly returns
     monthly = d["monthly"]
@@ -519,7 +520,7 @@ def _build_client_section(cid: str, d: dict) -> str:
         for m in monthly:
             ret = float(m["return_pct"])
             parts.append(f"""\
-      <tr><td>{m['month']}</td><td class="{_sign_class(ret)}">{ret:+.2f}%</td></tr>
+      <tr><td>{m["month"]}</td><td class="{_sign_class(ret)}">{ret:+.2f}%</td></tr>
 """)
         parts.append("    </tbody></table>\n")
 
@@ -556,24 +557,26 @@ def _build_client_section(cid: str, d: dict) -> str:
         is_flagged = abs(day_ret) > 25
         ret_class = "warn" if is_flagged else _sign_class(day_ret)
 
-        parts.append(f'      <tr{row_class}>\n')
-        parts.append(f'        <td>{r["date"]}</td>\n')
-        parts.append(f'        <td>{unit}{_fmt(r["equity"], is_btc)}</td>\n')
+        parts.append(f"      <tr{row_class}>\n")
+        parts.append(f"        <td>{r['date']}</td>\n")
+        parts.append(f"        <td>{unit}{_fmt(r['equity'], is_btc)}</td>\n")
         if has_btc_fields:
             btc_b = r.get("btc_balance", "")
             usdt_b = r.get("usdt_balance", "")
             btc_p = r.get("btc_price", "")
-            parts.append(f'        <td>{f"{btc_b:.6f}" if btc_b != "" else ""}</td>\n')
-            parts.append(f'        <td>{f"{usdt_b:,.2f}" if usdt_b != "" else ""}</td>\n')
-            parts.append(f'        <td>{f"${btc_p:,.0f}" if btc_p != "" else ""}</td>\n')
-        parts.append(f'        <td>{r["twr"]:.6f}</td>\n')
+            parts.append(f"        <td>{f'{btc_b:.6f}' if btc_b != '' else ''}</td>\n")
+            parts.append(f"        <td>{f'{usdt_b:,.2f}' if usdt_b != '' else ''}</td>\n")
+            parts.append(f"        <td>{f'${btc_p:,.0f}' if btc_p != '' else ''}</td>\n")
+        parts.append(f"        <td>{r['twr']:.6f}</td>\n")
         parts.append(f'        <td class="{_sign_class(r["dd_pct"])}">{r["dd_pct"]:.2f}%</td>\n')
         parts.append(f'        <td class="{ret_class}">{day_ret:+.4f}%</td>\n')
         xfer_str = _fmt(xfer, is_btc) if is_xfer_day else ""
-        parts.append(f'        <td class="{"pos" if xfer > 0 else "neg" if xfer < 0 else ""}">{xfer_str}</td>\n')
-        parts.append(f'        <td>{_fmt(r["cum_transfer"], is_btc)}</td>\n')
+        parts.append(
+            f'        <td class="{"pos" if xfer > 0 else "neg" if xfer < 0 else ""}">{xfer_str}</td>\n'
+        )
+        parts.append(f"        <td>{_fmt(r['cum_transfer'], is_btc)}</td>\n")
         if not is_btc and "equity_usd" in r:
-            parts.append(f'        <td>${r["equity_usd"]:,.2f}</td>\n')
+            parts.append(f"        <td>${r['equity_usd']:,.2f}</td>\n")
         parts.append("      </tr>\n")
 
     parts.append("    </tbody>\n  </table>\n  </div>\n")
@@ -612,12 +615,12 @@ def main() -> None:
     if path:
         logger.info("Combined tear sheet: %s", path)
 
-    print(f"\n{'='*60}")
-    print(f"AUDIT COMPLETE")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print("AUDIT COMPLETE")
+    print(f"{'=' * 60}")
     print(f"  Audit HTML:      {audit_path}")
     print(f"  Tear sheets:     {OUTPUT_DIR.parent / 'tear_sheets'}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":
