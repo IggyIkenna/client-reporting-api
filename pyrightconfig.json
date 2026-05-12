@@ -11,6 +11,7 @@
     "../unified-config-interface",
     "../unified-cloud-interface"
   ],
+  "stubPath": "stubs",
   "reportUnknownVariableType": "error",
   "venvPath": ".",
   "venv": ".venv"

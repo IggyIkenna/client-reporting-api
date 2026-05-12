@@ -23,6 +23,7 @@ from unified_trading_library import (
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
 from client_reporting_api.api.routes.allocators import router as allocators_router
+from client_reporting_api.api.routes.attribution import router as attribution_router
 from client_reporting_api.api.routes.clients import router as clients_router
 from client_reporting_api.api.routes.compliance import router as compliance_router
 from client_reporting_api.api.routes.documents import router as documents_router
@@ -188,6 +189,7 @@ _authenticated_router.include_router(tax_router)
 _authenticated_router.include_router(manual_entry_router)
 _authenticated_router.include_router(reporting_router)
 _authenticated_router.include_router(emergency_router)
+_authenticated_router.include_router(attribution_router)
 app.include_router(_authenticated_router)
 
 
