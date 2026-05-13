@@ -101,6 +101,15 @@ MOCK_CLIENTS: list[dict[str, str | bool]] = [
         "is_active": True,
         "is_underwater": False,
     },
+    {
+        "id": "demo-internal",
+        "name": "Demo Client (May-23 Cutover)",
+        "venue": "bybit,hyperliquid",
+        "currency": "USDT",
+        "tranche": "demo",
+        "is_active": True,
+        "is_underwater": False,
+    },
 ]
 
 
