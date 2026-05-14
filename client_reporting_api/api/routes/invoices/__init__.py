@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from client_reporting_api.api.routes.invoices import _mock_seed
+from client_reporting_api.api.routes.invoices import (
+    _mock_seed as _mock_seed,
+)  # side-effect: seeds mock data on import
 from client_reporting_api.api.routes.invoices._shared import cloud_cfg as _cloud_cfg
 from client_reporting_api.api.routes.invoices.analytics import router as analytics_router
 from client_reporting_api.api.routes.invoices.dashboards import router as dashboards_router

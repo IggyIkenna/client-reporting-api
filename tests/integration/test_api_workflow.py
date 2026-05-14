@@ -20,7 +20,7 @@ from unified_trading_library import setup_events
 
 setup_events("client-reporting-api", "test")
 
-from client_reporting_api.api.main import app
+from client_reporting_api.api.main import app  # noqa: E402
 
 pytestmark = [pytest.mark.integration, pytest.mark.timeout(120)]
 

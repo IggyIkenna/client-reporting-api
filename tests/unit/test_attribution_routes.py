@@ -17,7 +17,6 @@ import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes import attribution as _attr_mod
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

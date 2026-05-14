@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 from unified_api_contracts.internal import TransferRecord
 
 from client_reporting_api.core import transfer_collector, transfer_store
@@ -384,5 +385,5 @@ class TestTransferRecordSchema:
             status="ok",
             timestamp=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             record.amount = Decimal("9999")

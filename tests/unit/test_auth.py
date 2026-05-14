@@ -195,7 +195,7 @@ def test_production_guard_raises_on_disable_auth(monkeypatch: pytest.MonkeyPatch
         patch("client_reporting_api._google_auth_sync.make_http_request", return_value=MagicMock()),
         pytest.raises(RuntimeError, match="DISABLE_AUTH=true is forbidden in production"),
     ):
-        import client_reporting_api.auth
+        import client_reporting_api.auth  # noqa: F401 — import triggers module-level production guard
 
     # Cleanup: remove the partially-imported module so it doesn't pollute other tests
     sys.modules.pop("client_reporting_api.auth", None)
