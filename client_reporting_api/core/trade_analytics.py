@@ -23,7 +23,7 @@ CLIENT_IDS = ["PR", "NN", "ET", "STD", "GP", "SL", "SL2", "ANU", "IK", "ODUM_PRO
 
 
 @dataclass
-class CoinBreakdown:
+class CoinBreakdown:  # CORRECT-LOCAL: service-internal trade analytics dataclass
     """PnL and volume breakdown for a single coin."""
 
     symbol: str
@@ -43,7 +43,7 @@ class CoinBreakdown:
 
 
 @dataclass
-class TradeAnalytics:
+class TradeAnalytics:  # CORRECT-LOCAL: service-internal trade analytics dataclass
     """Full trade analytics for a client."""
 
     client_id: str

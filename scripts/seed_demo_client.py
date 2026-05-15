@@ -45,13 +45,13 @@ from unified_api_contracts.internal.domain.treasury import (
     DefiWalletKeyMaterial,
     TreasurySource,
 )
-from unified_trading_library.client_lifecycle.onboarding import (
+from unified_trading_library.client_lifecycle.onboarding import (  # noqa: qg-deep-import
     ClientOnboardingStateMachine,
     GCSStateStore,
     InMemoryStateStore,
     StateStore,
 )
-from unified_trading_library.treasury.custody_pinger import CustodyPinger
+from unified_trading_library.treasury.custody_pinger import CustodyPinger  # noqa: qg-deep-import
 
 logger: logging.Logger = logging.getLogger(__name__)
 

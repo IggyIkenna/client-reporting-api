@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -170,7 +170,7 @@ def _pnl_from_rows(
         amount_str = str(row.get("amount", "0"))
         try:
             amount = Decimal(amount_str)
-        except Exception:
+        except InvalidOperation:
             continue
         if row_date not in by_date:
             by_date[row_date] = {

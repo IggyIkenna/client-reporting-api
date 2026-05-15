@@ -165,6 +165,49 @@ class TestGetPnl:
 
 
 # ---------------------------------------------------------------------------
+# GET /performance  (live path)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPerformance:
+    def test_get_performance_returns_status_from_pnl(self) -> None:
+        """GET /performance returns status from live PnL report."""
+        expected: dict[str, object] = {
+            "status": "ok",
+            "client_id": "client-1",
+            "period_month": "2024-01",
+            "rows": [{"pnl": 500.0}],
+        }
+        with patch(
+            "client_reporting_api.api.routes.pnl.generate_pnl_report",
+            return_value=expected,
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get(
+                "/performance",
+                params={"client_id": "client-1", "period_month": "2024-01"},
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["client_id"] == "client-1"
+        assert data["period_month"] == "2024-01"
+        assert data["status"] == "ok"
+
+    def test_get_performance_returns_500_on_exception(self) -> None:
+        """GET /performance returns 500 when PnL computation raises."""
+        with patch(
+            "client_reporting_api.api.routes.pnl.generate_pnl_report",
+            side_effect=RuntimeError("compute error"),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            response = client.get(
+                "/performance",
+                params={"client_id": "client-1", "period_month": "2024-01"},
+            )
+        assert response.status_code == 500
+
+
+# ---------------------------------------------------------------------------
 # GET /alerts
 # ---------------------------------------------------------------------------
 

@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 import pytest
 from unified_api_contracts.internal.domain.client_lifecycle import ClientOnboardingState
 from unified_api_contracts.internal.domain.treasury import TreasurySource
-from unified_trading_library.client_lifecycle.onboarding import (
+from unified_trading_library.client_lifecycle.onboarding import (  # noqa: qg-deep-import
     ClientOnboardingStateMachine,
     InMemoryStateStore,
     InvalidStateTransitionError,

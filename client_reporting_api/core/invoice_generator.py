@@ -78,7 +78,7 @@ CLIENT_DETAILS: dict[str, dict[str, str]] = {
 
 
 @dataclass
-class InvoiceLineItem:
+class InvoiceLineItem:  # CORRECT-LOCAL: service-internal invoice rendering dataclass
     """Single line on an invoice."""
 
     description: str
@@ -86,7 +86,7 @@ class InvoiceLineItem:
 
 
 @dataclass
-class InvoiceData:
+class InvoiceData:  # CORRECT-LOCAL: service-internal invoice rendering dataclass
     """All data needed to render an invoice."""
 
     invoice_id: str

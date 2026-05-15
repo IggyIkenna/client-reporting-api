@@ -22,11 +22,13 @@ from client_reporting_api.api.routes.invoices.transitions import router as trans
 from client_reporting_api.api.routes.invoices.viewing import router as viewing_router
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
-router.include_router(generation_router)
-router.include_router(transitions_router)
+# Routers with literal single-segment paths must be registered before generation_router
+# to avoid being swallowed by generation's catch-all GET /{invoice_id}.
+router.include_router(analytics_router)
+router.include_router(viewing_router)
 router.include_router(dashboards_router)
 router.include_router(portals_router)
-router.include_router(viewing_router)
-router.include_router(analytics_router)
+router.include_router(transitions_router)
+router.include_router(generation_router)
 
 __all__ = ["_cloud_cfg", "router"]

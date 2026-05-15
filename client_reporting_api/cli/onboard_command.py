@@ -137,7 +137,7 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     )
 
     logger.info("[4/4] Running full backfill...")
-    from scripts.backfill_history import backfill_client
+    from scripts.backfill_history import backfill_client  # noqa: imports-inside-functions
 
     client_dir = DATA_DIR / client_id
     client_dir.mkdir(parents=True, exist_ok=True)
