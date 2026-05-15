@@ -34,11 +34,38 @@ EMPTY_DICT_LIST_EXCLUDE_GLOBS=(
     "!**/core/*.py"
 )
 
+# Schema provenance: route files define FastAPI request/response models (CORRECT-LOCAL, not shared domain schemas)
+SCHEMA_PROVENANCE_SKIP=true
+
+# Deep imports: unified_api_contracts.internal is the approved path for internal domain schemas
+# (FeeStructure, ClientConfig, CredentialsRegistry, TransferRecord, InvoiceRecord, HWMState, ...).
+# Per unified-trading-pm/codex/02-data/contracts-scope-and-layout.md, .internal is a first-class
+# facade for non-external-facing contracts — the QG regex can't distinguish it from deep UAC paths.
+#
+# attribution_reader.py / backfill_store.py: use unified_trading_library.cloud_interface and
+# unified_trading_library.performance_metrics sub-paths intentionally — the top-level UTL facade
+# triggers candidate_manifest_store which imports UAC strategy_service module not yet on this branch.
+# Remove exclusions once UAC + UTL deps are fully reconciled across all tabs.
+DEEP_IMPORT_EXCLUDE_GLOBS=(
+    "!**/core/fee_calculator.py"
+    "!**/core/tranche_router.py"
+    "!**/core/exchange_data_collector.py"
+    "!**/core/invoice_state.py"
+    "!**/core/transfer_store.py"
+    "!**/core/transfer_collector.py"
+    "!**/core/attribution_reader.py"
+    "!**/core/backfill_store.py"
+)
+
 # Imports-inside-functions: the onboard/backfill commands dynamically import the backfill_history
 # script from the sibling ``scripts/`` directory (not on sys.path at module load). Keep the lazy
 # import so the CLI can run without the script package installed.
-# backfill_store.py: lazy-imports performance_metrics to defer heavy UTL module loading until
-# the metrics are actually needed (avoids slow startup for commands that don't compute metrics).
+#
+# backfill_store.py / tear_sheet_generator.py: lazy-import unified_trading_library.performance_metrics
+# sub-module because performance_metrics functions (twr_equity_curve, max_drawdown, sharpe_ratio, etc.)
+# are not re-exported at the UTL top-level __init__. Moving to top-level requires deep imports which
+# trigger the full UTL __init__ chain (candidate_manifest_store -> UAC strategy_service). Lazy imports
+# are the correct escape hatch here — remove once UTL exports performance_metrics at top-level.
 IMPORT_INSIDE_EXCLUDE_GLOBS=(
     "!**/cli/backfill_command.py"
     "!**/cli/onboard_command.py"

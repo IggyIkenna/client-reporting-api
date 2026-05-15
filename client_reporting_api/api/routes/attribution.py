@@ -166,7 +166,7 @@ def _pnl_from_rows(
     for row in rows:
         ts = row.get("timestamp")
         row_date = str(ts)[:10] if ts else "unknown"
-        layer = str(row.get("layer", ""))
+        layer = str(row.get("layer", ""))  # noqa: qg-empty-fallback
         amount_str = str(row.get("amount", "0"))
         try:
             amount = Decimal(amount_str)
