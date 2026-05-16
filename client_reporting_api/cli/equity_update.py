@@ -97,11 +97,9 @@ def _detect_transfer(
     )
     transfer = equity_change - trading_pnl - price_effect
     ref_equity = max(abs(total_usd), abs(prev_equity), 1.0)
-    if btc_bal == 0:
-        # USDT-only accounts: ledger query lag is noisy; require 2% or $5K.
-        threshold = max(5000.0, ref_equity * 0.02)
-    else:
-        threshold = max(100.0, min(ref_equity * 0.01, 1000.0))
+    # USDT-only accounts (btc_bal==0): ledger query lag is noisy; require 2% or $5K.
+    # Other accounts: tighter 1% / $100-$1K band.
+    threshold = max(5000.0, ref_equity * 0.02) if btc_bal == 0 else max(100.0, min(ref_equity * 0.01, 1000.0))
     return round(transfer, 2) if abs(transfer) > threshold else 0.0
 
 
