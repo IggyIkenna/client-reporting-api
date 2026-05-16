@@ -27,8 +27,8 @@ from unified_api_contracts.internal import (
     PnLLayer,
 )
 from unified_trading_library import GCSEventSink, log_event, setup_events
-from unified_trading_library.pnl_attribution.emitter import (
-    emit_attribution_parquet,  # noqa: qg-deep-import
+from unified_trading_library.pnl_attribution.emitter import (  # noqa: qg-deep-import
+    emit_attribution_parquet,
 )
 from unified_trading_library.pnl_attribution.invariants import (  # noqa: qg-deep-import
     DecompositionInvariantError,
