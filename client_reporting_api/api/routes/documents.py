@@ -188,9 +188,7 @@ def get_download_url(document_id: str) -> dict[str, object]:
 @router.get("")
 def list_documents(
     org_id: str = Query(..., description="Organisation identifier"),
-    category: str | None = Query(
-        None, description="Filter by category (INVOICE, REPORT, CONTRACT, COMPLIANCE)"
-    ),
+    category: str | None = Query(None, description="Filter by category (INVOICE, REPORT, CONTRACT, COMPLIANCE)"),
 ) -> list[dict[str, object]]:
     """List documents for an organisation, optionally filtered by category.
 

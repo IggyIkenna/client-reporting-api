@@ -40,9 +40,7 @@ DATA_DIR = _LOCAL_DATA if _LOCAL_DATA.exists() else _APP_DIR / "data" / "backfil
 # Registry path: workspace (local dev) → /app/configs (Docker) → package-relative
 _WORKSPACE_REGISTRY = WORKSPACE / "execution-service" / "configs" / "credentials-registry.yaml"
 _DOCKER_REGISTRY = _APP_DIR / "configs" / "credentials-registry.yaml"
-_PKG_REGISTRY = (
-    Path(__file__).resolve().parent.parent.parent / "configs" / "credentials-registry.yaml"
-)
+_PKG_REGISTRY = Path(__file__).resolve().parent.parent.parent / "configs" / "credentials-registry.yaml"
 REGISTRY_PATH = (
     _WORKSPACE_REGISTRY
     if _WORKSPACE_REGISTRY.exists()
@@ -70,9 +68,7 @@ def _load_registry() -> dict[str, dict[str, str | float | bool | dict[str, float
     return data.get("clients", {})
 
 
-def _load_full_registry() -> dict[
-    str, dict[str, str | float | bool | dict[str, float]] | dict[str, dict[str, str]]
-]:
+def _load_full_registry() -> dict[str, dict[str, str | float | bool | dict[str, float]] | dict[str, dict[str, str]]]:
     """Load the full credentials registry (clients + organisations + strategies)."""
     with open(REGISTRY_PATH) as f:
         return yaml.safe_load(f)
@@ -153,11 +149,7 @@ def _get_active_clients(
     """Filter the registry to active, managed clients (optionally a single client)."""
     clients = []
     for cid, cfg in registry.items():
-        if (
-            not cfg.get("is_active", False)
-            or cfg.get("tranche") != "managed"
-            or not cfg.get("secret_name")
-        ):
+        if not cfg.get("is_active", False) or cfg.get("tranche") != "managed" or not cfg.get("secret_name"):
             continue
         if client_filter and cid != client_filter:
             continue

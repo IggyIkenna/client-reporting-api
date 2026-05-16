@@ -39,9 +39,7 @@ from client_reporting_api.cli.trades_and_orders import (
 logger = logging.getLogger(__name__)
 
 
-def _update_client(
-    client_id: str, venue: str, currency: str, dry_run: bool = False, full: bool = False
-) -> bool:
+def _update_client(client_id: str, venue: str, currency: str, dry_run: bool = False, full: bool = False) -> bool:
     """Incremental update for a single client — backfills gaps then updates today."""
     del currency  # currency is registry metadata; not used in this path
     client_dir = DATA_DIR / client_id
@@ -71,9 +69,7 @@ def _update_client(
     usdt_bal, btc_bal, btc_price = _parse_balances(exchange, total_info)
     total_usd = usdt_bal + btc_bal * btc_price
     point = _build_equity_point(gap.today, total_usd, usdt_bal, btc_bal, btc_price)
-    _maybe_attach_transfer(
-        point, exchange, venue, equity_curve[-1], gap, total_usd, btc_bal, btc_price, client_id
-    )
+    _maybe_attach_transfer(point, exchange, venue, equity_curve[-1], gap, total_usd, btc_bal, btc_price, client_id)
     equity_curve = _merge_today_point_into_curve(equity_curve, point, gap)
 
     with open(equity_path, "w") as f:

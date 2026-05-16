@@ -102,9 +102,7 @@ def trader_payment_summary(auth: AuthDep) -> dict[str, object]:
         {
             "performance_fees": performance_fees,
             "total_performance_fees": total_perf,
-            "underwater_accounts": [
-                {"client_id": c["client_id"], "server_cost": Decimal("50")} for c in underwater
-            ],
+            "underwater_accounts": [{"client_id": c["client_id"], "server_cost": Decimal("50")} for c in underwater],
             "total_server_costs": server_costs_total,
             "total_due": total_perf + server_costs_total,
             "total_trader_credits_outstanding": state_mgr.get_total_trader_credits(),

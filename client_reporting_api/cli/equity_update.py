@@ -44,9 +44,7 @@ def _load_existing_equity_curve(
         return json.load(f)
 
 
-def _parse_balances(
-    exchange: ccxt.Exchange, total_info: dict[str, object]
-) -> tuple[float, float, float]:
+def _parse_balances(exchange: ccxt.Exchange, total_info: dict[str, object]) -> tuple[float, float, float]:
     """Extract USDT balance, BTC balance, and BTC USD price from a balance dict."""
     usdt_bal = 0.0
     btc_bal = 0.0
@@ -92,9 +90,7 @@ def _detect_transfer(
     trading_pnl = _fetch_pnl_since(exchange, venue, last_date, today)
     prev_btc = float(prev_point.get("btc_balance", 0))
     prev_btc_price = float(prev_point.get("btc_price_usd", 0))
-    price_effect = (
-        prev_btc * (btc_price - prev_btc_price) if prev_btc > 0 and prev_btc_price > 0 else 0.0
-    )
+    price_effect = prev_btc * (btc_price - prev_btc_price) if prev_btc > 0 and prev_btc_price > 0 else 0.0
     transfer = equity_change - trading_pnl - price_effect
     ref_equity = max(abs(total_usd), abs(prev_equity), 1.0)
     # USDT-only accounts (btc_bal==0): ledger query lag is noisy; require 2% or $5K.
@@ -103,9 +99,7 @@ def _detect_transfer(
     return round(transfer, 2) if abs(transfer) > threshold else 0.0
 
 
-def _fill_gap_days(
-    equity_curve: list[dict[str, str | float]], last_dt: datetime, today_dt: datetime
-) -> None:
+def _fill_gap_days(equity_curve: list[dict[str, str | float]], last_dt: datetime, today_dt: datetime) -> None:
     """Carry-forward equity for missing intermediate days (in place)."""
     d = last_dt + timedelta(days=1)
     while d < today_dt:
@@ -189,9 +183,7 @@ def _update_summary(
         json.dump(summary, f, cls=DecimalEncoder, indent=2)
 
 
-def _compute_update_gap(
-    client_id: str, equity_curve: list[dict[str, str | float]]
-) -> _GapInfo | None:
+def _compute_update_gap(client_id: str, equity_curve: list[dict[str, str | float]]) -> _GapInfo | None:
     """Compute the today/last-date gap. Returns None if last date is in the future."""
     today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
     last_date = str(equity_curve[-1].get("date", ""))
@@ -214,9 +206,7 @@ def _compute_update_gap(
     return _GapInfo(today, last_date, last_dt, today_dt, gap_days)
 
 
-def _open_exchange_with_balance(
-    client_id: str, venue: str
-) -> tuple[ccxt.Exchange, dict[str, object]] | None:
+def _open_exchange_with_balance(client_id: str, venue: str) -> tuple[ccxt.Exchange, dict[str, object]] | None:
     """Resolve credentials, open the exchange, and fetch balance. None on failure."""
     creds = _fetch_credentials(client_id, venue)
     if creds is None:

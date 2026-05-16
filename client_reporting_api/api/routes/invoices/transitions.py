@@ -56,9 +56,7 @@ def transition_invoice(
     if new_status not in allowed:
         raise HTTPException(
             status_code=409,
-            detail=(
-                f"Cannot transition from {current} to {new_status}. Allowed: {sorted(allowed)}"
-            ),
+            detail=(f"Cannot transition from {current} to {new_status}. Allowed: {sorted(allowed)}"),
         )
 
     updated = {**inv, "status": new_status}

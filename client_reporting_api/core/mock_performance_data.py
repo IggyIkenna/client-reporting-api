@@ -113,9 +113,7 @@ MOCK_CLIENTS: list[dict[str, str | bool]] = [
 ]
 
 
-def _generate_equity_curve(
-    start_equity: float, months: int, monthly_return_avg: float
-) -> list[dict[str, str | float]]:
+def _generate_equity_curve(start_equity: float, months: int, monthly_return_avg: float) -> list[dict[str, str | float]]:
     """Generate realistic equity curve data points (daily)."""
     random.seed(42)
     points: list[dict[str, str | float]] = []

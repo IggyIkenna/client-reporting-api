@@ -26,9 +26,7 @@ _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
-class GenerateReportRequest(
-    BaseModel
-):  # CORRECT-LOCAL: FastAPI route schema — not a shared domain contract
+class GenerateReportRequest(BaseModel):  # CORRECT-LOCAL: FastAPI route schema — not a shared domain contract
     client_id: str
     period_month: str  # "YYYY-MM"
 

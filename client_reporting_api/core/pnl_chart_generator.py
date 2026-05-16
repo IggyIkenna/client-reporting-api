@@ -83,9 +83,7 @@ class _PnLAccumulator:
     twr_product: float = 1.0
 
 
-def _walk_pnl_series(
-    curve: list[dict[str, float]], is_btc: bool, initial_equity: float
-) -> _PnLAccumulator:
+def _walk_pnl_series(curve: list[dict[str, float]], is_btc: bool, initial_equity: float) -> _PnLAccumulator:
     """Walk the equity curve once, building per-day PnL/transfer/TWR series."""
     acc = _PnLAccumulator()
     first_date = str(curve[0].get("date", ""))
@@ -99,9 +97,7 @@ def _walk_pnl_series(
             acc.cumulative_transfers += day_transfer
             if is_btc:
                 acc.transfers.append(
-                    _btc_transfer_entry(
-                        date, day_transfer, point, curve[i - 1], acc.cumulative_transfers
-                    )
+                    _btc_transfer_entry(date, day_transfer, point, curve[i - 1], acc.cumulative_transfers)
                 )
             else:
                 acc.transfers.append(
@@ -180,9 +176,7 @@ def compute_pnl_series(client_id: str) -> dict[str, list[float] | list[str] | fl
     if is_btc:
         last = curve[-1]
         first = curve[0]
-        result["usdt_pnl"] = round(
-            float(last.get("usdt_balance", 0)) - float(first.get("usdt_balance", 0)), 2
-        )
+        result["usdt_pnl"] = round(float(last.get("usdt_balance", 0)) - float(first.get("usdt_balance", 0)), 2)
     return result
 
 

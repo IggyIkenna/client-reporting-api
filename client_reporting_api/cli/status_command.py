@@ -70,10 +70,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         return 0
 
     now = datetime.now(tz=UTC)
-    header = (
-        f"\n{'Client':<12} {'Venue':<8} {'Currency':<8} {'Equity':<14} "
-        f"{'Days':<6} {'Last Update':<22} {'Age':<10}"
-    )
+    header = f"\n{'Client':<12} {'Venue':<8} {'Currency':<8} {'Equity':<14} {'Days':<6} {'Last Update':<22} {'Age':<10}"
     lines = [header, "-" * 84]
     for cid, cfg in clients:
         venue = str(cfg.get("venue", ""))
@@ -82,8 +79,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         days_str, last_update_str, age_str = _read_status_summary(client_dir / "summary.json", now)
         equity_str = _read_status_equity(client_dir / "equity_curve.json")
         lines.append(
-            f"{cid:<12} {venue:<8} {currency:<8} {equity_str:<14} "
-            f"{days_str:<6} {last_update_str:<22} {age_str:<10}"
+            f"{cid:<12} {venue:<8} {currency:<8} {equity_str:<14} {days_str:<6} {last_update_str:<22} {age_str:<10}"
         )
     lines.append("")
     _emit_status_table(lines)

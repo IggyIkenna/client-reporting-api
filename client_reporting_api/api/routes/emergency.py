@@ -42,9 +42,7 @@ AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 class CloseAllRequest(BaseModel):  # CORRECT-LOCAL: FastAPI request schema
     """Request body for emergency close-all."""
 
-    rationale: str = Field(
-        ..., min_length=10, description="Reason for emergency close - audit trail"
-    )
+    rationale: str = Field(..., min_length=10, description="Reason for emergency close - audit trail")
     dry_run: bool = Field(default=True, description="If true, preview only - no orders placed")
 
 
@@ -191,8 +189,7 @@ def close_all_positions(
         raise HTTPException(
             status_code=403,
             detail=(
-                "Trading API keys not configured for this client. "
-                "Contact client to provision trading-capable keys."
+                "Trading API keys not configured for this client. Contact client to provision trading-capable keys."
             ),
         )
 

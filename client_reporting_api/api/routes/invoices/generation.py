@@ -56,9 +56,7 @@ def _build_mock_invoice(request: GenerateInvoiceRequest, invoice_id: str) -> dic
         "subtotal": round(subtotal, 2),
         "tax": 0.00,
         "total": round(subtotal, 2),
-        "description": (
-            f"{request.invoice_type.replace('_', ' ').title()} \u2014 {request.period_month}"
-        ),
+        "description": (f"{request.invoice_type.replace('_', ' ').title()} \u2014 {request.period_month}"),
         "issued_at": "2026-03-21T00:00:00Z",
         "due_date": "2026-04-20",
         "aum_basis": mock_aum,
@@ -72,11 +70,7 @@ def _clients_for_org(org_id: str) -> list[dict[str, object]]:
     all_clients = summary["at_hwm"] + summary["underwater"] + summary["prop"]
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
-    return [
-        c
-        for c in all_clients
-        if clients_cfg.get(str(c.get("client_id", "")), {}).get("organisation_id") == org_id
-    ]
+    return [c for c in all_clients if clients_cfg.get(str(c.get("client_id", "")), {}).get("organisation_id") == org_id]
 
 
 def _build_live_invoice_line_items(
@@ -162,11 +156,7 @@ def list_invoices(
         return [inv for inv in all_invoices if inv.get("org_id") == org_id]
 
     registry = load_registry()
-    org_client_ids = {
-        cid
-        for cid, cfg in registry.get("clients", {}).items()
-        if cfg.get("organisation_id") == org_id
-    }
+    org_client_ids = {cid for cid, cfg in registry.get("clients", {}).items() if cfg.get("organisation_id") == org_id}
     all_invoices = state_mgr.get_invoices()
     return [
         {k: (float(v) if isinstance(v, Decimal) else v) for k, v in inv.items()}
@@ -211,10 +201,7 @@ def download_invoice(invoice_id: str, auth: AuthDep) -> dict[str, object]:
             raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} not found")
         return {
             "invoice_id": invoice_id,
-            "download_url": (
-                f"https://mock-storage.example.com/invoices/"
-                f"{invoice_id}.pdf?X-Mock-Signature=inv789"
-            ),
+            "download_url": (f"https://mock-storage.example.com/invoices/{invoice_id}.pdf?X-Mock-Signature=inv789"),
             "expires_in_minutes": 60,
             "filename": f"{invoice_id}.pdf",
         }

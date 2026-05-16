@@ -78,9 +78,7 @@ def get_performance_summary(
         "equity_curve": equity_curve,
         "monthly_returns": monthly_returns,
         "stats": stats,
-        "equity_source": backfill_summary.get("equity_source", "unknown")
-        if backfill_summary
-        else "unknown",
+        "equity_source": backfill_summary.get("equity_source", "unknown") if backfill_summary else "unknown",
         "trade_count": backfill_summary.get("trade_count", 0) if backfill_summary else 0,
         "ledger_records": backfill_summary.get("ledger_records", 0) if backfill_summary else 0,
     }
@@ -110,9 +108,7 @@ def get_open_positions(
             "mark_price": _decimal_to_float(p.mark_price),
             "unrealized_pnl": _decimal_to_float(p.unrealized_pnl),
             "leverage": _decimal_to_float(p.leverage),
-            "liquidation_price": _decimal_to_float(p.liquidation_price)
-            if p.liquidation_price
-            else None,
+            "liquidation_price": _decimal_to_float(p.liquidation_price) if p.liquidation_price else None,
             "notional_usd": _decimal_to_float(p.notional_usd),
         }
         for p in snapshot.positions
@@ -182,9 +178,7 @@ def get_coin_breakdown(
             "avg_trade_size_usd": c.avg_trade_size_usd,
             "avg_holding_hours": c.avg_holding_hours,
             "round_trips": c.round_trips,
-            "allocation_pct": round(c.volume_usd / ta.total_volume_usd, 4)
-            if ta.total_volume_usd > 0
-            else 0,
+            "allocation_pct": round(c.volume_usd / ta.total_volume_usd, 4) if ta.total_volume_usd > 0 else 0,
         }
         for c in ta.coins
     ]

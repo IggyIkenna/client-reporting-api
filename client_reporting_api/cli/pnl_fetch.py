@@ -38,9 +38,7 @@ def _fetch_okx_pnl(exchange: ccxt.Exchange, since_ms: int, until_ms: int) -> flo
     try:
         while cursor_ms < until_ms:
             end_ms = min(cursor_ms + 7 * 86400 * 1000, until_ms)
-            resp = exchange.private_get_account_bills(
-                {"begin": str(cursor_ms), "end": str(end_ms), "limit": "100"}
-            )
+            resp = exchange.private_get_account_bills({"begin": str(cursor_ms), "end": str(end_ms), "limit": "100"})
             bills = resp.get("data", [])
             for bill in bills:
                 total += _okx_bill_pnl(bill, exchange)
@@ -83,9 +81,7 @@ def _fetch_binance_pnl(exchange: ccxt.Exchange, since_ms: int, until_ms: int) ->
     return total
 
 
-def _fetch_pnl_since(
-    exchange: ccxt.Exchange, venue: str, since_date: str, until_date: str
-) -> float:
+def _fetch_pnl_since(exchange: ccxt.Exchange, venue: str, since_date: str, until_date: str) -> float:
     """Fetch trading PnL between two dates from the exchange ledger."""
     since_ms = int(datetime.strptime(since_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000)
     until_ms = int(datetime.strptime(until_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000)

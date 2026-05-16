@@ -51,11 +51,7 @@ def get_aggregated_analytics(
     Cross-client aggregate — internal-only.
     """
     require_internal(auth)
-    ids = (
-        [c.strip().upper() for c in client_ids.split(",") if c.strip()]
-        if client_ids
-        else CLIENT_IDS
-    )
+    ids = [c.strip().upper() for c in client_ids.split(",") if c.strip()] if client_ids else CLIENT_IDS
     ta = aggregate_clients(ids)
     return asdict(ta)
 

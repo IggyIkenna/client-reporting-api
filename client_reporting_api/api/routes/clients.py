@@ -45,9 +45,7 @@ def _build_client_entry(
     # Resolve strategy name from registry
     strategies = registry.get("strategies", {})
     strat_info = strategies.get(strategy_id, {}) if isinstance(strategies, dict) else {}
-    strategy_name = (
-        str(strat_info.get("name", strategy_id)) if isinstance(strat_info, dict) else strategy_id
-    )
+    strategy_name = str(strat_info.get("name", strategy_id)) if isinstance(strat_info, dict) else strategy_id
 
     return {
         "id": cid,

@@ -62,9 +62,7 @@ CLIENT_DETAILS: dict[str, dict[str, str]] = {
         "company_name": "Eqvilent Trading Limited",
         "contact_name": "Andrey Vlasov",
         "email": "andrey.vlasov@eqvilent.com",
-        "address": (
-            "Intershore Chambers, P.O.Box 4342, Road Town, Tortola, VG1110, British Virgin Islands"
-        ),
+        "address": ("Intershore Chambers, P.O.Box 4342, Road Town, Tortola, VG1110, British Virgin Islands"),
     },
     "STD": {
         "company_name": "Steady Hash",
@@ -206,9 +204,7 @@ def _build_invoice(
         total_due=total_due,
         line_items=[
             InvoiceLineItem(
-                description=(
-                    f"{fee_label} — {int(fee_rate_pct * 100)}% x {_fmt(profit)} profit above HWM"
-                ),
+                description=(f"{fee_label} — {int(fee_rate_pct * 100)}% x {_fmt(profit)} profit above HWM"),
                 amount=total_due,
             ),
         ],
@@ -658,6 +654,4 @@ if __name__ == "__main__":
     _generated = generate_all_invoices()
     for _p in _generated:
         _main_logger.info("  %s", _p)
-    _main_logger.info(
-        "Generated %d invoices. Open in browser to preview/print to PDF.", len(_generated)
-    )
+    _main_logger.info("Generated %d invoices. Open in browser to preview/print to PDF.", len(_generated))

@@ -22,9 +22,7 @@ _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
-def _nav_investor_for_client(
-    cid: str, cfg: dict[str, object]
-) -> tuple[dict[str, object], float, float] | None:
+def _nav_investor_for_client(cid: str, cfg: dict[str, object]) -> tuple[dict[str, object], float, float] | None:
     """Build a NAV investor row plus the (current_eq, peak) it contributes.
 
     Returns ``None`` for inactive clients or when no equity history is available.
@@ -47,9 +45,7 @@ def _nav_investor_for_client(
     return investor, current_eq, peak
 
 
-def _aggregate_nav_investors(
-    ids: list[str], clients_cfg: object
-) -> tuple[list[dict[str, object]], float, float]:
+def _aggregate_nav_investors(ids: list[str], clients_cfg: object) -> tuple[list[dict[str, object]], float, float]:
     """Walk ``ids`` and build investors list + total NAV + total HWM."""
     investors: list[dict[str, object]] = []
     total_nav = 0.0

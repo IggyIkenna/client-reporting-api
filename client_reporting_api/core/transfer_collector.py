@@ -167,12 +167,8 @@ def _extract_btc_transfers(
     records: list[TransferRecord] = []
     # Use Decimal arithmetic to preserve exact balance values from the
     # equity curve — float subtraction produces 0.9999...8-style noise.
-    btc_change = Decimal(str(point.get("btc_balance", 0))) - Decimal(
-        str(prev_point.get("btc_balance", 0))
-    )
-    usdt_change = Decimal(str(point.get("usdt_balance", 0))) - Decimal(
-        str(prev_point.get("usdt_balance", 0))
-    )
+    btc_change = Decimal(str(point.get("btc_balance", 0))) - Decimal(str(prev_point.get("btc_balance", 0)))
+    usdt_change = Decimal(str(point.get("usdt_balance", 0))) - Decimal(str(prev_point.get("usdt_balance", 0)))
     btc_price = Decimal(str(point.get("btc_price_usd", 1)))
 
     if abs(btc_change) > Decimal("0.0001"):

@@ -64,13 +64,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _add_onboard_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
-    p_onboard = sub.add_parser(
-        "onboard", help="Add a new client (credentials + registry + backfill)"
-    )
+    p_onboard = sub.add_parser("onboard", help="Add a new client (credentials + registry + backfill)")
     p_onboard.add_argument("--client-id", required=True, help="Client ID (e.g. NEW_CLIENT)")
-    p_onboard.add_argument(
-        "--venue", required=True, choices=["okx", "binance"], help="Exchange venue"
-    )
+    p_onboard.add_argument("--venue", required=True, choices=["okx", "binance"], help="Exchange venue")
     p_onboard.add_argument("--api-key", required=True, help="Exchange API key (read-only)")
     p_onboard.add_argument("--api-secret", required=True, help="Exchange API secret")
     p_onboard.add_argument("--passphrase", help="OKX passphrase (if applicable)")
@@ -90,9 +86,7 @@ def _add_backfill_parser(sub: argparse._SubParsersAction) -> None:  # type: igno
 
 
 def _add_update_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
-    p_update = sub.add_parser(
-        "update", help="Incremental refresh (balance, equity, positions, trades, orders)"
-    )
+    p_update = sub.add_parser("update", help="Incremental refresh (balance, equity, positions, trades, orders)")
     p_update.add_argument("--client", help="Specific client ID (default: all)")
     p_update.add_argument(
         "--full",

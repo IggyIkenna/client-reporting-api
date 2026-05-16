@@ -258,9 +258,7 @@ def _hwm_and_recovery(
         notional_hwm += _get_transfer(equity_curve[i], equity_curve[i - 1], is_btc, first_date)
 
     notional_recovery = max(0.0, notional_hwm - current_equity)
-    notional_recovery_pct = (
-        (notional_recovery / current_equity * 100) if current_equity > 0 else 0.0
-    )
+    notional_recovery_pct = (notional_recovery / current_equity * 100) if current_equity > 0 else 0.0
     return (
         hwm_twr_index,
         twr_recovery_pct,
@@ -376,9 +374,7 @@ def compute_performance_stats(
         notional_hwm,
         notional_recovery,
         notional_recovery_pct,
-    ) = _hwm_and_recovery(
-        hwm_seed, starting_equity, current_equity, twr_equity, equity_curve, is_btc, first_date
-    )
+    ) = _hwm_and_recovery(hwm_seed, starting_equity, current_equity, twr_equity, equity_curve, is_btc, first_date)
 
     pnl_recovery_seed_usd: float | None = None
     pnl_recovery_usd: float | None = None

@@ -275,10 +275,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("5681.70"),
-        "notes": (
-            "30% x $18,939 PnL above $519,000 HWM "
-            "(deposits $1.5M, withdrawal $19K offset). Sent Apr 9 2026."
-        ),
+        "notes": ("30% x $18,939 PnL above $519,000 HWM (deposits $1.5M, withdrawal $19K offset). Sent Apr 9 2026."),
     },
     {
         "invoice_id": "INV-2026-STD-002",
@@ -286,10 +283,7 @@ _INVOICE_SEED: list[dict[str, str | Decimal]] = [
         "period_month": "2026-04",
         "status": "ISSUED",
         "total": Decimal("4458.65"),
-        "notes": (
-            "35% x $12,739 PnL above $514,800 HWM "
-            "(deposit $500K, withdrawal $14.8K offset). Sent Apr 9 2026."
-        ),
+        "notes": ("35% x $12,739 PnL above $514,800 HWM (deposit $500K, withdrawal $14.8K offset). Sent Apr 9 2026."),
     },
     # Introducer — Max for PR (Apr 9)
     {
@@ -601,9 +595,7 @@ class InvoiceStateManager:
                 net_usdt_moved += usdt_jump
         return net_usdt_moved
 
-    def _compute_pnl_based_recovery(
-        self, client_id: str, seed: dict[str, Decimal | str]
-    ) -> Decimal:
+    def _compute_pnl_based_recovery(self, client_id: str, seed: dict[str, Decimal | str]) -> Decimal:
         """Recovery for accounts using the PnL-based HWM model (e.g. GP).
 
         PnL = current USDT balance, offset by any post-``tracking_start`` USDT
@@ -699,15 +691,9 @@ class InvoiceStateManager:
 
         odum_fee = pnl * odum_fee_pct
         trader_fee = pnl * trader_fee_pct
-        intro_fee = (
-            odum_fee * introducer_fee_pct if introducer_fee_pct and introducer_id else Decimal("0")
-        )
-        trader_already_paid = (
-            Decimal(str(seed.get("trader_paid_since_hwm", 0))) if seed else Decimal("0")
-        )
-        net_trader_fee, credit_applied = self._apply_trader_credits(
-            trader_fee, trader_already_paid, hwm.trader_credits
-        )
+        intro_fee = odum_fee * introducer_fee_pct if introducer_fee_pct and introducer_id else Decimal("0")
+        trader_already_paid = Decimal(str(seed.get("trader_paid_since_hwm", 0))) if seed else Decimal("0")
+        net_trader_fee, credit_applied = self._apply_trader_credits(trader_fee, trader_already_paid, hwm.trader_credits)
         return {
             "deposits_since": deposits_since,
             "pnl": pnl,
@@ -786,17 +772,11 @@ class InvoiceStateManager:
             }
 
         if cfg.get("is_underwater", False) or cfg.get("odum_fee_pct", 0) == 0:
-            return self._underwater_fee_block(
-                client_id, cfg, hwm, seed, live_equity, live_equity_usd, currency
-            )
-        return self._at_hwm_fee_block(
-            client_id, cfg, hwm, seed, live_equity, live_equity_usd, currency
-        )
+            return self._underwater_fee_block(client_id, cfg, hwm, seed, live_equity, live_equity_usd, currency)
+        return self._at_hwm_fee_block(client_id, cfg, hwm, seed, live_equity, live_equity_usd, currency)
 
     @staticmethod
-    def _fund_of_fund_entry(
-        client_id: str, cfg: dict[str, object]
-    ) -> dict[str, Decimal | str | bool]:
+    def _fund_of_fund_entry(client_id: str, cfg: dict[str, object]) -> dict[str, Decimal | str | bool]:
         """Build the dashboard entry for a fund-of-fund client (manual data)."""
         return {
             "client_id": client_id,

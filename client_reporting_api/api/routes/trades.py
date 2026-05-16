@@ -61,12 +61,8 @@ def get_trade_history(
             "realized_pnl": _decimal_to_float(r.realized_pnl),
             "timestamp": r.timestamp.isoformat(),
             "order_id": r.order_id,
-            "trade_type": r.trade_type.value
-            if hasattr(r.trade_type, "value")
-            else str(r.trade_type),
-            "notional_usd": _decimal_to_float(
-                r.notional_usd if r.notional_usd else r.quantity * r.price
-            ),
+            "trade_type": r.trade_type.value if hasattr(r.trade_type, "value") else str(r.trade_type),
+            "notional_usd": _decimal_to_float(r.notional_usd if r.notional_usd else r.quantity * r.price),
         }
         for r in records
     ]

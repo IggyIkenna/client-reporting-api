@@ -126,9 +126,7 @@ def get_coin_breakdown(
             "total_pnl": c.net_pnl,
             "volume_usd": c.volume_usd,
             "trade_count": c.trade_count,
-            "allocation_pct": round(c.volume_usd / ta.total_volume_usd, 4)
-            if ta.total_volume_usd > 0
-            else 0,
+            "allocation_pct": round(c.volume_usd / ta.total_volume_usd, 4) if ta.total_volume_usd > 0 else 0,
         }
         for c in ta.coins
     ]

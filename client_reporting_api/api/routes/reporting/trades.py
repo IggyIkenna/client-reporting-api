@@ -16,9 +16,7 @@ _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
-def _apply_filters(
-    trades: list[dict[str, object]], symbol: str, side: str
-) -> list[dict[str, object]]:
+def _apply_filters(trades: list[dict[str, object]], symbol: str, side: str) -> list[dict[str, object]]:
     """Filter the trade list by symbol substring / side — both case-insensitive."""
     result = trades
     if symbol:
@@ -44,9 +42,7 @@ def _project_trade(t: dict[str, object]) -> tuple[dict[str, object], float, floa
         "quantity": float(t.get("amount", 0) or 0),
         "price": float(t.get("price", 0) or 0),
         "fee": abs(fee_cost),
-        "fee_currency": str(fee_info.get("currency", "USDT"))
-        if isinstance(fee_info, dict)
-        else "USDT",
+        "fee_currency": str(fee_info.get("currency", "USDT")) if isinstance(fee_info, dict) else "USDT",
         "realized_pnl": rpnl,
         "timestamp": str(t.get("datetime", "")),
         "order_id": str(t.get("order", "")),

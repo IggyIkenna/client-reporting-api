@@ -46,9 +46,7 @@ def _resolve_trade_symbols(exchange: ccxt.Exchange) -> list[str]:
     return symbols
 
 
-def _update_recent_trades(
-    exchange: ccxt.Exchange, client_id: str, client_dir: Path, hours: int = 24
-) -> None:
+def _update_recent_trades(exchange: ccxt.Exchange, client_id: str, client_dir: Path, hours: int = 24) -> None:
     """Append recent trades to trades file."""
     trades_path = client_dir / "trades.json"
     existing, existing_ids = _load_existing_trades(trades_path)
@@ -87,9 +85,7 @@ def _load_existing_orders(
     return existing, {str(o.get("id", "")) for o in existing if o.get("id")}
 
 
-def _fetch_orders_for_symbol(
-    exchange: ccxt.Exchange, sym: str, since_ms: int
-) -> list[dict[str, str | float | None]]:
+def _fetch_orders_for_symbol(exchange: ccxt.Exchange, sym: str, since_ms: int) -> list[dict[str, str | float | None]]:
     """Pull orders for a single symbol, falling back to closed+open on OKX."""
     page_limit = 100 if exchange.id == "okx" else 200
     if exchange.has.get("fetchOrders"):
@@ -133,9 +129,7 @@ def _slippage_bps(
     return round(slippage_bps, 2)
 
 
-def _project_order_record(
-    order: dict[str, str | float | None], venue: str
-) -> dict[str, str | float | None]:
+def _project_order_record(order: dict[str, str | float | None], venue: str) -> dict[str, str | float | None]:
     """Build the MiFID-compliant order record from a CCXT order dict."""
     info = order.get("info") or {}
     info_dict = info if isinstance(info, dict) else {}
@@ -163,9 +157,7 @@ def _project_order_record(
         "reduce_only": order.get("reduceOnly"),
         "post_only": order.get("postOnly"),
         "stop_price": float(order.get("stopPrice", 0) or 0) if order.get("stopPrice") else None,
-        "trigger_price": (
-            float(order.get("triggerPrice", 0) or 0) if order.get("triggerPrice") else None
-        ),
+        "trigger_price": (float(order.get("triggerPrice", 0) or 0) if order.get("triggerPrice") else None),
     }
     slippage = _slippage_bps(order, record)
     if slippage is not None:
@@ -214,6 +206,4 @@ def _update_order_history(
         existing_orders.sort(key=lambda o: int(o.get("timestamp", 0) or 0))
         with open(orders_path, "w") as f:
             json.dump(existing_orders, f, cls=DecimalEncoder, indent=2)
-        logger.info(
-            "[%s] Added %d new orders (total: %d)", client_id, new_count, len(existing_orders)
-        )
+        logger.info("[%s] Added %d new orders (total: %d)", client_id, new_count, len(existing_orders))

@@ -202,9 +202,7 @@ class ExchangeDataCollector:
         for cur, total_val in total_info.items():
             if cur in skip:
                 continue
-            projected = ExchangeDataCollector._project_asset(
-                cur, total_val, free_raw, used_raw, exchange
-            )
+            projected = ExchangeDataCollector._project_asset(cur, total_val, free_raw, used_raw, exchange)
             if projected is None:
                 continue
             summary, tu, fu, lu = projected
@@ -440,18 +438,14 @@ class ExchangeDataCollector:
         venue = str(exchange.id)
 
         try:
-            deposits: list[dict[str, str | float | None]] = exchange.fetch_deposits(
-                code=None, since=since_ms
-            )
+            deposits: list[dict[str, str | float | None]] = exchange.fetch_deposits(code=None, since=since_ms)
             for dep in deposits:
                 records.append(self._parse_transfer(dep, client_id, venue, "deposit"))
         except ccxt.BaseError as exc:
             logger.warning("Failed to fetch deposits for %s: %s", client_id, str(exc))
 
         try:
-            withdrawals: list[dict[str, str | float | None]] = exchange.fetch_withdrawals(
-                code=None, since=since_ms
-            )
+            withdrawals: list[dict[str, str | float | None]] = exchange.fetch_withdrawals(code=None, since=since_ms)
             for wd in withdrawals:
                 records.append(self._parse_transfer(wd, client_id, venue, "withdrawal"))
         except ccxt.BaseError as exc:
@@ -463,8 +457,4 @@ class ExchangeDataCollector:
         """Return all active managed client IDs from the registry."""
         registry = load_registry()
         clients = registry["clients"]
-        return [
-            cid
-            for cid, cfg in clients.items()
-            if cfg.get("is_active", False) and cfg.get("tranche") == "managed"
-        ]
+        return [cid for cid, cfg in clients.items() if cfg.get("is_active", False) and cfg.get("tranche") == "managed"]

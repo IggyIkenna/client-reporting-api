@@ -157,9 +157,7 @@ def list_charts(auth: AuthDep) -> list[dict[str, str]]:
     for client_id in _CHART_CLIENT_IDS:
         chart_path = _CHARTS_DIR / f"{client_id}_pnl.html"
         if chart_path.exists():
-            results.append(
-                {"client_id": client_id, "view_url": f"/api/v1/invoices/charts/{client_id}"}
-            )
+            results.append({"client_id": client_id, "view_url": f"/api/v1/invoices/charts/{client_id}"})
     return results
 
 
@@ -188,9 +186,7 @@ def list_dashboards(auth: AuthDep) -> list[dict[str, str]]:
     for cid in CLIENT_IDS:
         dash_path = _DASH_DIR / f"{cid}_dashboard.html"
         if dash_path.exists():
-            results.append(
-                {"client_id": cid, "dashboard_url": f"/api/v1/invoices/dashboards/{cid}"}
-            )
+            results.append({"client_id": cid, "dashboard_url": f"/api/v1/invoices/dashboards/{cid}"})
     return results
 
 
@@ -236,9 +232,7 @@ def list_monthly_reports(client_id: str, auth: AuthDep) -> list[dict[str, str]]:
                 results.append(
                     {
                         "month": month_str,
-                        "report_url": (
-                            f"/api/v1/invoices/reports/{cid}/{year_part}/{int(month_part)}"
-                        ),
+                        "report_url": (f"/api/v1/invoices/reports/{cid}/{year_part}/{int(month_part)}"),
                     }
                 )
     return results

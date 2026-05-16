@@ -43,9 +43,7 @@ class FundAdminProvider(Protocol):
 
     def list_redemptions_for_client(self, client_id: str) -> list[AllocatorRedemption]: ...
 
-    def get_cash_account_view(
-        self, client_id: str, share_class: str
-    ) -> AllocatorCashAccountView: ...
+    def get_cash_account_view(self, client_id: str, share_class: str) -> AllocatorCashAccountView: ...
 
 
 # ---------------------------------------------------------------------------
@@ -150,9 +148,7 @@ def _aggregate_balances(
     return settled_balance, subscriptions_ytd, redemptions_ytd
 
 
-def _last_settlement_timestamp(
-    subs: list[AllocatorSubscription], reds: list[AllocatorRedemption]
-) -> datetime | None:
+def _last_settlement_timestamp(subs: list[AllocatorSubscription], reds: list[AllocatorRedemption]) -> datetime | None:
     """Latest settled-movement timestamp across subscriptions + redemptions."""
     candidates: list[datetime] = [
         s.approval_timestamp
@@ -197,16 +193,8 @@ class InMemoryFundAdminProvider:
         return [r for r in self._redemptions if r.allocator_id == client_id]
 
     def get_cash_account_view(self, client_id: str, share_class: str) -> AllocatorCashAccountView:
-        subs = [
-            s
-            for s in self._subscriptions
-            if s.allocator_id == client_id and s.share_class == share_class
-        ]
-        reds = [
-            r
-            for r in self._redemptions
-            if r.allocator_id == client_id and r.share_class == share_class
-        ]
+        subs = [s for s in self._subscriptions if s.allocator_id == client_id and s.share_class == share_class]
+        reds = [r for r in self._redemptions if r.allocator_id == client_id and r.share_class == share_class]
         now = datetime.now(UTC)
         settled_balance, subscriptions_ytd, redemptions_ytd = _aggregate_balances(subs, reds, now)
         return AllocatorCashAccountView(

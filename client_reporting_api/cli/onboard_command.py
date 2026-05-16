@@ -28,9 +28,7 @@ from client_reporting_api.cli.shared import (
 logger = logging.getLogger(__name__)
 
 
-def _validate_onboard_credentials(
-    venue: str, api_key: str, api_secret: str, passphrase: str
-) -> float | None:
+def _validate_onboard_credentials(venue: str, api_key: str, api_secret: str, passphrase: str) -> float | None:
     """Open the exchange, fetch balance, return total USD value or None on failure."""
     try:
         exchange = _create_exchange(venue, api_key, api_secret, passphrase)
@@ -49,9 +47,7 @@ def _validate_onboard_credentials(
     return total_usd
 
 
-def _store_onboard_secrets(
-    secret_base: str, venue: str, api_key: str, api_secret: str, passphrase: str
-) -> None:
+def _store_onboard_secrets(secret_base: str, venue: str, api_key: str, api_secret: str, passphrase: str) -> None:
     """Store the client's credentials in Secret Manager (best-effort)."""
     try:
         create_secret_if_not_exists(f"{secret_base}-api-key", api_key)
@@ -132,9 +128,7 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     _store_onboard_secrets(secret_base, venue, args.api_key, args.api_secret, passphrase)
 
     logger.info("[3/4] Adding to credentials registry...")
-    _register_new_client(
-        client_id, full_name, org_id, strategy_id, currency, venue, secret_base, total_usd
-    )
+    _register_new_client(client_id, full_name, org_id, strategy_id, currency, venue, secret_base, total_usd)
 
     logger.info("[4/4] Running full backfill...")
     from scripts.backfill_history import backfill_client  # noqa: imports-inside-functions

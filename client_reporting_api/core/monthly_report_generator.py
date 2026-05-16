@@ -46,9 +46,7 @@ class _MonthEquitySnapshot:
     daily_pnl: list[float]
 
 
-def _slice_equity_for_month(
-    ec: list[dict[str, str | float]], month_str: str
-) -> _MonthEquitySnapshot | None:
+def _slice_equity_for_month(ec: list[dict[str, str | float]], month_str: str) -> _MonthEquitySnapshot | None:
     """Slice an equity curve to one month and compute transfers + daily PnL."""
     points = [p for p in ec if str(p.get("date", "")).startswith(month_str)]
     if not points:
@@ -99,9 +97,7 @@ def _apply_bill_to_coin(b: dict[str, str | float], slot: dict[str, float]) -> No
         slot["funding"] += change
 
 
-def _aggregate_month_bills(
-    bills: list[dict[str, str | float]], month_str: str
-) -> dict[str, dict[str, float]]:
+def _aggregate_month_bills(bills: list[dict[str, str | float]], month_str: str) -> dict[str, dict[str, float]]:
     """Aggregate bill ledger entries into per-coin realized/fees/funding sums."""
     coin_data: dict[str, dict[str, float]] = defaultdict(
         lambda: {"realized": 0.0, "fees": 0.0, "funding": 0.0, "volume": 0.0, "trades": 0.0}

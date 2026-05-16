@@ -85,8 +85,7 @@ def get_allocator_cash_account(
         str,
         Query(
             description=(
-                "Share-class key the view is scoped to. One cash-account "
-                "exists per (client_id, share_class)."
+                "Share-class key the view is scoped to. One cash-account exists per (client_id, share_class)."
             ),
         ),
     ] = "USDC",

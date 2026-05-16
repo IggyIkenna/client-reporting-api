@@ -200,9 +200,7 @@ def _populate_totals(
 def _populate_daily_series(analytics: TradeAnalytics, daily_vol: dict[str, float]) -> None:
     """Set the daily volume series and derived calendar fields."""
     sorted_days = sorted(daily_vol.keys())
-    analytics.daily_volumes = [
-        {"date": d, "volume_usd": round(daily_vol[d], 2)} for d in sorted_days
-    ]
+    analytics.daily_volumes = [{"date": d, "volume_usd": round(daily_vol[d], 2)} for d in sorted_days]
     analytics.trading_days = len(sorted_days)
     if sorted_days:
         analytics.first_trade_date = sorted_days[0]
@@ -455,17 +453,11 @@ def aggregate_clients(client_ids: list[str]) -> TradeAnalytics:
         _finalise_aggregated_coin(coin)
 
     aggregated.coins = sorted(coin_agg.values(), key=lambda c: abs(c.net_pnl), reverse=True)
-    aggregated.daily_volumes = [
-        {"date": d, "volume_usd": round(v, 2)} for d, v in sorted(daily_vol_agg.items())
-    ]
-    aggregated.monthly_pnl = [
-        {"month": m, "pnl_usd": round(v, 2)} for m, v in sorted(monthly_pnl_agg.items())
-    ]
+    aggregated.daily_volumes = [{"date": d, "volume_usd": round(v, 2)} for d, v in sorted(daily_vol_agg.items())]
+    aggregated.monthly_pnl = [{"month": m, "pnl_usd": round(v, 2)} for m, v in sorted(monthly_pnl_agg.items())]
     aggregated.trading_days = len(daily_vol_agg)
     if aggregated.trading_days > 0:
-        aggregated.avg_daily_volume_usd = round(
-            aggregated.total_volume_usd / aggregated.trading_days, 2
-        )
+        aggregated.avg_daily_volume_usd = round(aggregated.total_volume_usd / aggregated.trading_days, 2)
 
     return aggregated
 
@@ -476,9 +468,7 @@ if __name__ == "__main__":
     for a in compute_all_clients():
         _logger.info("%s", "=" * 60)
         _logger.info("%s - %s", a.client_id, a.strategy)
-        _logger.info(
-            "  Volume: $%s | Trades: %s", f"{a.total_volume_usd:,.0f}", a.total_trade_count
-        )
+        _logger.info("  Volume: $%s | Trades: %s", f"{a.total_volume_usd:,.0f}", a.total_trade_count)
         _logger.info("  Realized PnL: $%s", f"{a.total_realized_pnl:,.2f}")
         _logger.info("  Fees: $%s", f"{a.total_trading_fees:,.2f}")
         _logger.info("  Funding: $%s", f"{a.total_funding_pnl:,.2f}")

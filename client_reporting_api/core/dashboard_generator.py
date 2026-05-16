@@ -51,9 +51,7 @@ def _compute_daily_pnl(pnl_series: list[float]) -> list[float]:
     """Compute daily PnL changes from cumulative PnL series."""
     if not pnl_series:
         return []
-    return [pnl_series[0]] + [
-        round(pnl_series[i] - pnl_series[i - 1], 2) for i in range(1, len(pnl_series))
-    ]
+    return [pnl_series[0]] + [round(pnl_series[i] - pnl_series[i - 1], 2) for i in range(1, len(pnl_series))]
 
 
 def _load_orders(client_id: str) -> list[dict[str, str | float | None]]:
@@ -89,9 +87,7 @@ def generate_dashboard(client_id: str) -> str | None:
     daily_pnl = _compute_daily_pnl(pnl_data["pnl_series"])
 
     # Client list for dropdown
-    all_clients = [
-        (cid, CLIENT_NAMES.get(cid, cid)) for cid in CLIENT_IDS if (_DATA_DIR / cid).exists()
-    ]
+    all_clients = [(cid, CLIENT_NAMES.get(cid, cid)) for cid in CLIENT_IDS if (_DATA_DIR / cid).exists()]
 
     # Top 15 coins for chart
     top_coins = ta.coins[:15]

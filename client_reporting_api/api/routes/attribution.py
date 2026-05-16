@@ -97,9 +97,7 @@ def _mock_positions(client_id: str) -> dict[str, object]:
     }
 
 
-def _mock_attribution(
-    client_id: str, date_from: date | None, date_to: date | None
-) -> dict[str, object]:
+def _mock_attribution(client_id: str, date_from: date | None, date_to: date | None) -> dict[str, object]:
     today = date.today()
     return {
         "client_id": client_id,
