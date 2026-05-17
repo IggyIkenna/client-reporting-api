@@ -28,6 +28,16 @@ def _mock_mode() -> Generator[None]:
     original_auth = _auth_module.DISABLE_AUTH
     _auth_module.DISABLE_AUTH = True
 
+    # Routes use UTL's create_api_auth which reads disable_auth via @lru_cache
+    # of UnifiedCloudConfig — setting the module-level DISABLE_AUTH has no
+    # effect on the route's auth dependency. Patch UTL's _get_auth_config
+    # directly (2026-05-17, per client_reporting_api_coverage_below_floor).
+    from unified_trading_library.cloud_interface import api_auth as _utl_api_auth
+
+    _utl_api_auth._get_auth_config.cache_clear()
+    _orig_utl_get_auth_config = _utl_api_auth._get_auth_config
+    _utl_api_auth._get_auth_config = lambda: (True, False, None)  # type: ignore[misc,assignment]
+
     cfg = _attr_mod._cloud_cfg
     orig_data_mode = cfg.data_mode
     orig_mock = cfg.cloud_mock_mode
@@ -37,6 +47,8 @@ def _mock_mode() -> Generator[None]:
     yield
 
     _auth_module.DISABLE_AUTH = original_auth
+    _utl_api_auth._get_auth_config = _orig_utl_get_auth_config  # type: ignore[misc,assignment]
+    _utl_api_auth._get_auth_config.cache_clear()
     cfg.data_mode = orig_data_mode  # type: ignore[misc]
     cfg.cloud_mock_mode = orig_mock  # type: ignore[misc]
 

@@ -27,6 +27,16 @@ def _disable_auth_and_mock_mode() -> Generator[None]:
     original_auth = _auth_module.DISABLE_AUTH
     _auth_module.DISABLE_AUTH = True
 
+    # Routes use UTL's `create_api_auth` which reads `disable_auth` via an
+    # @lru_cache of UnifiedCloudConfig — setting the module-level DISABLE_AUTH
+    # in client_reporting_api.auth has no effect on the route's auth dependency.
+    # Patch UTL's _get_auth_config directly for the test duration (2026-05-17).
+    from unified_trading_library.cloud_interface import api_auth as _utl_api_auth
+
+    _utl_api_auth._get_auth_config.cache_clear()
+    _orig_get_auth_config = _utl_api_auth._get_auth_config
+    _utl_api_auth._get_auth_config = lambda: (True, False, None)  # type: ignore[misc,assignment]
+
     # Force live code path so patches on generate_pnl_report take effect
     from client_reporting_api.api.routes import pnl as _pnl_mod
     from client_reporting_api.api.routes import reports as _reports_mod
@@ -45,6 +55,8 @@ def _disable_auth_and_mock_mode() -> Generator[None]:
     yield
 
     _auth_module.DISABLE_AUTH = original_auth
+    _utl_api_auth._get_auth_config = _orig_get_auth_config  # type: ignore[misc,assignment]
+    _utl_api_auth._get_auth_config.cache_clear()
     reports_cfg.data_mode = orig_reports_data_mode  # type: ignore[misc]
     pnl_cfg.data_mode = orig_pnl_data_mode  # type: ignore[misc]
     reports_cfg.cloud_mock_mode = orig_reports_mock  # type: ignore[misc]

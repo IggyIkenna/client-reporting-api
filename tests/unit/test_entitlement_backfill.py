@@ -24,6 +24,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from unified_trading_library import AuthContext
 
+from client_reporting_api.api import main as _main_module
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes import (
     clients as clients_module,
@@ -130,9 +131,17 @@ def external_client_a_for_modules() -> Generator[None]:
     async def _fake_auth() -> AuthContext:
         return _make_external_auth("client-A")
 
+    # main.py wraps the auth routes with `_authenticated_router =
+    # APIRouter(dependencies=[Depends(_api_auth)])` — a SEPARATE
+    # `create_api_auth("client-reporting-api")` instance distinct from each
+    # per-route module's `_require_auth`. The router-level dep runs first;
+    # without overriding it too, every request 401s before the per-route
+    # dep override fires (2026-05-17).
+    app.dependency_overrides[_main_module._api_auth] = _fake_auth
     for mod in modules:
         app.dependency_overrides[mod._require_auth] = _fake_auth
     yield
+    app.dependency_overrides.pop(_main_module._api_auth, None)
     for mod in modules:
         app.dependency_overrides.pop(mod._require_auth, None)
 
@@ -152,9 +161,12 @@ def internal_for_modules() -> Generator[None]:
     async def _fake_auth() -> AuthContext:
         return _make_internal_auth()
 
+    # Router-level _api_auth override — see external_client_a_for_modules docstring.
+    app.dependency_overrides[_main_module._api_auth] = _fake_auth
     for mod in modules:
         app.dependency_overrides[mod._require_auth] = _fake_auth
     yield
+    app.dependency_overrides.pop(_main_module._api_auth, None)
     for mod in modules:
         app.dependency_overrides.pop(mod._require_auth, None)
 

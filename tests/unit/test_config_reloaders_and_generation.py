@@ -419,6 +419,7 @@ class TestGetInvoice:
 
 class TestDownloadInvoice:
     def test_found_invoice_returns_download_url(self) -> None:
+        from client_reporting_api.api.routes.invoices import generation as _gen_mod
         from client_reporting_api.api.routes.invoices._shared import store
         from client_reporting_api.api.routes.invoices.generation import download_invoice
 
@@ -435,16 +436,32 @@ class TestDownloadInvoice:
         invoice_id = inv["id"]
 
         auth = _make_internal_auth()
-        result = download_invoice(invoice_id=invoice_id, auth=auth)
+        # generate_download_url calls GCS signed-URL which needs a service-account
+        # private key (ADC user-account creds don't have one in tests). Patch the
+        # signer to a deterministic mock URL for test purposes (2026-05-17).
+        with patch.object(
+            _gen_mod,
+            "generate_download_url",
+            return_value=f"https://signed-mock.example.com/{invoice_id}.pdf?X-Mock-Signature=abc",
+        ):
+            result = download_invoice(invoice_id=invoice_id, auth=auth)
         assert "download_url" in result
         assert result["invoice_id"] == invoice_id
 
     def test_not_found_raises_404(self) -> None:
+        from client_reporting_api.api.routes.invoices import generation as _gen_mod
         from client_reporting_api.api.routes.invoices.generation import download_invoice
 
         auth = _make_internal_auth()
-        with pytest.raises(HTTPException) as exc_info:
-            download_invoice(invoice_id="never-exists-xyz", auth=auth)
+        # 404 only fires in mock-mode branch (live mode just signs whatever
+        # path it's given). Force mock mode for this lookup test (2026-05-17).
+        original_mock = _gen_mod.cloud_cfg.cloud_mock_mode
+        _gen_mod.cloud_cfg.cloud_mock_mode = True  # type: ignore[misc]
+        try:
+            with pytest.raises(HTTPException) as exc_info:
+                download_invoice(invoice_id="never-exists-xyz", auth=auth)
+        finally:
+            _gen_mod.cloud_cfg.cloud_mock_mode = original_mock  # type: ignore[misc]
         assert exc_info.value.status_code == 404
 
     def test_external_caller_raises_403(self) -> None:
