@@ -32,7 +32,7 @@ def _mock_mode() -> Generator[None]:
     # of UnifiedCloudConfig — setting the module-level DISABLE_AUTH has no
     # effect on the route's auth dependency. Patch UTL's _get_auth_config
     # directly (2026-05-17, per client_reporting_api_coverage_below_floor).
-    from unified_trading_library.cloud_interface import api_auth as _utl_api_auth
+    from unified_trading_library.cloud_interface import api_auth as _utl_api_auth  # noqa: qg-deep-import (test needs the @lru_cache _get_auth_config module attr — root facade only re-exports create_api_auth)
 
     _utl_api_auth._get_auth_config.cache_clear()
     _orig_utl_get_auth_config = _utl_api_auth._get_auth_config
