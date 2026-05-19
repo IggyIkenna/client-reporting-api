@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import Annotated
 
 import ccxt
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 from unified_trading_library import (  # pyright: ignore[reportPrivateImportUsage]
     AuthContext,
@@ -156,8 +156,8 @@ def _fetch_open_positions(
 @router.post("/close-all/{client_id}", response_model=CloseAllResponse)
 def close_all_positions(
     auth: AuthDep,
+    body: Annotated[CloseAllRequest, Body()],
     client_id: str = Path(..., description="Client identifier"),
-    body: CloseAllRequest = ...,  # pyright: ignore[reportAssignmentType]  # FastAPI required-body sentinel after path param with default
 ) -> CloseAllResponse:
     """Emergency close-all positions for a client.
 
