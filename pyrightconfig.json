@@ -3,8 +3,17 @@
   "reportMissingTypeStubs": false,
   "reportUnknownMemberType": "none",
   "typeCheckingMode": "strict",
-  "include": ["client_reporting_api"],
-  "exclude": ["tests", "**/__pycache__", ".venv*"],
+  "include": [
+    "client_reporting_api"
+  ],
+  "exclude": [
+    "tests",
+    "**/__pycache__",
+    ".venv*",
+    "node_modules",
+    "dist",
+    "build"
+  ],
   "extraPaths": [
     "../unified-internal-contracts",
     "../unified-trading-library",
