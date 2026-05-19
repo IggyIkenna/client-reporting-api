@@ -58,9 +58,9 @@ class TestHealthWorkflow:
         """GET /metrics returns Prometheus text format."""
         resp = client.get("/metrics")
         assert resp.status_code == 200
-        assert "text/plain" in resp.headers.get(
-            "content-type", ""
-        ) or "text/plain" in resp.headers.get("Content-Type", "")
+        assert "text/plain" in resp.headers.get("content-type", "") or "text/plain" in resp.headers.get(
+            "Content-Type", ""
+        )
 
 
 # ---------------------------------------------------------------------------

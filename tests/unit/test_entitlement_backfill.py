@@ -185,16 +185,12 @@ def http() -> TestClient:
 class TestExternalEntitlementOnReportingRoutes:
     """Cross-section across the (a) routes proves entitlement is wired."""
 
-    def test_trades_same_client_passes(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_trades_same_client_passes(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get("/api/v1/trades", params={"client_id": "client-A"})
         # 200 happy path — mock-mode returns MOCK_TRADES.
         assert resp.status_code == 200
 
-    def test_trades_cross_client_returns_403(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_trades_cross_client_returns_403(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get("/api/v1/trades", params={"client_id": "client-B"})
         assert resp.status_code == 403
 
@@ -202,27 +198,21 @@ class TestExternalEntitlementOnReportingRoutes:
         resp = http.get("/api/v1/trades", params={"client_id": "any-client"})
         assert resp.status_code == 200
 
-    def test_pnl_cross_client_returns_403(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_pnl_cross_client_returns_403(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get(
             "/pnl",
             params={"client_id": "client-B", "period_month": "2026-04"},
         )
         assert resp.status_code == 403
 
-    def test_pnl_same_client_passes(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_pnl_same_client_passes(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get(
             "/pnl",
             params={"client_id": "client-A", "period_month": "2026-04"},
         )
         assert resp.status_code == 200
 
-    def test_sports_pnl_cross_client_returns_403(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_sports_pnl_cross_client_returns_403(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get(
             "/sports/pnl",
             params={"client_id": "client-B", "period_month": "2026-04"},
@@ -235,9 +225,7 @@ class TestExternalEntitlementOnReportingRoutes:
         resp = http.get("/api/v1/performance/summary", params={"client_id": "client-B"})
         assert resp.status_code == 403
 
-    def test_get_client_cross_client_returns_403(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_get_client_cross_client_returns_403(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get("/api/v1/clients/client-B")
         assert resp.status_code == 403
 
@@ -256,15 +244,11 @@ class TestExternalEntitlementOnReportingRoutes:
 
 
 class TestInternalOnlyRoutes:
-    def test_clients_listing_external_returns_403(
-        self, http: TestClient, external_client_a_for_modules: None
-    ) -> None:
+    def test_clients_listing_external_returns_403(self, http: TestClient, external_client_a_for_modules: None) -> None:
         resp = http.get("/api/v1/clients")
         assert resp.status_code == 403
 
-    def test_clients_listing_internal_passes(
-        self, http: TestClient, internal_for_modules: None
-    ) -> None:
+    def test_clients_listing_internal_passes(self, http: TestClient, internal_for_modules: None) -> None:
         resp = http.get("/api/v1/clients")
         assert resp.status_code == 200
 
@@ -279,9 +263,7 @@ class TestInternalOnlyRoutes:
         )
         assert resp.status_code == 403
 
-    def test_emergency_close_all_internal_reaches_handler(
-        self, http: TestClient, internal_for_modules: None
-    ) -> None:
+    def test_emergency_close_all_internal_reaches_handler(self, http: TestClient, internal_for_modules: None) -> None:
         # Internal caller passes entitlement; the handler then either
         # returns 200 (mock mode preview) or 403 because the mock client
         # has no trading capability — both prove require_internal passed.

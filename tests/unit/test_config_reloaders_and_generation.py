@@ -146,9 +146,7 @@ class TestStartDomainConfigReloaders:
         mock_cfg.config_store_bucket = ""
         mock_cfg.gcp_project_id = "test-project"
 
-        with patch(
-            "client_reporting_api.config_reloaders.DomainConfigReloader"
-        ) as mock_reloader_cls:
+        with patch("client_reporting_api.config_reloaders.DomainConfigReloader") as mock_reloader_cls:
             start_domain_config_reloaders(mock_cfg)
 
         mock_reloader_cls.assert_not_called()
@@ -259,9 +257,7 @@ class TestBuildLiveInvoiceLineItems:
             _build_live_invoice_line_items,
         )
 
-        clients = [
-            {"client_id": "STD", "odum_fee": Decimal("300.00"), "server_cost": Decimal("75.00")}
-        ]
+        clients = [{"client_id": "STD", "odum_fee": Decimal("300.00"), "server_cost": Decimal("75.00")}]
         items, total = _build_live_invoice_line_items(clients)
         assert len(items) == 2
         assert total == Decimal("375.00")
@@ -556,9 +552,7 @@ class TestExportTearSheet:
         assert response.status_code == 404
 
     def test_with_html_path_returns_200(self, _internal_auth: None) -> None:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".html", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
             f.write("<html><body>Test Tear Sheet</body></html>")
             tmp_path = f.name
 
@@ -642,9 +636,7 @@ class TestClientsLiveMode:
         auth = _make_internal_auth()
         with (
             patch("client_reporting_api.api.routes.clients._cloud_cfg", mock_cfg),
-            patch(
-                "client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry
-            ),
+            patch("client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry),
         ):
             result = list_clients(auth=auth, organisation_id=None, strategy_id=None)
 
@@ -686,9 +678,7 @@ class TestClientsLiveMode:
         auth = _make_internal_auth()
         with (
             patch("client_reporting_api.api.routes.clients._cloud_cfg", mock_cfg),
-            patch(
-                "client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry
-            ),
+            patch("client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry),
         ):
             result = list_clients(auth=auth, organisation_id="org-alpha", strategy_id=None)
 
@@ -720,9 +710,7 @@ class TestClientsLiveMode:
         auth = _make_internal_auth()
         with (
             patch("client_reporting_api.api.routes.clients._cloud_cfg", mock_cfg),
-            patch(
-                "client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry
-            ),
+            patch("client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry),
         ):
             result = get_client(client_id="CLI-LIVE-2", auth=auth)
 
@@ -737,9 +725,7 @@ class TestClientsLiveMode:
         auth = _make_internal_auth()
         with (
             patch("client_reporting_api.api.routes.clients._cloud_cfg", mock_cfg),
-            patch(
-                "client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry
-            ),
+            patch("client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry),
             pytest.raises(HTTPException) as exc_info,
         ):
             get_client(client_id="NO-SUCH-CLIENT", auth=auth)
@@ -820,9 +806,7 @@ class TestListClientsLiveModeNonDictClientsCfg:
         auth = _make_internal_auth()
         with (
             patch("client_reporting_api.api.routes.clients._cloud_cfg", mock_cfg),
-            patch(
-                "client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry
-            ),
+            patch("client_reporting_api.api.routes.clients.load_registry", return_value=fake_registry),
         ):
             result = list_clients(auth=auth, organisation_id=None, strategy_id=None)
 
@@ -955,9 +939,7 @@ class TestGenerateInvoiceLiveMode:
         mock_gen_cfg = MagicMock()
         mock_gen_cfg.is_mock_mode.return_value = False
 
-        fake_clients = [
-            {"client_id": "CLI-A", "odum_fee": Decimal("300.00"), "server_cost": Decimal("0")}
-        ]
+        fake_clients = [{"client_id": "CLI-A", "odum_fee": Decimal("300.00"), "server_cost": Decimal("0")}]
         auth = _make_internal_auth()
         req = GenerateInvoiceRequest(
             org_id="org-alpha",
@@ -991,9 +973,7 @@ class TestGetInvoiceLiveMode:
         mock_gen_cfg = MagicMock()
         mock_gen_cfg.is_mock_mode.return_value = False
 
-        fake_invoices = [
-            {"invoice_id": "INV-LIVE-001", "org_id": "org-alpha", "total": Decimal("750.00")}
-        ]
+        fake_invoices = [{"invoice_id": "INV-LIVE-001", "org_id": "org-alpha", "total": Decimal("750.00")}]
         auth = _make_internal_auth()
         with (
             patch("client_reporting_api.api.routes.invoices.generation.cloud_cfg", mock_gen_cfg),

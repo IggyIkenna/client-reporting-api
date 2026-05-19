@@ -262,9 +262,7 @@ class TestCharts:
 
         with (
             patch.object(_viewing_mod, "_CHARTS_DIR", mock_dir),
-            patch(
-                "client_reporting_api.api.routes.invoices.viewing.generate_all_charts"
-            ) as mock_gen,
+            patch("client_reporting_api.api.routes.invoices.viewing.generate_all_charts") as mock_gen,
         ):
             client = TestClient(app, raise_server_exceptions=True)
             response = client.get("/api/v1/invoices/charts")

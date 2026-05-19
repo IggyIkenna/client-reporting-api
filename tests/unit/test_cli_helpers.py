@@ -101,9 +101,7 @@ class TestFetchCredentials:
 
     def test_returns_dict_with_passphrase_for_okx(self) -> None:
         seq = iter(["the-key", "the-secret", "the-passphrase"])
-        with patch(
-            "client_reporting_api.cli.shared._get_secret", side_effect=lambda _name: next(seq)
-        ):
+        with patch("client_reporting_api.cli.shared._get_secret", side_effect=lambda _name: next(seq)):
             creds = cli._fetch_credentials("PR", "okx")
         assert creds == {
             "api_key": "the-key",
@@ -113,9 +111,7 @@ class TestFetchCredentials:
 
     def test_passphrase_empty_for_binance(self) -> None:
         seq = iter(["k", "s"])
-        with patch(
-            "client_reporting_api.cli.shared._get_secret", side_effect=lambda _name: next(seq)
-        ):
+        with patch("client_reporting_api.cli.shared._get_secret", side_effect=lambda _name: next(seq)):
             creds = cli._fetch_credentials("PR", "binance")
         assert creds == {"api_key": "k", "api_secret": "s", "passphrase": ""}
 
@@ -158,9 +154,7 @@ class TestOnboardHelpers:
         ):
             cli._store_onboard_secrets("base", "okx", "k", "s", "p")  # must not raise
 
-    def test_register_new_client_inserts(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_register_new_client_inserts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         registry = {"organisations": {}, "clients": {}, "strategies": {}}
         registry_path = tmp_path / "registry.yaml"
         import yaml
@@ -170,9 +164,7 @@ class TestOnboardHelpers:
 
         monkeypatch.setattr(shared, "REGISTRY_PATH", registry_path)
         monkeypatch.setattr(onboard_command, "REGISTRY_PATH", registry_path)
-        cli._register_new_client(
-            "NEW", "Newco", "newco", "strategy_x", "USDT", "okx", "exec-new-okx", 50000.0
-        )
+        cli._register_new_client("NEW", "Newco", "newco", "strategy_x", "USDT", "okx", "exec-new-okx", 50000.0)
         loaded = yaml.safe_load(registry_path.read_text())
         assert "NEW" in loaded["clients"]
         assert "newco" in loaded["organisations"]
@@ -186,9 +178,7 @@ class TestParseBalances:
     def test_separates_usdt_and_btc(self) -> None:
         ex = MagicMock()
         with patch("client_reporting_api.cli.equity_update._get_usd_price", return_value=50000.0):
-            usdt, btc, btc_price = cli._parse_balances(
-                ex, {"USDT": 100.0, "BTC": 0.25, "info": "x"}
-            )
+            usdt, btc, btc_price = cli._parse_balances(ex, {"USDT": 100.0, "BTC": 0.25, "info": "x"})
         assert usdt == 100.0
         assert btc == 0.25
         assert btc_price == 50000.0
@@ -386,9 +376,7 @@ class TestStatusCommand:
         assert cli._format_age(datetime.now(tz=UTC), "not-an-iso") == "-"
 
     def test_read_status_summary_when_missing(self, tmp_path: Path) -> None:
-        days, last_update, age = cli._read_status_summary(
-            tmp_path / "summary.json", datetime.now(tz=UTC)
-        )
+        days, last_update, age = cli._read_status_summary(tmp_path / "summary.json", datetime.now(tz=UTC))
         assert (days, last_update, age) == ("-", "no data", "-")
 
     def test_read_status_equity_handles_missing(self, tmp_path: Path) -> None:

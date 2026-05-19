@@ -54,9 +54,7 @@ def patched_registry(tmp_path: Path) -> Path:
 
 def test_load_registry_returns_empty_when_file_missing() -> None:
     """load_registry() returns empty structure when YAML file does not exist."""
-    with patch(
-        "client_reporting_api.core.tranche_router._REGISTRY_PATH", Path("/nonexistent/path.yaml")
-    ):
+    with patch("client_reporting_api.core.tranche_router._REGISTRY_PATH", Path("/nonexistent/path.yaml")):
         registry = load_registry()
     assert registry["clients"] == {}
     assert registry["server_costs_per_underwater_account_usd"] == 50
@@ -138,8 +136,6 @@ def test_get_server_cost_usd_returns_value_from_registry(patched_registry: Path)
 
 def test_get_server_cost_usd_defaults_to_50_when_missing() -> None:
     """get_server_cost_usd() defaults to 50 when registry file is missing."""
-    with patch(
-        "client_reporting_api.core.tranche_router._REGISTRY_PATH", Path("/nonexistent/path.yaml")
-    ):
+    with patch("client_reporting_api.core.tranche_router._REGISTRY_PATH", Path("/nonexistent/path.yaml")):
         cost = get_server_cost_usd()
     assert cost == 50

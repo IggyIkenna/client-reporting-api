@@ -235,9 +235,7 @@ class TestReportingCoinBreakdown:
             return_value=mock_ta,
         ):
             client = TestClient(app, raise_server_exceptions=True)
-            response = client.get(
-                "/api/reporting/performance/coin-breakdown", params={"client_id": "PR"}
-            )
+            response = client.get("/api/reporting/performance/coin-breakdown", params={"client_id": "PR"})
         assert response.status_code == 200
         data = response.json()
         assert data["client_id"] == "PR"
@@ -258,9 +256,7 @@ class TestReportingPositions:
             return_value=None,
         ):
             client = TestClient(app, raise_server_exceptions=True)
-            response = client.get(
-                "/api/reporting/performance/positions", params={"client_id": "PR"}
-            )
+            response = client.get("/api/reporting/performance/positions", params={"client_id": "PR"})
         assert response.status_code == 200
         assert response.json()["positions"] == []
 
@@ -287,9 +283,7 @@ class TestReportingPositions:
             return_value=raw_positions,
         ):
             client = TestClient(app, raise_server_exceptions=True)
-            response = client.get(
-                "/api/reporting/performance/positions", params={"client_id": "PR"}
-            )
+            response = client.get("/api/reporting/performance/positions", params={"client_id": "PR"})
         assert response.status_code == 200
         pos = response.json()["positions"][0]
         assert pos["symbol"] == "BTC-USDT-SWAP"
@@ -349,9 +343,7 @@ class TestReportsOverview:
                 "client_reporting_api.api.routes.reporting.reports_overview.compute_pnl_series",
                 return_value={},
             ),
-            patch(
-                "client_reporting_api.api.routes.reporting.reports_overview.state_mgr"
-            ) as mock_mgr,
+            patch("client_reporting_api.api.routes.reporting.reports_overview.state_mgr") as mock_mgr,
             patch.object(_ro_mod, "_REPORTS_DIR", MagicMock(**{"exists.return_value": False})),
         ):
             mock_mgr.get_invoices.return_value = []
@@ -401,9 +393,7 @@ class TestReportsOverview:
                 "client_reporting_api.api.routes.reporting.reports_overview.load_registry",
                 return_value=_REGISTRY,
             ),
-            patch(
-                "client_reporting_api.api.routes.reporting.reports_overview.state_mgr"
-            ) as mock_mgr,
+            patch("client_reporting_api.api.routes.reporting.reports_overview.state_mgr") as mock_mgr,
             patch.object(_ro_mod, "_REPORTS_DIR", mock_dir),
         ):
             mock_mgr.get_invoices.return_value = invoices
@@ -568,9 +558,7 @@ class TestReportingTrades:
             return_value=trades,
         ):
             client = TestClient(app, raise_server_exceptions=True)
-            response = client.get(
-                "/api/reporting/trades", params={"client_id": "PR", "symbol": "ETH"}
-            )
+            response = client.get("/api/reporting/trades", params={"client_id": "PR", "symbol": "ETH"})
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
@@ -587,9 +575,7 @@ class TestReportingTrades:
             return_value=trades,
         ):
             client = TestClient(app, raise_server_exceptions=True)
-            response = client.get(
-                "/api/reporting/trades", params={"client_id": "PR", "side": "sell"}
-            )
+            response = client.get("/api/reporting/trades", params={"client_id": "PR", "side": "sell"})
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1

@@ -144,9 +144,7 @@ class TestListAllInvoices:
     def test_internal_no_filter_returns_all(self) -> None:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
-        data = list_all_invoices(
-            auth=_make_internal_auth(), client_id=None, invoice_type=None, status=None
-        )
+        data = list_all_invoices(auth=_make_internal_auth(), client_id=None, invoice_type=None, status=None)
         assert isinstance(data, list)
         assert len(data) > 0
         for item in data:
@@ -159,36 +157,28 @@ class TestListAllInvoices:
     def test_internal_filter_by_invoice_type_odum(self) -> None:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
-        data = list_all_invoices(
-            auth=_make_internal_auth(), client_id=None, invoice_type="odum", status=None
-        )
+        data = list_all_invoices(auth=_make_internal_auth(), client_id=None, invoice_type="odum", status=None)
         for item in data:
             assert item["type"] == "odum"
 
     def test_internal_filter_by_invoice_type_trader(self) -> None:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
-        data = list_all_invoices(
-            auth=_make_internal_auth(), client_id=None, invoice_type="trader", status=None
-        )
+        data = list_all_invoices(auth=_make_internal_auth(), client_id=None, invoice_type="trader", status=None)
         for item in data:
             assert item["type"] == "trader"
 
     def test_internal_filter_by_client_id(self) -> None:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
-        data = list_all_invoices(
-            auth=_make_internal_auth(), client_id="PR", invoice_type=None, status=None
-        )
+        data = list_all_invoices(auth=_make_internal_auth(), client_id="PR", invoice_type=None, status=None)
         for item in data:
             assert item["client_id"] == "PR"
 
     def test_internal_filter_by_status_issued(self) -> None:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
-        data = list_all_invoices(
-            auth=_make_internal_auth(), client_id=None, invoice_type=None, status="ISSUED"
-        )
+        data = list_all_invoices(auth=_make_internal_auth(), client_id=None, invoice_type=None, status="ISSUED")
         for item in data:
             assert item["status"] == "ISSUED"
 
@@ -198,17 +188,13 @@ class TestListAllInvoices:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
         with pytest.raises(HTTPException) as exc_info:
-            list_all_invoices(
-                auth=_make_external_auth("PR"), client_id=None, invoice_type=None, status=None
-            )
+            list_all_invoices(auth=_make_external_auth("PR"), client_id=None, invoice_type=None, status=None)
         assert exc_info.value.status_code == 403
 
     def test_external_with_own_client_id_returns_data(self) -> None:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
-        data = list_all_invoices(
-            auth=_make_external_auth("PR"), client_id="PR", invoice_type=None, status=None
-        )
+        data = list_all_invoices(auth=_make_external_auth("PR"), client_id="PR", invoice_type=None, status=None)
         assert isinstance(data, list)
         for item in data:
             assert item["client_id"] == "PR"
@@ -219,9 +205,7 @@ class TestListAllInvoices:
         from client_reporting_api.api.routes.invoices.viewing import list_all_invoices
 
         with pytest.raises(HTTPException) as exc_info:
-            list_all_invoices(
-                auth=_make_external_auth("PR"), client_id="ET", invoice_type=None, status=None
-            )
+            list_all_invoices(auth=_make_external_auth("PR"), client_id="ET", invoice_type=None, status=None)
         assert exc_info.value.status_code == 403
 
 

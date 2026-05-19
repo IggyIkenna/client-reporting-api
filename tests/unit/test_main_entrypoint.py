@@ -59,10 +59,6 @@ def test_main_module_name_guard() -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.If):
             test = node.test
-            if (
-                isinstance(test, ast.Compare)
-                and isinstance(test.left, ast.Name)
-                and test.left.id == "__name__"
-            ):
+            if isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and test.left.id == "__name__":
                 found = True
     assert found, "main.py must have if __name__ == '__main__' guard"

@@ -58,9 +58,7 @@ def _make_subscription(
         requested_amount_usd=Decimal(amount_usd),
         requested_timestamp=ts,
         status=status,
-        approval_timestamp=(ts + timedelta(hours=1))
-        if status is SubscriptionStatus.SETTLED
-        else None,
+        approval_timestamp=(ts + timedelta(hours=1)) if status is SubscriptionStatus.SETTLED else None,
     )
 
 
@@ -85,9 +83,7 @@ def _make_redemption(
         status=status,
         grace_period_days=5,
         cash_amount_due_usd=Decimal(cash_usd) if status is RedemptionStatus.SETTLED else None,
-        settlement_timestamp=(ts + timedelta(days=5))
-        if status is RedemptionStatus.SETTLED
-        else None,
+        settlement_timestamp=(ts + timedelta(days=5)) if status is RedemptionStatus.SETTLED else None,
     )
 
 

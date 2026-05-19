@@ -17,9 +17,7 @@ from starlette.testclient import TestClient
 from client_reporting_api.auth import GoogleOAuthMiddleware
 
 
-def _make_app(
-    client_id: str = "test-client", allowed_domains: list[str] | None = None
-) -> Starlette:
+def _make_app(client_id: str = "test-client", allowed_domains: list[str] | None = None) -> Starlette:
     async def homepage(request: Request) -> Response:
         return Response("OK", status_code=200)
 
@@ -52,9 +50,7 @@ def test_wrong_domain_returns_403() -> None:
         "client_reporting_api._google_auth_sync.verify_oauth2_token_sync",
         return_value=fake_claims,
     ):
-        client = TestClient(
-            _make_app(allowed_domains=["allowed.com"]), raise_server_exceptions=False
-        )
+        client = TestClient(_make_app(allowed_domains=["allowed.com"]), raise_server_exceptions=False)
         response = client.get("/", headers={"Authorization": "Bearer fake-token"})
     assert response.status_code == 403
     assert response.json()["detail"] == "Domain not allowed"

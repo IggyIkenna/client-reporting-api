@@ -86,9 +86,7 @@ class TestTradeAnalyticsHelpers:
 
     def test_match_sell_against_buy_queue_partial_fill(self) -> None:
         buy_queue: list[tuple[float, float]] = [(0.0, 2.0), (1000.0, 1.0)]
-        durations = _match_sell_against_buy_queue(
-            sell_ts=3 * 1000 * 3600.0, sell_amount=2.5, buy_queue=buy_queue
-        )
+        durations = _match_sell_against_buy_queue(sell_ts=3 * 1000 * 3600.0, sell_amount=2.5, buy_queue=buy_queue)
         # First buy fully consumed (2 BTC), second buy partial (0.5 BTC)
         assert len(durations) == 2
         assert all(d > 0 for d in durations)
@@ -405,9 +403,7 @@ class TestDashboardGenerator:
         assert out[1] == 10.0
         assert out[2] == -5.0
 
-    def test_load_orders_returns_empty_when_missing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_load_orders_returns_empty_when_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(dashboard_generator, "_ORDERS_DIR", tmp_path)
         assert dashboard_generator._load_orders("MISSING_CLIENT") == []
 
@@ -434,30 +430,22 @@ class TestInvoiceState:
     def manager(self) -> invoice_state.InvoiceStateManager:
         return invoice_state.InvoiceStateManager()
 
-    def test_get_total_trader_credits_returns_decimal(
-        self, manager: invoice_state.InvoiceStateManager
-    ) -> None:
+    def test_get_total_trader_credits_returns_decimal(self, manager: invoice_state.InvoiceStateManager) -> None:
         total = manager.get_total_trader_credits()
         assert isinstance(total, Decimal)
         assert total <= Decimal("0")  # credits are negative
 
-    def test_get_invoices_returns_seed_records(
-        self, manager: invoice_state.InvoiceStateManager
-    ) -> None:
+    def test_get_invoices_returns_seed_records(self, manager: invoice_state.InvoiceStateManager) -> None:
         invoices = manager.get_invoices()
         assert isinstance(invoices, list)
         assert len(invoices) > 0
 
-    def test_get_dashboard_summary_has_expected_buckets(
-        self, manager: invoice_state.InvoiceStateManager
-    ) -> None:
+    def test_get_dashboard_summary_has_expected_buckets(self, manager: invoice_state.InvoiceStateManager) -> None:
         summary = manager.get_dashboard_summary()
         for key in ("at_hwm", "underwater", "fund_of_fund", "prop", "totals"):
             assert key in summary
 
-    def test_compute_current_fees_for_all_seed_clients(
-        self, manager: invoice_state.InvoiceStateManager
-    ) -> None:
+    def test_compute_current_fees_for_all_seed_clients(self, manager: invoice_state.InvoiceStateManager) -> None:
         any_result = False
         for cid in invoice_state._HWM_SEED:
             result = manager.compute_current_fees(cid)
@@ -467,9 +455,7 @@ class TestInvoiceState:
                 assert "status" in result
         assert any_result
 
-    def test_load_equity_curve_returns_none_for_missing(
-        self, manager: invoice_state.InvoiceStateManager
-    ) -> None:
+    def test_load_equity_curve_returns_none_for_missing(self, manager: invoice_state.InvoiceStateManager) -> None:
         assert manager._load_equity_curve("DOES_NOT_EXIST") is None
 
     def test_net_usdt_moved_after_filters_dates(self) -> None:
@@ -518,11 +504,7 @@ class TestInvoiceGenerator:
             fee_rate_pct=Decimal("0.30"),
             fee_label="Performance Fee (30%)",
             total_due=Decimal("3000"),
-            line_items=[
-                invoice_generator.InvoiceLineItem(
-                    description="Performance fee", amount=Decimal("3000")
-                )
-            ],
+            line_items=[invoice_generator.InvoiceLineItem(description="Performance fee", amount=Decimal("3000"))],
             payment_info=invoice_generator.ODUM_PAYMENT_INFO,
         )
         html = invoice_generator.generate_invoice_html(inv)
