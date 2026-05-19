@@ -278,9 +278,7 @@ async def wire_demo_treasury(
     )
 
     raw_results = await pinger.ping_all(DEMO_TREASURY_SOURCES)
-    results: dict[TreasurySource, CustodyPingResult] = cast(
-        "dict[TreasurySource, CustodyPingResult]", raw_results
-    )
+    results: dict[TreasurySource, CustodyPingResult] = cast("dict[TreasurySource, CustodyPingResult]", raw_results)
 
     source: TreasurySource
     result: CustodyPingResult
@@ -311,8 +309,7 @@ async def _run(
     """Orchestrate Phase 7.A (onboarding) + 7.B (treasury wire + ping)."""
     if cloud != "local" and not confirm:
         print(
-            "ERROR: --confirm required for non-local cloud targets. "
-            "Re-run with --confirm to proceed.",
+            "ERROR: --confirm required for non-local cloud targets. Re-run with --confirm to proceed.",
             file=sys.stderr,
         )
         sys.exit(1)

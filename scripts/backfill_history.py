@@ -707,9 +707,7 @@ def fetch_okx_bills_ledger(
             if page % 20 == 0:
                 ts = int(data[-1].get("ts", 0))
                 dt = datetime.fromtimestamp(ts / 1000, tz=UTC)
-                logger.info(
-                    "  %s page %d, %d bills, oldest: %s", endpoint_name, page, len(all_bills), dt
-                )
+                logger.info("  %s page %d, %d bills, oldest: %s", endpoint_name, page, len(all_bills), dt)
 
             time.sleep(0.3)  # Slower to avoid rate limits
             if page > 1000:
@@ -879,10 +877,7 @@ def _fetch_btc_daily_prices(start_date: str, end_date: str) -> dict[str, float]:
     """
     prices: dict[str, float] = {}
     start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000)
-    end_ts = (
-        int(datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000)
-        + 86400000
-    )
+    end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000) + 86400000
 
     # OKX public candle API: max 100 per request, paginate backwards from end
     base_url = "https://www.okx.com/api/v5/market/history-candles"
@@ -1067,9 +1062,7 @@ def compute_daily_equity_from_okx_bills(
                 prev_btc_bal = float(equity_curve[i - 1].get("btc_balance", 0))
             btc_price_curr = float(equity_curve[i].get("btc_price_usd", 0))
             btc_price_prev = float(equity_curve[i - 1].get("btc_price_usd", 0)) if i > 0 else 0
-            price_effect = (
-                prev_btc_bal * (btc_price_curr - btc_price_prev) if prev_btc_bal > 0 else 0.0
-            )
+            price_effect = prev_btc_bal * (btc_price_curr - btc_price_prev) if prev_btc_bal > 0 else 0.0
 
             transfer = equity_change - total_pnl_usd - price_effect
 
@@ -1146,9 +1139,7 @@ def compute_daily_equity(
     # Method 2: OKX bills ledger
     if bills_ledger and venue == "okx":
         logger.info("  Using OKX bills ledger (%d records)", len(bills_ledger))
-        return compute_daily_equity_from_okx_bills(
-            bills_ledger, transfers, assets if isinstance(assets, dict) else {}
-        )
+        return compute_daily_equity_from_okx_bills(bills_ledger, transfers, assets if isinstance(assets, dict) else {})
 
     # Method 3: Legacy fallback (trade fees only — inaccurate)
     logger.warning("  No income/bills ledger — using legacy fee-based reconstruction")
@@ -1347,9 +1338,7 @@ def backfill_client(
         "deposit_count": len(transfers["deposits"]),
         "withdrawal_count": len(transfers["withdrawals"]),
         "equity_curve_days": len(equity_curve),
-        "equity_source": "binance_income"
-        if income_ledger
-        else ("okx_bills" if bills_ledger else "legacy_fees"),
+        "equity_source": "binance_income" if income_ledger else ("okx_bills" if bills_ledger else "legacy_fees"),
         "current_equity_usd": balance.get("assets", {}),
         "position_count": len(positions),
     }
@@ -1401,9 +1390,7 @@ def main() -> None:
         venue = str(cfg.get("venue", ""))
         currency = str(cfg.get("currency", "USDT"))
         start_date = str(cfg.get("strategy_start_date", ""))
-        success = backfill_client(
-            cid, venue, currency, dry_run=args.dry_run, strategy_start_date=start_date
-        )
+        success = backfill_client(cid, venue, currency, dry_run=args.dry_run, strategy_start_date=start_date)
         results[cid] = success
 
     # Print summary

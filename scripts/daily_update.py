@@ -213,9 +213,7 @@ def update_client(client_id: str, venue: str, currency: str, dry_run: bool = Fal
         # BTC price effect on existing position
         prev_btc = float(equity_curve[-1].get("btc_balance", 0))
         prev_btc_price = float(equity_curve[-1].get("btc_price_usd", 0))
-        price_effect = (
-            prev_btc * (btc_price - prev_btc_price) if prev_btc > 0 and prev_btc_price > 0 else 0.0
-        )
+        price_effect = prev_btc * (btc_price - prev_btc_price) if prev_btc > 0 and prev_btc_price > 0 else 0.0
 
         transfer = equity_change - trading_pnl - price_effect
         ref_equity = max(abs(total_usd), abs(prev_equity), 1.0)
@@ -324,9 +322,7 @@ def update_client(client_id: str, venue: str, currency: str, dry_run: bool = Fal
     return True
 
 
-def _fetch_pnl_since(
-    exchange: ccxt.Exchange, venue: str, since_date: str, until_date: str
-) -> float:
+def _fetch_pnl_since(exchange: ccxt.Exchange, venue: str, since_date: str, until_date: str) -> float:
     """Fetch trading PnL from since_date to until_date via bills/income ledger."""
     since_ms = int(datetime.strptime(since_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000)
     until_ms = int(datetime.strptime(until_date, "%Y-%m-%d").replace(tzinfo=UTC).timestamp() * 1000)
@@ -441,9 +437,7 @@ def _update_recent_trades(
         existing_trades.sort(key=lambda t: int(t.get("timestamp", 0) or 0))
         with open(trades_path, "w") as f:
             json.dump(existing_trades, f, cls=DecimalEncoder, indent=2)
-        logger.info(
-            "[%s] Added %d new trades (total: %d)", client_id, new_count, len(existing_trades)
-        )
+        logger.info("[%s] Added %d new trades (total: %d)", client_id, new_count, len(existing_trades))
 
 
 def main() -> None:
@@ -456,11 +450,7 @@ def main() -> None:
     clients: list[tuple[str, dict[str, str | float | bool | dict[str, float]]]] = []
 
     for cid, cfg in registry.items():
-        if (
-            not cfg.get("is_active", False)
-            or cfg.get("tranche") != "managed"
-            or not cfg.get("secret_name")
-        ):
+        if not cfg.get("is_active", False) or cfg.get("tranche") != "managed" or not cfg.get("secret_name"):
             continue
         if args.client and cid != args.client:
             continue

@@ -571,9 +571,7 @@ def _build_client_section(cid: str, d: dict) -> str:
         parts.append(f'        <td class="{_sign_class(r["dd_pct"])}">{r["dd_pct"]:.2f}%</td>\n')
         parts.append(f'        <td class="{ret_class}">{day_ret:+.4f}%</td>\n')
         xfer_str = _fmt(xfer, is_btc) if is_xfer_day else ""
-        parts.append(
-            f'        <td class="{"pos" if xfer > 0 else "neg" if xfer < 0 else ""}">{xfer_str}</td>\n'
-        )
+        parts.append(f'        <td class="{"pos" if xfer > 0 else "neg" if xfer < 0 else ""}">{xfer_str}</td>\n')
         parts.append(f"        <td>{_fmt(r['cum_transfer'], is_btc)}</td>\n")
         if not is_btc and "equity_usd" in r:
             parts.append(f"        <td>${r['equity_usd']:,.2f}</td>\n")

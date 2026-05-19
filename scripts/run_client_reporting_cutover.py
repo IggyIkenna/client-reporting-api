@@ -126,9 +126,7 @@ def _run_loop(
             "duration_hours": duration_hours,
         },
     )
-    logger.info(
-        "STARTED: run_id=%s demo_client=%s duration_hours=%d", run_id, demo_client, duration_hours
-    )
+    logger.info("STARTED: run_id=%s demo_client=%s duration_hours=%d", run_id, demo_client, duration_hours)
 
     invariant_failures: list[str] = []
 
