@@ -33,7 +33,9 @@ def _mock_mode() -> Generator[None]:
     # of UnifiedCloudConfig — setting the module-level DISABLE_AUTH has no
     # effect on the route's auth dependency. Patch UTL's _get_auth_config
     # directly (2026-05-17, per client_reporting_api_coverage_below_floor).
-    from unified_trading_library.cloud_interface import api_auth as _utl_api_auth  # noqa: qg-deep-import (test needs the @lru_cache _get_auth_config module attr — root facade only re-exports create_api_auth)
+    from unified_trading_library.cloud_interface import (  # noqa: qg-deep-import
+        api_auth as _utl_api_auth,  # test needs @lru_cache _get_auth_config
+    )
 
     _utl_api_auth._get_auth_config.cache_clear()
     _orig_utl_get_auth_config = _utl_api_auth._get_auth_config
@@ -276,9 +278,7 @@ class TestMockHwmTimeline:
 
 class TestBlobDate:
     def test_parses_iso_date_from_segment(self) -> None:
-        assert _hwm_reader_mod._blob_date(
-            "client-A/fee_recognition/2026-04-01/rows.parquet"
-        ) == date(2026, 4, 1)
+        assert _hwm_reader_mod._blob_date("client-A/fee_recognition/2026-04-01/rows.parquet") == date(2026, 4, 1)
 
     def test_returns_none_for_no_date_in_path(self) -> None:
         assert _hwm_reader_mod._blob_date("some/path/without/dates/rows.parquet") is None

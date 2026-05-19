@@ -63,7 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_onboard_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def _add_onboard_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_onboard = sub.add_parser("onboard", help="Add a new client (credentials + registry + backfill)")
     p_onboard.add_argument("--client-id", required=True, help="Client ID (e.g. NEW_CLIENT)")
     p_onboard.add_argument("--venue", required=True, choices=["okx", "binance"], help="Exchange venue")
@@ -78,14 +78,14 @@ def _add_onboard_parser(sub: argparse._SubParsersAction) -> None:  # type: ignor
     p_onboard.set_defaults(func=cmd_onboard)
 
 
-def _add_backfill_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def _add_backfill_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_backfill = sub.add_parser("backfill", help="Full historical rebuild from exchange ledger")
     p_backfill.add_argument("--client", help="Specific client ID (default: all)")
     p_backfill.add_argument("--dry-run", action="store_true")
     p_backfill.set_defaults(func=cmd_backfill)
 
 
-def _add_update_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def _add_update_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_update = sub.add_parser("update", help="Incremental refresh (balance, equity, positions, trades, orders)")
     p_update.add_argument("--client", help="Specific client ID (default: all)")
     p_update.add_argument(
@@ -97,7 +97,7 @@ def _add_update_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore
     p_update.set_defaults(func=cmd_update)
 
 
-def _add_status_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+def _add_status_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p_status = sub.add_parser("status", help="Show all clients and data freshness")
     p_status.add_argument("--client", help="Specific client ID")
     p_status.set_defaults(func=cmd_status)

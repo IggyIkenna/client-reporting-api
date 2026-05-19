@@ -157,7 +157,7 @@ def _fetch_open_positions(
 def close_all_positions(
     auth: AuthDep,
     client_id: str = Path(..., description="Client identifier"),
-    body: CloseAllRequest = ...,  # type: ignore[assignment]
+    body: CloseAllRequest = ...,  # type: ignore[assignment]  # FastAPI required-body sentinel after path param with default
 ) -> CloseAllResponse:
     """Emergency close-all positions for a client.
 

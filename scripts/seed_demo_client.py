@@ -134,7 +134,7 @@ def _persist_treasury_config(
     Writes to ``gs://{bucket_name}/{client_id}/treasury/sources.json``.
     Uses google-cloud-storage directly (no extra deps required).
     """
-    from google.cloud import storage  # type: ignore[import-untyped]
+    from google.cloud import storage
 
     payload: dict[str, object] = {
         "client_id": client_id,
