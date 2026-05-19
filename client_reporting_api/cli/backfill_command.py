@@ -22,7 +22,7 @@ def cmd_backfill(args: argparse.Namespace) -> int:
     # Import the existing backfill logic (lives in scripts/, outside the package)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
     from backfill_history import (
-        backfill_client,  # type: ignore[import-not-found]  # noqa: imports-inside-functions
+        backfill_client,  # pyright: ignore[reportMissingImports]  # noqa: imports-inside-functions
     )
 
     registry = _load_registry()
