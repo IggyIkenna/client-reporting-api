@@ -4,17 +4,16 @@ Routes (all under /api/v1/clients/{client_id}/):
   GET /nav         — NAV time-series (date_from / date_to query params)
   GET /pnl         — Daily PnL series
   GET /positions   — Current open positions
-  GET /attribution — PnL attribution waterfall by factor x layer
+  GET /attribution — PnL attribution waterfall by factor × layer
 
 SSOT: plans/active/client_reporting_pnl_attribution_mvp_2026_05_10.md Phase 4.
 """
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from datetime import UTC, date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -97,7 +96,9 @@ def _mock_positions(client_id: str) -> dict[str, object]:
     }
 
 
-def _mock_attribution(client_id: str, date_from: date | None, date_to: date | None) -> dict[str, object]:
+def _mock_attribution(
+    client_id: str, date_from: date | None, date_to: date | None
+) -> dict[str, object]:
     today = date.today()
     return {
         "client_id": client_id,
@@ -139,8 +140,10 @@ def _nav_from_rows(
         ts = row.get("timestamp")
         row_date = str(ts)[:10] if ts else "unknown"
         amount_str = str(row.get("amount", "0"))
-        with contextlib.suppress(Exception):
+        try:
             by_date[row_date] = by_date.get(row_date, Decimal("0")) + Decimal(amount_str)
+        except Exception:
+            pass
 
     snapshots = [
         {
@@ -164,11 +167,11 @@ def _pnl_from_rows(
     for row in rows:
         ts = row.get("timestamp")
         row_date = str(ts)[:10] if ts else "unknown"
-        layer = str(row.get("layer", ""))  # noqa: qg-empty-fallback
+        layer = str(row.get("layer", ""))
         amount_str = str(row.get("amount", "0"))
         try:
             amount = Decimal(amount_str)
-        except InvalidOperation:
+        except Exception:
             continue
         if row_date not in by_date:
             by_date[row_date] = {
@@ -227,16 +230,12 @@ def _attribution_from_rows(
 # ---------------------------------------------------------------------------
 
 
-DateFromQuery = Annotated[date | None, Query(description="Start date (inclusive) YYYY-MM-DD")]
-DateToQuery = Annotated[date | None, Query(description="End date (inclusive) YYYY-MM-DD")]
-
-
 @router.get("/nav")
 def get_client_nav(
     client_id: str,
     auth: AuthDep,
-    date_from: DateFromQuery = None,
-    date_to: DateToQuery = None,
+    date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),
+    date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),
 ) -> dict[str, object]:
     """NAV time-series for a client. Reads attribution parquet, sums amounts per date."""
     _enforce_entitlement(auth, client_id)
@@ -250,8 +249,8 @@ def get_client_nav(
 def get_client_pnl(
     client_id: str,
     auth: AuthDep,
-    date_from: DateFromQuery = None,
-    date_to: DateToQuery = None,
+    date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),
+    date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),
 ) -> dict[str, object]:
     """Daily PnL series for a client. Returns strategy_alpha + execution_alpha split per day."""
     _enforce_entitlement(auth, client_id)
@@ -279,10 +278,10 @@ def get_client_positions(
 def get_client_attribution(
     client_id: str,
     auth: AuthDep,
-    date_from: DateFromQuery = None,
-    date_to: DateToQuery = None,
+    date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),
+    date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),
 ) -> dict[str, object]:
-    """PnL attribution waterfall by factor x layer for a client.
+    """PnL attribution waterfall by factor × layer for a client.
 
     Returns raw PnLAttributionRow records grouped by (strategy_id, instrument, factor, layer).
     """
