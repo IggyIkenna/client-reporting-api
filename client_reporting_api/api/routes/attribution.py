@@ -168,7 +168,7 @@ def _pnl_from_rows(
         amount_str = str(row.get("amount", "0"))
         try:
             amount = Decimal(amount_str)
-        except Exception:
+        except ArithmeticError:
             continue
         if row_date not in by_date:
             by_date[row_date] = {

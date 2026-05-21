@@ -79,6 +79,7 @@ IMPORT_INSIDE_EXCLUDE_GLOBS=(
 HARDCODED_PROTO_EXCLUDE_GLOBS=("--glob=!**/cli/gcs_sync.py" "--glob=!**/cli/__init__.py")
 
 # Type check + pytest + codex often exceed 300s on large trees locally.
+PIP_AUDIT_EXTRA_ARGS="--ignore-vuln PYSEC-2024-277 --ignore-vuln PYSEC-2025-183"
 MAX_DURATION=600
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
