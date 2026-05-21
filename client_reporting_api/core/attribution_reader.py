@@ -15,8 +15,7 @@ from datetime import date
 from typing import cast
 
 import pyarrow.parquet as pq
-from unified_trading_library.cloud_interface import get_storage_client
-from unified_trading_library.cloud_interface.bucket_naming import Cloud, resolve_bucket_name
+from unified_trading_library import Cloud, get_storage_client, resolve_bucket_name
 
 logger = logging.getLogger(__name__)
 
