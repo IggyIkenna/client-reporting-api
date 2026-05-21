@@ -15,7 +15,8 @@ from datetime import date
 from typing import cast
 
 import pyarrow.parquet as pq
-from unified_trading_library import Cloud, get_storage_client, resolve_bucket_name
+from unified_trading_library import get_storage_client, resolve_bucket_name
+from unified_trading_library.cloud_interface.bucket_naming import Cloud  # noqa: qg-deep-import
 
 logger = logging.getLogger(__name__)
 
