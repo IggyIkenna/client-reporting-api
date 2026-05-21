@@ -88,7 +88,7 @@ class TestInvoiceRoutes:
         data = response.json()
         assert data["invoice_id"] == "INV-2026-001"
         assert data["org_id"] == "org-alpha"
-        assert data["type"] == "management_fee"
+        assert data["type"] == "performance_fee"
 
     def test_download_invoice_returns_url(self) -> None:
         """GET /api/v1/invoices/{invoice_id}/download returns a download URL."""

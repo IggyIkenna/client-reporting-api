@@ -17,9 +17,7 @@ from starlette.testclient import TestClient
 from client_reporting_api.auth import GoogleOAuthMiddleware
 
 
-def _make_app(
-    client_id: str = "test-client", allowed_domains: list[str] | None = None
-) -> Starlette:
+def _make_app(client_id: str = "test-client", allowed_domains: list[str] | None = None) -> Starlette:
     async def homepage(request: Request) -> Response:
         return Response("OK", status_code=200)
 
@@ -52,9 +50,7 @@ def test_wrong_domain_returns_403() -> None:
         "client_reporting_api._google_auth_sync.verify_oauth2_token_sync",
         return_value=fake_claims,
     ):
-        client = TestClient(
-            _make_app(allowed_domains=["allowed.com"]), raise_server_exceptions=False
-        )
+        client = TestClient(_make_app(allowed_domains=["allowed.com"]), raise_server_exceptions=False)
         response = client.get("/", headers={"Authorization": "Bearer fake-token"})
     assert response.status_code == 403
     assert response.json()["detail"] == "Domain not allowed"
@@ -195,7 +191,9 @@ def test_production_guard_raises_on_disable_auth(monkeypatch: pytest.MonkeyPatch
         patch("client_reporting_api._google_auth_sync.make_http_request", return_value=MagicMock()),
         pytest.raises(RuntimeError, match="DISABLE_AUTH=true is forbidden in production"),
     ):
-        pass
+        import importlib
+
+        importlib.import_module("client_reporting_api.auth")
 
     # Cleanup: remove the partially-imported module so it doesn't pollute other tests
     sys.modules.pop("client_reporting_api.auth", None)
