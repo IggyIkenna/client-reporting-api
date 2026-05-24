@@ -87,6 +87,7 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 "client_reporting_api/core/tear_sheet_generator.py" = ["E501"]
 "client_reporting_api/core/backfill_store.py" = ["C901"]
+"scripts/*.py" = ["C901", "E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 7

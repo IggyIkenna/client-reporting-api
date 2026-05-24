@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import io
 import json
@@ -155,10 +156,8 @@ def fetch_credentials(client_id: str, venue: str) -> dict[str, str] | None:
 
     passphrase = ""
     if venue == "okx":
-        try:
+        with contextlib.suppress(RuntimeError):
             passphrase = get_secret(f"{base}-passphrase")
-        except RuntimeError:
-            pass
 
     return {"api_key": api_key, "api_secret": api_secret, "passphrase": passphrase}
 
@@ -183,7 +182,7 @@ def fetch_all_trades_binance(
             sym = pos.get("symbol")
             contracts = float(pos.get("contracts", 0) or 0)
             if sym and contracts != 0 and str(sym) not in pairs:
-                pairs = [str(sym)] + pairs
+                pairs = [str(sym), *pairs]
     except ccxt.BaseError:
         pass
 
@@ -724,12 +723,10 @@ def fetch_okx_bills_ledger(
 
     for year, quarter in quarters:
         # Request generation (idempotent)
-        try:
+        with contextlib.suppress(ccxt.BaseError):
             exchange.private_post_account_bills_history_archive(
                 {"year": year, "quarter": quarter},
             )
-        except ccxt.BaseError:
-            pass
         time.sleep(0.5)
 
         # Try to download
@@ -1077,10 +1074,7 @@ def compute_daily_equity_from_okx_bills(
         usdt_live = 0.0
         btc_live = 0.0
         for ccy, asset_data in current_balance_assets.items():
-            if isinstance(asset_data, dict):
-                total = asset_data.get("total", 0.0)
-            else:
-                total = float(asset_data)
+            total = asset_data.get("total", 0.0) if isinstance(asset_data, dict) else float(asset_data)
             if ccy == "USDT":
                 usdt_live = total
             elif ccy == "BTC":
@@ -1282,10 +1276,7 @@ def backfill_client(
 
     # 3. Fetch all trades
     logger.info("[%s] Fetching trade history...", client_id)
-    if venue == "binance":
-        trades = fetch_all_trades_binance(exchange, currency)
-    else:
-        trades = fetch_all_trades_okx(exchange)
+    trades = fetch_all_trades_binance(exchange, currency) if venue == "binance" else fetch_all_trades_okx(exchange)
 
     with open(client_dir / "trades.json", "w") as f:
         json.dump(trades, f, cls=DecimalEncoder, indent=2)
