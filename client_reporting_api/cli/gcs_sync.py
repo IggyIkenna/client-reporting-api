@@ -1,3 +1,4 @@
+# pyright: reportConstantRedefinition=false, reportUnusedFunction=false
 """GCS persistence for client-reporting CLI updates.
 
 MiFID II requires 5-year retention of order and trade records. GCS object

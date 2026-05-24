@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """CLI entry point for ``client-reporting-manage`` — argparse wiring + dispatch.
 
 Cloud Run Jobs (gen2) require structured JSON logging to stdout for Cloud

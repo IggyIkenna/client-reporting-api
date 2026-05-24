@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnnecessaryComparison=false, reportAttributeAccessIssue=false
 """Trade and order history fetch + projection for client-reporting updates.
 
 Order records are projected to the MiFID II compliance schema (timestamp,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from unified_trading_library import (
@@ -21,7 +21,7 @@ from client_reporting_api.api.routes.invoices._shared import (
     store,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
+    enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.tranche_router import load_registry
@@ -70,7 +70,10 @@ def _clients_for_org(org_id: str) -> list[dict[str, object]]:
     all_clients = summary["at_hwm"] + summary["underwater"] + summary["prop"]
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
-    return [c for c in all_clients if clients_cfg.get(str(c.get("client_id", "")), {}).get("organisation_id") == org_id]
+    return cast(
+        list[dict[str, object]],
+        [c for c in all_clients if clients_cfg.get(str(c.get("client_id", "")), {}).get("organisation_id") == org_id],
+    )
 
 
 def _build_live_invoice_line_items(
@@ -147,10 +150,10 @@ def list_invoices(
     """List invoices for an organisation.
 
     External callers MUST pass their own ``org_id`` (matched via
-    :func:`_enforce_entitlement`); internal callers may pass any
+    :func:`enforce_entitlement`); internal callers may pass any
     ``org_id`` to inspect another org's invoice history.
     """
-    _enforce_entitlement(auth, org_id)
+    enforce_entitlement(auth, org_id)
     if cloud_cfg.is_mock_mode():
         all_invoices = store.list("invoices")
         return [inv for inv in all_invoices if inv.get("org_id") == org_id]

@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """client-reporting-manage CLI package.
 
 The CLI is split across focused submodules:

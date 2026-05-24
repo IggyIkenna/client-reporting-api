@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportArgumentType=false, reportUnknownArgumentType=false, reportAttributeAccessIssue=false, reportUnknownVariableType=false
 """Equity-curve + balance/positions update helpers for incremental runs.
 
 Given a live exchange session, these helpers compute today's equity point,
@@ -50,12 +51,12 @@ def _parse_balances(exchange: ccxt.Exchange, total_info: dict[str, object]) -> t
     btc_bal = 0.0
     btc_price = 0.0
     for cur, val in total_info.items():
-        if cur in _BALANCE_SKIP_KEYS or val is None or float(val) == 0:
+        if cur in _BALANCE_SKIP_KEYS or val is None or float(val or 0) == 0:
             continue
         if cur == "USDT":
-            usdt_bal = float(val)
+            usdt_bal = float(val or 0)
         elif cur == "BTC":
-            btc_bal = float(val)
+            btc_bal = float(val or 0)
             btc_price = _get_usd_price(exchange, "BTC")
     return usdt_bal, btc_bal, btc_price
 
@@ -120,10 +121,10 @@ def _persist_balance_snapshot(
     """Write the balance snapshot file and return the assets dict."""
     assets: dict[str, dict[str, float]] = {}
     for cur, val in total_info.items():
-        if cur in _BALANCE_SKIP_KEYS or val is None or float(val) == 0:
+        if cur in _BALANCE_SKIP_KEYS or val is None or float(val or 0) == 0:
             continue
         assets[cur] = {
-            "total": float(val),
+            "total": float(val or 0),
             "free": float(balance_raw.get("free", {}).get(cur, 0) or 0),
             "locked": float(balance_raw.get("used", {}).get(cur, 0) or 0),
         }

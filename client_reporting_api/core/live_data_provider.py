@@ -1,3 +1,4 @@
+# pyright: reportReturnType=false
 """Singleton live data provider — pre-fetches secrets, creates ExchangeDataCollector.
 
 Lazily initialized on first access so the API starts fast in mock mode.

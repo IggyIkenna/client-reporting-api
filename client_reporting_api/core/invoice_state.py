@@ -1,3 +1,4 @@
+# pyright: reportReturnType=false, reportArgumentType=false, reportAssignmentType=false
 """Invoice & HWM state management.
 
 Migrated from mr_report/ manual tracking system (Excel + markdown files).

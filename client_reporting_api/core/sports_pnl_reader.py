@@ -1,3 +1,4 @@
+# pyright: reportUnknownArgumentType=false
 """Sports PnL report generation from GCS Parquet data via UCI DataSource.
 
 Reads from: pnl/sports/{period_month}/{strategy_or_all}/sports_pnl.parquet

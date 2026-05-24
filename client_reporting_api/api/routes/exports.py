@@ -19,7 +19,7 @@ from client_reporting_api.core.backfill_store import (
     get_equity_curve,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
+    enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.mock_performance_data import (
@@ -55,7 +55,7 @@ def export_trades_csv(
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download full trade history as CSV."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     fields = [
         "trade_id",
         "venue",
@@ -85,7 +85,7 @@ def export_daily_summary_csv(
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download daily P&L summary as CSV."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     summary = get_mock_performance_summary(client_id)
     monthly = summary.get("monthly_returns", [])
 
@@ -104,7 +104,7 @@ def export_hourly_snapshots_csv(
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download hourly equity snapshots as CSV."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     summary = get_mock_performance_summary(client_id)
     curve = summary.get("equity_curve", [])
 
@@ -123,7 +123,7 @@ def export_coin_breakdown_csv(
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download per-coin P&L breakdown as CSV."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     fields = [
         "symbol",
         "quantity",
@@ -155,7 +155,7 @@ def export_daily_equity_csv(
     Includes: date, equity, TWR index, drawdown %, daily return, cumulative transfers.
     Uses transfer-adjusted metrics from canonical transfer store.
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     curve = get_equity_curve(client_id)
     if not curve:
         buf = io.StringIO("No data\n")
@@ -227,7 +227,7 @@ def export_transfers_csv(
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
     """Download canonical transfer history as CSV."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     records = get_transfers(client_id)
     fields = [
         "transfer_id",
@@ -284,7 +284,7 @@ def export_tear_sheet(
     Cross-client tear sheets accept a list of client IDs and are used
     for internal / IR reporting; require ``is_internal``. External
     callers must use the per-client export endpoints that apply
-    ``_enforce_entitlement``.
+    ``enforce_entitlement``.
     """
     require_internal(auth)
     ids = [cid.strip() for cid in client_ids.split(",") if cid.strip()]

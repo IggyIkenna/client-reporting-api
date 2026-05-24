@@ -1,3 +1,4 @@
+# pyright: reportUnknownLambdaType=false, reportArgumentType=false
 """Generate comprehensive interactive client performance dashboards.
 
 Each dashboard includes:

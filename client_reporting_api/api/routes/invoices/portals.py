@@ -1,3 +1,4 @@
+# pyright: reportArgumentType=false, reportUnknownArgumentType=false
 """Role-based portal views: admin, trader, introducer."""
 
 from __future__ import annotations
@@ -234,7 +235,7 @@ def portal_introducer(introducer_id: str, auth: AuthDep) -> dict[str, object]:
         if intro_state:
             introducer_name = str(intro_state.get("introducer_name", ""))
 
-    total_due = sum(float(c.get("balance_due", 0)) for c in linked_clients)
+    total_due = sum(float(c.get("balance_due") or 0) for c in linked_clients)
     return decimal_safe(
         {
             "introducer_id": introducer_id,

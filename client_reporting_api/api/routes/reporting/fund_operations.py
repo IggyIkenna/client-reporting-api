@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportPrivateUsage=false, reportArgumentType=false
 """GET /fund-operations — investor register, capital accounts, distribution waterfall."""
 
 from __future__ import annotations

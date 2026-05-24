@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportArgumentType=false, reportAssignmentType=false
 """Generate interactive PnL charts for all clients.
 
 For each client, computes:

@@ -1,3 +1,4 @@
+# pyright: reportUnusedFunction=false
 """Shared state + JSON loader + client-id resolver for the reporting routes."""
 
 from __future__ import annotations

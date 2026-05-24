@@ -314,7 +314,7 @@ class TestCashAccountView:
 
 
 class TestEntitlementEnforcement:
-    """Directly exercises ``_enforce_entitlement`` to cover both branches.
+    """Directly exercises ``enforce_entitlement`` to cover both branches.
 
     The route-level tests above cover the HTTP contract; this one locks
     the unit-level invariant so a future refactor of the helper doesn't
@@ -331,7 +331,7 @@ class TestEntitlementEnforcement:
             is_internal=False,
         )
         with pytest.raises(HTTPException) as excinfo:
-            allocators_module._enforce_entitlement(auth, "client-B")
+            allocators_module.enforce_entitlement(auth, "client-B")
         assert excinfo.value.status_code == 403
 
     def test_external_match_passes(self) -> None:
@@ -342,7 +342,7 @@ class TestEntitlementEnforcement:
             is_internal=False,
         )
         # No exception — None return is success.
-        allocators_module._enforce_entitlement(auth, "client-A")
+        allocators_module.enforce_entitlement(auth, "client-A")
 
     def test_internal_bypass(self) -> None:
         auth = AuthContext(
@@ -351,4 +351,4 @@ class TestEntitlementEnforcement:
             role="admin",
             is_internal=True,
         )
-        allocators_module._enforce_entitlement(auth, "any-client")
+        allocators_module.enforce_entitlement(auth, "any-client")

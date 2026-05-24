@@ -27,7 +27,7 @@ from unified_api_contracts import (
 )
 from unified_trading_library import AuthContext, create_api_auth
 
-from client_reporting_api.core.entitlement import _enforce_entitlement  # pyright: ignore[reportPrivateUsage]
+from client_reporting_api.core.entitlement import enforce_entitlement  # pyright: ignore[reportPrivateUsage]
 from client_reporting_api.core.fund_admin_provider import (
     FundAdminProvider,
     get_fund_admin_provider,
@@ -61,7 +61,7 @@ def list_allocator_subscriptions(
     re-sort if a specific timeline is required (the UI renders via a
     table that owns its own sort).
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     return provider.list_subscriptions_for_client(client_id)
 
 
@@ -72,7 +72,7 @@ def list_allocator_redemptions(
     provider: ProviderDep,
 ) -> list[AllocatorRedemption]:
     """Return the full redemption history for an allocator / client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     return provider.list_redemptions_for_client(client_id)
 
 
@@ -96,7 +96,7 @@ def get_allocator_cash_account(
     ``current_balance_usd`` is the signed sum of settled rows. YTD totals
     are unsigned gross figures for display.
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     return provider.get_cash_account_view(client_id, share_class)
 
 

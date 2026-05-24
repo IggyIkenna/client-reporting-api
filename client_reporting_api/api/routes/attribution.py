@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.attribution_reader import read_attribution_rows
-from client_reporting_api.core.entitlement import _enforce_entitlement  # pyright: ignore[reportPrivateUsage]
+from client_reporting_api.core.entitlement import enforce_entitlement  # pyright: ignore[reportPrivateUsage]
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/clients/{client_id}", tags=["attribution"])
@@ -235,7 +235,7 @@ def get_client_nav(
     date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
 ) -> dict[str, object]:
     """NAV time-series for a client. Reads attribution parquet, sums amounts per date."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_nav(client_id, date_from, date_to)
     rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
@@ -250,7 +250,7 @@ def get_client_pnl(
     date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
 ) -> dict[str, object]:
     """Daily PnL series for a client. Returns strategy_alpha + execution_alpha split per day."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_pnl(client_id, date_from, date_to)
     rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
@@ -267,7 +267,7 @@ def get_client_positions(
     Positions snapshot is sourced from position-balance-monitor-service parquet.
     MVP returns mock data — real feed plugged in Phase 8 demo run.
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     return _mock_positions(client_id)
 
 
@@ -282,7 +282,7 @@ def get_client_attribution(
 
     Returns raw PnLAttributionRow records grouped by (strategy_id, instrument, factor, layer).
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_attribution(client_id, date_from, date_to)
     rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)

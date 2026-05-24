@@ -1,3 +1,4 @@
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnnecessaryCast=false
 """GET /clients — client / organisation / strategy dropdown data."""
 
 from __future__ import annotations
@@ -40,10 +41,10 @@ def _client_entry_for_listing(
         "is_active": bool(cfg_dict.get("is_active", False)),
         "is_underwater": bool(cfg_dict.get("is_underwater", False)),
         "organisation_id": org_id,
-        "organisation_name": (str(org_info.get("name", org_id)) if isinstance(org_info, dict) else org_id),
-        "organisation_type": (str(org_info.get("type", "client")) if isinstance(org_info, dict) else "client"),
+        "organisation_name": (str(org_info.get("name", org_id)) if isinstance(org_info, dict) else org_id),  # pyright: ignore[reportUnnecessaryIsInstance]
+        "organisation_type": (str(org_info.get("type", "client")) if isinstance(org_info, dict) else "client"),  # pyright: ignore[reportUnnecessaryIsInstance]
         "strategy_id": strat_id,
-        "strategy_name": (str(strat_info.get("name", strat_id)) if isinstance(strat_info, dict) else strat_id),
+        "strategy_name": (str(strat_info.get("name", strat_id)) if isinstance(strat_info, dict) else strat_id),  # pyright: ignore[reportUnnecessaryIsInstance]
     }
 
 

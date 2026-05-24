@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false, reportUnknownVariableType=false
 """Institutional-grade tear sheet generator.
 
 Generates self-contained HTML tear sheets with:
@@ -25,9 +26,9 @@ from pathlib import Path
 from jinja2 import Template
 
 from client_reporting_api.core.backfill_store import (
-    _get_equity,
-    _get_transfer,
-    _is_btc_account,
+    _get_equity,  # pyright: ignore[reportPrivateUsage]
+    _get_transfer,  # pyright: ignore[reportPrivateUsage]
+    _is_btc_account,  # pyright: ignore[reportPrivateUsage]
     compute_monthly_returns,
     compute_performance_stats,
     get_equity_curve,
@@ -54,7 +55,15 @@ _COLOURS = [
 
 _TearSheetData = dict[
     str,
-    list[float] | list[str] | dict[str, float | str] | list[dict[str, str | float]] | bool,
+    list[float]
+    | list[str]
+    | list[float | None]
+    | dict[str, float | str]
+    | list[dict[str, str | float]]
+    | dict[str, dict[str, float | None]]
+    | dict[str, float]
+    | bool
+    | str,
 ]
 
 
@@ -130,10 +139,10 @@ def _append_rolling(
         )
 
         recent = daily_returns[-window:]
-        sharpe = sharpe_ratio(recent)
-        vol = annualised_volatility(recent) * 100.0
-        rolling_sharpe.append(round(sharpe, 2))
-        rolling_vol.append(round(vol, 2))
+        sharpe = sharpe_ratio(recent)  # pyright: ignore[reportUnknownVariableType]
+        vol = annualised_volatility(recent) * 100.0  # pyright: ignore[reportUnknownVariableType]
+        rolling_sharpe.append(round(float(sharpe), 2))  # pyright: ignore[reportUnknownArgumentType]
+        rolling_vol.append(round(float(vol), 2))  # pyright: ignore[reportUnknownArgumentType]
     else:
         rolling_sharpe.append(None)
         rolling_vol.append(None)

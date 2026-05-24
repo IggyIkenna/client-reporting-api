@@ -45,7 +45,7 @@ from client_reporting_api.api.routes import (
     trades as trades_module,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    enforce_entitlement,
     require_internal,
 )
 
@@ -58,16 +58,16 @@ class TestEnforceEntitlement:
     def test_internal_caller_bypasses(self) -> None:
         auth = AuthContext(org_id="anything", user_id="svc", role="admin", is_internal=True)
         # No raise.
-        _enforce_entitlement(auth, "client-A")
+        enforce_entitlement(auth, "client-A")
 
     def test_external_match_passes(self) -> None:
         auth = AuthContext(org_id="client-A", user_id="u", role="external", is_internal=False)
-        _enforce_entitlement(auth, "client-A")
+        enforce_entitlement(auth, "client-A")
 
     def test_external_mismatch_raises_403(self) -> None:
         auth = AuthContext(org_id="client-A", user_id="u", role="external", is_internal=False)
         with pytest.raises(HTTPException) as excinfo:
-            _enforce_entitlement(auth, "client-B")
+            enforce_entitlement(auth, "client-B")
         assert excinfo.value.status_code == 403
 
 

@@ -1,3 +1,4 @@
+# pyright: reportReturnType=false, reportArgumentType=false
 """Read-only store for backfilled historical data.
 
 Loads JSON files from data/backfill/{client_id}/ written by

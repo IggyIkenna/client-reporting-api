@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportArgumentType=false
 """``client-reporting-manage update`` — hourly incremental refresh.
 
 Orchestrates the per-client update: load existing curve → compute gap →

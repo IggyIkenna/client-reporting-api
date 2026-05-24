@@ -19,7 +19,7 @@ from client_reporting_api.core.backfill_store import (
     get_backfill_summary,
     get_equity_curve,
 )
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.live_data_provider import get_collector
 from client_reporting_api.core.mock_performance_data import (
     MOCK_BALANCE_BREAKDOWN,
@@ -48,7 +48,7 @@ def get_performance_summary(
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return full performance summary with equity curve, monthly returns, and stats."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return get_mock_performance_summary(client_id)
 
@@ -90,7 +90,7 @@ def get_open_positions(
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return current open positions with unrealized P&L."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {"client_id": client_id, "positions": MOCK_POSITIONS}
 
@@ -122,7 +122,7 @@ def get_balance_breakdown(
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Return per-asset balance breakdown with USD values."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {"client_id": client_id, **MOCK_BALANCE_BREAKDOWN}
 
@@ -159,7 +159,7 @@ def get_coin_breakdown(
     buy/sell split, avg holding time, round trips.
     Validated: sum(coin.net_pnl) == total_net_pnl.
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {"client_id": client_id, "coins": MOCK_COIN_BREAKDOWN}
 

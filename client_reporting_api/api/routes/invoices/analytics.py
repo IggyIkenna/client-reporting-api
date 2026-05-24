@@ -1,3 +1,4 @@
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false
 """Trade analytics + performance stats + order browser endpoints."""
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from client_reporting_api.core.backfill_store import (
     get_equity_curve,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
+    enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.trade_analytics import (
@@ -36,7 +37,7 @@ _BACKFILL_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent / "
 @router.get("/analytics/{client_id}")
 def get_trade_analytics(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Coin-level PnL, volume, holding time breakdown for a client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ta = compute_coin_breakdown(cid)
     return asdict(ta)
@@ -60,7 +61,7 @@ def get_aggregated_analytics(
 @router.get("/performance/{client_id}")
 def get_performance_stats(client_id: str, auth: AuthDep) -> Mapping[str, object]:
     """Full performance stats: Sharpe, Sortino, Calmar, max drawdown, win rate, etc."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ec = get_equity_curve(cid)
     if not ec:
@@ -94,7 +95,7 @@ def get_orders(
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, object]:
     """Browse orders for a client with pagination and filters."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     orders_path = _BACKFILL_ROOT / cid / "orders.json"
     if not orders_path.exists():
@@ -103,7 +104,7 @@ def get_orders(
     with open(orders_path) as f:
         all_orders = json.load(f)
 
-    all_orders.sort(key=lambda o: o.get("timestamp", 0) or 0, reverse=True)
+    all_orders.sort(key=lambda o: float(o.get("timestamp", 0) or 0), reverse=True)  # pyright: ignore[reportUnknownLambdaType]
     all_orders = _filter_orders_in_place(all_orders, symbol, side, status)
 
     total = len(all_orders)

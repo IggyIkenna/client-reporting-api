@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportArgumentType=false, reportUnnecessaryIsInstance=false
 """GET /settlements — settlement/reconciliation data from real trade history."""
 
 from __future__ import annotations

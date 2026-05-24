@@ -49,7 +49,7 @@ class TradeAnalytics:  # CORRECT-LOCAL: service-internal trade analytics datacla
     client_id: str
     strategy: str = "Mean Reversion Grid"
     # Coin breakdown
-    coins: list[CoinBreakdown] = field(default_factory=list)
+    coins: list[CoinBreakdown] = field(default_factory=list)  # pyright: ignore[reportUnknownVariableType]
     # Totals
     total_realized_pnl: float = 0.0
     total_trading_fees: float = 0.0
@@ -68,9 +68,9 @@ class TradeAnalytics:  # CORRECT-LOCAL: service-internal trade analytics datacla
     first_trade_date: str = ""
     last_trade_date: str = ""
     # Daily volume series for charting
-    daily_volumes: list[dict[str, str | float]] = field(default_factory=list)
+    daily_volumes: list[dict[str, str | float]] = field(default_factory=list)  # pyright: ignore[reportUnknownVariableType]
     # Monthly PnL series
-    monthly_pnl: list[dict[str, str | float]] = field(default_factory=list)
+    monthly_pnl: list[dict[str, str | float]] = field(default_factory=list)  # pyright: ignore[reportUnknownVariableType]
 
 
 def _load_json(client_id: str, filename: str) -> list[dict[str, str | float | None]] | None:
@@ -110,7 +110,8 @@ def _aggregate_bills(bills: list[dict[str, str | float | None]]) -> _BillsAggreg
         sym = inst.split("-")[0] if inst else ""
         if not sym:
             continue
-        change = float(b.get("change", 0))
+        change_raw = b.get("change", 0) or 0
+        change = float(change_raw)
         sub_type = b.get("sub_type", "")
         bill_type = b.get("type", "")
         if sub_type == "5":  # realized PnL from closing

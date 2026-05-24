@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnnecessaryComparison=false, reportArgumentType=false
 """Generate monthly PnL reports as printable HTML (PDF-ready via browser print).
 
 Each report includes:

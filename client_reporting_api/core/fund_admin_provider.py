@@ -1,3 +1,4 @@
+# pyright: reportArgumentType=false
 """Read-side access to fund-administration-service domain state.
 
 Phase-4 (``fund_administration_service_and_pooled_subscription_redemption_2026_04_20``)

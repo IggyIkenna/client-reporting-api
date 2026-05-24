@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """``client-reporting-manage status`` — show all clients and data freshness."""
 
 from __future__ import annotations

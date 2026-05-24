@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.mock_performance_data import MOCK_TRADES
 
 logger = logging.getLogger(__name__)
@@ -176,7 +176,7 @@ def get_annual_tax_summary(
     tax_year: int = Query(2025, description="Tax year to report on"),
 ) -> AnnualTaxSummary:
     """Return FIFO cost-basis tax lots and summary for a tax year."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _build_annual_summary(client_id, tax_year, MOCK_TRADES)
 
@@ -203,7 +203,7 @@ def export_annual_tax_csv(
     tax_year: int = Query(2025, description="Tax year to report on"),
 ) -> StreamingResponse:
     """Download FIFO tax lots as CSV for a given tax year."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     summary = _build_annual_summary(client_id, tax_year, MOCK_TRADES)
 
     fields = [

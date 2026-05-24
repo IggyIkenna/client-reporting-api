@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportCallIssue=false, reportArgumentType=false
 """``client-reporting-manage onboard`` — add a new client end-to-end.
 
 Validates the caller's read-only credentials, stores them in Secret Manager

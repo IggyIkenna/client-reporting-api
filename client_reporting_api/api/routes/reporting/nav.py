@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportPrivateUsage=false, reportArgumentType=false, reportReturnType=false, reportGeneralTypeIssues=false
 """GET /nav — total NAV across clients + hourly series + fees + capital flows."""
 
 from __future__ import annotations

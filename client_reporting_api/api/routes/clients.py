@@ -14,7 +14,7 @@ from unified_api_contracts.internal import ClientConfig, CredentialsRegistry
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
+    enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.mock_performance_data import MOCK_CLIENTS
@@ -123,7 +123,7 @@ def list_clients(
 
     Listing every client is a cross-tenant operation so the endpoint is
     internal-only. External callers should use ``GET /api/v1/clients/{client_id}``
-    for their own client — that route runs ``_enforce_entitlement``.
+    for their own client — that route runs ``enforce_entitlement``.
     """
     require_internal(auth)
     if _cloud_cfg.is_mock_mode():
@@ -143,7 +143,7 @@ def list_clients(
 @router.get("/{client_id}")
 def get_client(client_id: str, auth: AuthDep) -> dict[str, str | bool]:
     """Return config for a single client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         for c in MOCK_CLIENTS:
             if c["id"] == client_id:

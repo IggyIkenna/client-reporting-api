@@ -16,7 +16,7 @@ from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.invoices._shared import decimal_safe, state_mgr
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
+    enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 
@@ -34,13 +34,13 @@ def fee_dashboard(auth: AuthDep) -> dict[str, object]:
     """
     require_internal(auth)
     summary = state_mgr.get_dashboard_summary()
-    return decimal_safe(summary)
+    return cast(dict[str, object], decimal_safe(summary))
 
 
 @router.get("/fees/{client_id}")
 def client_fee_detail(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Detailed fee breakdown for a single client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     fees = state_mgr.compute_current_fees(client_id.upper())
     if fees is None:
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
@@ -109,13 +109,13 @@ def trader_payment_summary(auth: AuthDep) -> dict[str, object]:
             "total_trader_credits_outstanding": state_mgr.get_total_trader_credits(),
         }
     )
-    return cast(dict[str, object], result)
+    return cast(dict[str, object], decimal_safe(result))
 
 
 @router.get("/hwm/{client_id}")
 def get_hwm_state(client_id: str, auth: AuthDep) -> dict[str, object]:
     """Get current HWM state for a client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     state = state_mgr.get_hwm_state(client_id.upper())
     if state is None:
         raise HTTPException(status_code=404, detail=f"No HWM state for {client_id}")

@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    enforce_entitlement,
     require_internal,
 )
 from client_reporting_api.mock_state import get_store
@@ -84,7 +84,7 @@ def list_manual_snapshots(
     client_id: str = Query(..., description="Client identifier"),
 ) -> list[dict[str, object]]:
     """List manual equity snapshots for a client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     all_snaps = _store.list("manual_snapshots")
     return [s for s in all_snaps if s.get("client_id") == client_id]
 
@@ -122,6 +122,6 @@ def list_manual_returns(
     client_id: str = Query(..., description="Client identifier"),
 ) -> list[dict[str, object]]:
     """List manual monthly returns for a client."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     all_returns = _store.list("manual_returns")
     return [r for r in all_returns if r.get("client_id") == client_id]

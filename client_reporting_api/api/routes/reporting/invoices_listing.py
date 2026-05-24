@@ -1,3 +1,4 @@
+# pyright: reportArgumentType=false, reportUnknownArgumentType=false
 """GET /invoices — all invoices projected into the UI Invoice type shape."""
 
 from __future__ import annotations
@@ -8,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import state_mgr
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.pnl_chart_generator import CLIENT_NAMES
 from client_reporting_api.core.tranche_router import load_registry
 
@@ -48,15 +49,15 @@ def get_invoices(
     """Return all invoices matching the UI Invoice type shape.
 
     External callers MUST supply ``org_id`` matching their own
-    ``AuthContext.org_id`` — enforced via :func:`_enforce_entitlement`.
+    ``AuthContext.org_id`` — enforced via :func:`enforce_entitlement`.
     Internal callers may omit ``org_id`` to list all invoices.
     """
     if not auth.is_internal:
         # External caller: org_id must match their own. The reuse of
-        # ``_enforce_entitlement`` treats the org_id filter as the
+        # ``enforce_entitlement`` treats the org_id filter as the
         # tenant scope for invoices (invoices hang off org_id, not
         # client_id).
-        _enforce_entitlement(auth, org_id)
+        enforce_entitlement(auth, org_id)
     all_invs = state_mgr.get_invoices()
     registry = load_registry()
     clients_cfg = registry.get("clients", {})

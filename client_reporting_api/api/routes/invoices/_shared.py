@@ -46,7 +46,7 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
-def decimal_safe(obj: object) -> object:
+def decimal_safe(obj: object) -> Any:
     """Convert Decimals to floats for JSON serialisation (recursive)."""
     if isinstance(obj, Decimal):
         return float(obj)

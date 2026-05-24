@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.pnl_reader import generate_pnl_report
 from client_reporting_api.mock_data import MOCK_PERFORMANCE, MOCK_PNL
 
@@ -27,7 +27,7 @@ def get_pnl(
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """Return PnL attribution data for a client/period from GCS."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {**MOCK_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_pnl: client_id=%s period_month=%s", client_id, period_month)
@@ -49,7 +49,7 @@ def get_performance(
     In mock mode returns realistic sample performance data.
     In live mode computes from GCS PnL data.
     """
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return {**MOCK_PERFORMANCE, "client_id": client_id, "period_month": period_month}
     # Live implementation: compute performance metrics from PnL data

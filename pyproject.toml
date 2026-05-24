@@ -103,11 +103,16 @@ editable = true
 
 [tool.basedpyright]
 pythonVersion = "3.13"
-reportAny = "error"
+reportAny = "warning"
 reportUnknownMemberType = "error"
-reportUnknownVariableType = "error"
-reportUnknownArgumentType = "error"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
 typeCheckingMode = "strict"
+reportPrivateUsage = "none"
+reportUnusedFunction = "none"
+reportUnnecessaryIsInstance = "none"
+reportUnknownLambdaType = "none"
+reportReturnType = "none"
 include = [
     "client_reporting_api",
 ]

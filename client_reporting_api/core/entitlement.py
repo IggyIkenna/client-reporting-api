@@ -4,7 +4,7 @@ This module is the single source of truth for per-route authorisation on
 top of the blanket ``create_api_auth`` gate that already validates the
 caller's token. Two helpers are exposed:
 
-* :func:`_enforce_entitlement` — reject external callers whose
+* :func:`enforce_entitlement` — reject external callers whose
   ``AuthContext.org_id`` does not match the ``client_id`` they are
   trying to read. Internal callers (``is_internal=True``) bypass the
   check, matching the allocator-routes semantics shipped in Phase 4 of
@@ -31,7 +31,7 @@ from unified_trading_library import AuthContext
 logger = logging.getLogger(__name__)
 
 
-def _enforce_entitlement(auth: AuthContext, client_id: str) -> None:
+def enforce_entitlement(auth: AuthContext, client_id: str) -> None:
     """Reject with 403 when the caller's entitled client does not match.
 
     Internal callers (admin / S2S / local dev) bypass the check — they
@@ -91,4 +91,4 @@ def require_internal(auth: AuthContext) -> None:
     )
 
 
-__all__ = ["_enforce_entitlement", "require_internal"]
+__all__ = ["enforce_entitlement", "require_internal"]

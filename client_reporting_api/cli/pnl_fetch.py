@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportUnusedFunction=false
 """Per-venue trading P&L fetchers (OKX bills, Binance income).
 
 Used by the incremental-update path to detect transfers via

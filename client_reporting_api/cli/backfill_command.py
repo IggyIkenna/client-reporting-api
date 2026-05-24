@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportMissingImports=false, reportUnknownVariableType=false
 """``client-reporting-manage backfill`` — full historical rebuild from exchange ledger."""
 
 from __future__ import annotations

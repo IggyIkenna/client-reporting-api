@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    enforce_entitlement,
     require_internal,
 )
 from client_reporting_api.core.pnl_reader import generate_pnl_report
@@ -37,7 +37,7 @@ def list_reports(auth: AuthDep) -> list[dict[str, object]]:
 
     Cross-client listing — internal-only. External callers should use the
     per-client endpoints (``/api/v1/pnl``, ``/api/v1/performance/summary``)
-    that apply ``_enforce_entitlement``.
+    that apply ``enforce_entitlement``.
 
     In mock mode returns seed + mutated reports (performance, risk, compliance types).
     In live mode reads from GCS report metadata.
@@ -56,7 +56,7 @@ def generate_report(request: GenerateReportRequest, auth: AuthDep) -> dict[str, 
     Reads Parquet files from GCS at pnl/{period_month}/{client_id}/ and
     returns a structured report payload.
     """
-    _enforce_entitlement(auth, request.client_id)
+    enforce_entitlement(auth, request.client_id)
     if _cloud_cfg.is_mock_mode():
         new_report: dict[str, object] = {
             **MOCK_GENERATE_RESPONSE,

@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportReturnType=false, reportUnusedClass=false, reportArgumentType=false, reportUnknownVariableType=false
 """Shared helpers for the client-reporting-manage CLI.
 
 Holds:

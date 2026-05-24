@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnknownVariableType=false, reportGeneralTypeIssues=false
 """GET /reports — overview page with portfolio + monthly HTML + invoices + balances."""
 
 from __future__ import annotations

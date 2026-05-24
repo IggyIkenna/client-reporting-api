@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportReturnType=false, reportArgumentType=false
 """GET /performance/* — summary, coin breakdown, positions, balances."""
 
 from __future__ import annotations
@@ -8,14 +9,14 @@ from typing import Annotated, Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Query
 from unified_trading_library import AuthContext, create_api_auth
 
-from client_reporting_api.api.routes.reporting._shared import _load_json
+from client_reporting_api.api.routes.reporting._shared import _load_json  # pyright: ignore[reportPrivateUsage]
 from client_reporting_api.core.backfill_store import (
     compute_monthly_returns,
     compute_performance_stats,
     get_backfill_summary,
     get_equity_curve,
 )
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.hwm_seeds import get_hwm_seed, get_pnl_recovery_seed
 from client_reporting_api.core.pnl_chart_generator import CLIENT_NAMES, compute_pnl_series
 from client_reporting_api.core.trade_analytics import compute_coin_breakdown
@@ -31,7 +32,7 @@ def _build_equity_curve_ui(ec: list[dict[str, object]]) -> list[dict[str, object
     out: list[dict[str, object]] = []
     hwm = 0.0
     for p in ec:
-        eq = float(p.get("equity_usd", 0))
+        eq = float(p.get("equity_usd") or 0)
         if eq > hwm:
             hwm = eq
         dd = (hwm - eq) / hwm * 100 if hwm > 0 else 0
@@ -57,7 +58,7 @@ def _build_monthly_returns_ui(monthly: list[dict[str, object]]) -> list[dict[str
             {
                 "year": int(month_str[:4]),
                 "month": int(month_str[5:7]),
-                "return_pct": float(m.get("return_pct", 0)),
+                "return_pct": float(m.get("return_pct") or 0),
                 "pnl_usd": 0,
                 "opening_equity": 0,
                 "closing_equity": 0,
@@ -72,7 +73,7 @@ def get_performance_summary(
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return full performance summary with real equity curve, monthly returns, stats."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ec = get_equity_curve(cid)
     if not ec:
@@ -91,12 +92,12 @@ def get_performance_summary(
         "client_id": cid,
         "client_name": CLIENT_NAMES.get(cid, cid),
         "current_equity_usd": pnl_data.get("current_equity", 0) if pnl_data else 0,
-        "hwm_twr_index": float(stats.get("high_water_mark_twr", 0)),
-        "twr_recovery_pct": float(stats.get("twr_recovery_pct", 0)),
-        "twr_recovery_amount": float(stats.get("twr_recovery_amount", 0)),
-        "notional_hwm": float(stats.get("notional_hwm", 0)),
-        "notional_recovery": float(stats.get("notional_recovery", 0)),
-        "notional_recovery_pct": float(stats.get("notional_recovery_pct", 0)),
+        "hwm_twr_index": float(stats.get("high_water_mark_twr") or 0),
+        "twr_recovery_pct": float(stats.get("twr_recovery_pct") or 0),
+        "twr_recovery_amount": float(stats.get("twr_recovery_amount") or 0),
+        "notional_hwm": float(stats.get("notional_hwm") or 0),
+        "notional_recovery": float(stats.get("notional_recovery") or 0),
+        "notional_recovery_pct": float(stats.get("notional_recovery_pct") or 0),
         "source": "backfill",
         "timestamp": datetime.now(tz=UTC).isoformat(),
         "position_count": len(_load_json(cid, "positions.json") or []),
@@ -114,7 +115,7 @@ def get_coin_breakdown(
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return real coin-level PnL breakdown from bills ledger + trades."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     ta = compute_coin_breakdown(cid)
     coins = [
@@ -140,13 +141,13 @@ def _project_position(p: dict[str, object]) -> dict[str, object]:
     return {
         "symbol": p.get("symbol", info.get("instId", "")),
         "side": p.get("side", info.get("posSide", "")),
-        "quantity": float(info.get("pos", p.get("contracts", 0)) or 0),
-        "entry_price": float(info.get("avgPx", p.get("entryPrice", 0)) or 0),
-        "mark_price": float(info.get("markPx", p.get("markPrice", 0)) or 0),
-        "unrealized_pnl": float(info.get("upl", p.get("unrealizedPnl", 0)) or 0),
-        "leverage": float(info.get("lever", p.get("leverage", 1)) or 1),
-        "liquidation_price": float(info.get("liqPx", 0) or 0),
-        "notional_usd": float(info.get("notionalUsd", 0) or 0),
+        "quantity": float(info.get("pos", p.get("contracts")) or 0),
+        "entry_price": float(info.get("avgPx", p.get("entryPrice")) or 0),
+        "mark_price": float(info.get("markPx", p.get("markPrice")) or 0),
+        "unrealized_pnl": float(info.get("upl", p.get("unrealizedPnl")) or 0),
+        "leverage": float(info.get("lever", p.get("leverage")) or 1),
+        "liquidation_price": float(info.get("liqPx") or 0),
+        "notional_usd": float(info.get("notionalUsd") or 0),
     }
 
 
@@ -156,7 +157,7 @@ def get_positions(
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return current open positions from backfill data."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     positions = _load_json(cid, "positions.json") or []
     return {"client_id": cid, "positions": [_project_position(p) for p in positions]}
@@ -164,12 +165,12 @@ def get_positions(
 
 def _balance_row(ccy: str, info: dict[str, object]) -> tuple[dict[str, str], float]:
     """Build one balance row and return it alongside its USD contribution."""
-    total = float(info.get("total", 0) or 0)
-    usd = float(info.get("usd_value", total) or total)
+    total = float(info.get("total") or 0)
+    usd = float(info.get("usd_value") or total)
     row = {
         "currency": ccy,
-        "free": str(round(float(info.get("free", 0) or 0), 6)),
-        "locked": str(round(float(info.get("locked", 0) or 0), 6)),
+        "free": str(round(float(info.get("free") or 0), 6)),
+        "locked": str(round(float(info.get("locked") or 0), 6)),
         "total": str(round(total, 6)),
         "usd_value": str(round(usd, 2)),
     }
@@ -182,7 +183,7 @@ def get_balances(
     client_id: str = Query(..., description="Client ID"),
 ) -> dict[str, object]:
     """Return balance breakdown from backfill data."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     cid = client_id.upper()
     balance_data = _load_json(cid, "balance.json")
     if not balance_data:

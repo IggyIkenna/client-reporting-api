@@ -8,13 +8,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.backfill_store import get_backfill_trades
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.live_data_provider import get_collector
 from client_reporting_api.core.mock_performance_data import MOCK_TRADES
 
@@ -41,7 +41,7 @@ def get_trade_history(
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> dict[str, object]:
     """Return paginated trade history with fills, fees, and P&L."""
-    _enforce_entitlement(auth, client_id)
+    enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_trades(client_id, symbol, side, limit, offset)
 
@@ -79,9 +79,9 @@ def get_trade_history(
     total = len(trades)
     trades = trades[offset : offset + limit]
 
-    total_volume = sum(float(t["notional_usd"]) for t in trades)
-    total_fees = sum(float(t["fee"]) for t in trades)
-    net_pnl = sum(float(t["realized_pnl"]) for t in trades)
+    total_volume = sum(float(t.get("notional_usd", 0) or 0) for t in trades)
+    total_fees = sum(float(t.get("fee", 0) or 0) for t in trades)
+    net_pnl = sum(float(t.get("realized_pnl", 0) or 0) for t in trades)
 
     return {
         "client_id": client_id,
@@ -108,8 +108,8 @@ def _backfill_trades(client_id: str) -> list[dict[str, str | float | None]]:
         fee_cost = 0.0
         fee_currency = ""
         if isinstance(fee_info, dict):
-            fee_cost = float(fee_info.get("cost", 0) or 0)
-            fee_currency = str(fee_info.get("currency", ""))
+            fee_cost = float(cast(float, fee_info.get("cost", 0) or 0))
+            fee_currency = str(cast(str, fee_info.get("currency", "") or ""))
         qty = float(t.get("amount", 0) or 0)
         price = float(t.get("price", 0) or 0)
         # CCXT `cost` = amount * contractSize * price for derivatives.

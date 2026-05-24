@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
 """Collect and normalise transfers from all sources into canonical records.
 
 Sources:
@@ -49,7 +50,8 @@ def _parse_ccxt_transfer(
     fee_info = raw.get("fee")
     fee_cost = Decimal("0")
     if isinstance(fee_info, dict):
-        cost_value = fee_info.get("cost", 0) or 0
+        cost_raw = fee_info.get("cost", 0) or 0
+        cost_value = float(cost_raw) if cost_raw is not None else 0.0
         fee_cost = Decimal(str(cost_value))
 
     return TransferRecord(
