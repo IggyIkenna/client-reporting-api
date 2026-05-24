@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from typing import Any, cast
 
 from pydantic import BaseModel
 from unified_trading_library import UnifiedCloudConfig
@@ -50,7 +51,8 @@ def decimal_safe(obj: object) -> object:
     if isinstance(obj, Decimal):
         return float(obj)
     if isinstance(obj, dict):
-        return {k: decimal_safe(v) for k, v in obj.items()}
+        dict_obj = cast(dict[Any, Any], obj)
+        return {k: decimal_safe(v) for k, v in dict_obj.items()}
     if isinstance(obj, list):
         return [decimal_safe(item) for item in obj]
     return obj

@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import _enforce_entitlement  # pyright: ignore[reportPrivateUsage]
 from client_reporting_api.core.hwm_reader import read_fee_recognition_rows
 
 logger = logging.getLogger(__name__)

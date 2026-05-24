@@ -73,7 +73,7 @@ class TradeAnalytics:  # CORRECT-LOCAL: service-internal trade analytics datacla
     monthly_pnl: list[dict[str, str | float]] = field(default_factory=list)
 
 
-def _load_json(client_id: str, filename: str) -> list[dict[str, str | float]] | None:
+def _load_json(client_id: str, filename: str) -> list[dict[str, str | float | None]] | None:
     path = _DATA_DIR / client_id / filename
     if not path.exists():
         return None
@@ -101,12 +101,12 @@ class _TradesAggregate:
     daily_volume: dict[str, float] = field(default_factory=lambda: defaultdict(float))
 
 
-def _aggregate_bills(bills: list[dict[str, str | float]]) -> _BillsAggregate:
+def _aggregate_bills(bills: list[dict[str, str | float | None]]) -> _BillsAggregate:
     """Sum realized PnL, fees, and funding per coin from a bills ledger."""
     agg = _BillsAggregate()
     for b in bills:
         inst_raw = b.get("inst_id", "")
-        inst = str(inst_raw) if inst_raw is not None else ""
+        inst = str(inst_raw) if inst_raw else ""
         sym = inst.split("-")[0] if inst else ""
         if not sym:
             continue
@@ -235,7 +235,7 @@ def _populate_holding_aggregates(
         analytics.avg_holding_hours = round(sum(all_hours) / len(all_hours), 1)
 
 
-def _compute_monthly_pnl(bills: list[dict[str, str | float]]) -> list[dict[str, str | float]]:
+def _compute_monthly_pnl(bills: list[dict[str, str | float | None]]) -> list[dict[str, str | float]]:
     """Bucket bill ledger entries into a YYYY-MM PnL series."""
     monthly_pnl: dict[str, float] = defaultdict(float)
     for b in bills:

@@ -10,6 +10,7 @@ import logging
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from unified_api_contracts.internal import ClientConfig, CredentialsRegistry
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.entitlement import (
@@ -29,12 +30,13 @@ AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 def _build_client_entry(
     cid: str,
-    cfg: dict[str, str | float | bool | dict[str, float]],
-    registry: dict[str, dict[str, str | float | bool | dict[str, float]]],
+    cfg: ClientConfig,
+    registry: CredentialsRegistry,
 ) -> dict[str, str | bool]:
     """Build a client entry with org and strategy metadata."""
-    org_id = str(cfg.get("organisation_id", ""))
-    strategy_id = str(cfg.get("strategy_id", ""))
+    cfg_dict = cast(dict[str, Any], cfg)
+    org_id = str(cfg_dict.get("organisation_id", ""))
+    strategy_id = str(cfg_dict.get("strategy_id", ""))
 
     # Resolve org name from registry
     orgs = cast(dict[str, Any], registry.get("organisations", {}))
@@ -49,12 +51,12 @@ def _build_client_entry(
 
     return {
         "id": cid,
-        "name": str(cfg.get("full_name", cid)),
-        "venue": str(cfg.get("venue", "")),
-        "currency": str(cfg.get("currency", "")),
-        "tranche": str(cfg.get("tranche", "")),
-        "is_active": bool(cfg.get("is_active", False)),
-        "is_underwater": bool(cfg.get("is_underwater", False)),
+        "name": str(cfg_dict.get("full_name", cid)),
+        "venue": str(cfg_dict.get("venue", "")),
+        "currency": str(cfg_dict.get("currency", "")),
+        "tranche": str(cfg_dict.get("tranche", "")),
+        "is_active": bool(cfg_dict.get("is_active", False)),
+        "is_underwater": bool(cfg_dict.get("is_underwater", False)),
         "organisation_id": org_id,
         "organisation_name": org_name,
         "organisation_type": org_type,
@@ -64,16 +66,14 @@ def _build_client_entry(
 
 
 def _filter_clients(
-    clients_cfg: dict[str, object],
-    registry: dict[str, object],
+    clients_cfg: dict[str, ClientConfig],
+    registry: CredentialsRegistry,
     organisation_id: str | None,
     strategy_id: str | None,
 ) -> list[dict[str, str | bool]]:
     """Build the filtered client entry list for ``list_clients``."""
     clients: list[dict[str, str | bool]] = []
     for cid, cfg in clients_cfg.items():
-        if not isinstance(cfg, dict):
-            continue
         entry = _build_client_entry(cid, cfg, registry)
         if organisation_id and entry.get("organisation_id") != organisation_id:
             continue
@@ -83,7 +83,7 @@ def _filter_clients(
     return clients
 
 
-def _organisation_list(registry: dict[str, object]) -> list[dict[str, str]]:
+def _organisation_list(registry: CredentialsRegistry) -> list[dict[str, str]]:
     """Project the registry organisations dict to a UI-friendly list."""
     orgs_raw = registry.get("organisations", {})
     if not isinstance(orgs_raw, dict):
@@ -94,12 +94,11 @@ def _organisation_list(registry: dict[str, object]) -> list[dict[str, str]]:
             "name": str(oinfo.get("name", oid)),
             "type": str(oinfo.get("type", "client")),
         }
-        for oid, oinfo in orgs_raw.items()
-        if isinstance(oinfo, dict)
+        for oid, oinfo in cast(dict[str, dict[str, Any]], orgs_raw).items()
     ]
 
 
-def _strategy_list(registry: dict[str, object]) -> list[dict[str, str]]:
+def _strategy_list(registry: CredentialsRegistry) -> list[dict[str, str]]:
     """Project the registry strategies dict to a UI-friendly list."""
     strats_raw = registry.get("strategies", {})
     if not isinstance(strats_raw, dict):
@@ -110,8 +109,7 @@ def _strategy_list(registry: dict[str, object]) -> list[dict[str, str]]:
             "name": str(sinfo.get("name", sid)),
             "description": str(sinfo.get("description", "")),
         }
-        for sid, sinfo in strats_raw.items()
-        if isinstance(sinfo, dict)
+        for sid, sinfo in cast(dict[str, dict[str, Any]], strats_raw).items()
     ]
 
 
@@ -133,8 +131,7 @@ def list_clients(
 
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
-    if not isinstance(clients_cfg, dict):
-        clients_cfg = {}
+    # clients_cfg is always a dict[str, ClientConfig] from CredentialsRegistry
 
     return {
         "clients": _filter_clients(clients_cfg, registry, organisation_id, strategy_id),
@@ -156,7 +153,7 @@ def get_client(client_id: str, auth: AuthDep) -> dict[str, str | bool]:
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
     cfg = clients_cfg.get(client_id)
-    if cfg is None or not isinstance(cfg, dict):
+    if cfg is None:
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
 
     return _build_client_entry(client_id, cfg, registry)

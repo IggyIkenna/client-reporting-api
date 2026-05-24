@@ -15,7 +15,7 @@ from client_reporting_api.core.backfill_store import (
     get_equity_curve,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.trade_analytics import (

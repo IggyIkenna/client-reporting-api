@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends
 from unified_trading_library import AuthContext, create_api_auth
@@ -17,7 +17,7 @@ _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
-def _admin_at_hwm_rows(at_hwm: list[dict[str, object]]) -> list[dict[str, object]]:
+def _admin_at_hwm_rows(at_hwm: list[dict[str, Any]]) -> list[dict[str, object]]:
     """Project at-HWM clients into the admin portal row shape."""
     rows: list[dict[str, object]] = []
     for c in at_hwm:
@@ -42,7 +42,7 @@ def _admin_at_hwm_rows(at_hwm: list[dict[str, object]]) -> list[dict[str, object
     return rows
 
 
-def _admin_underwater_rows(underwater: list[dict[str, object]]) -> list[dict[str, object]]:
+def _admin_underwater_rows(underwater: list[dict[str, Any]]) -> list[dict[str, object]]:
     """Project underwater clients into the admin portal row shape."""
     rows: list[dict[str, object]] = []
     for c in underwater:
@@ -105,18 +105,21 @@ def portal_admin(auth: AuthDep) -> dict[str, object]:
     at_hwm = summary.get("at_hwm", [])
     underwater = summary.get("underwater", [])
 
-    clients = _admin_at_hwm_rows(at_hwm) + _admin_underwater_rows(underwater)
+    clients = _admin_at_hwm_rows(cast(list[dict[str, Any]], at_hwm)) + _admin_underwater_rows(
+        cast(list[dict[str, Any]], underwater)
+    )
 
     all_invoices = state_mgr.get_invoices()
     paid_invoices = [inv for inv in all_invoices if inv.get("status") == "PAID"]
 
-    return decimal_safe(
+    result = decimal_safe(
         {
             "clients": clients,
             "invoices_paid": paid_invoices,
             "introducers": _introducer_summary_rows(),
         }
     )
+    return cast(dict[str, object], result)
 
 
 def _trader_fee_row(c: dict[str, object]) -> dict[str, object] | None:

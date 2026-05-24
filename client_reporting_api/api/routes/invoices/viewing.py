@@ -14,7 +14,7 @@ from client_reporting_api.core.dashboard_generator import (
     generate_dashboard,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.invoice_generator import (

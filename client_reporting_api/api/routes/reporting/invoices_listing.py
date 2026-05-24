@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -65,7 +65,7 @@ def get_invoices(
     for inv in all_invs:
         cid = str(inv.get("client_id", ""))
         cfg = clients_cfg.get(cid, {})
-        client_org = str(cfg.get("organisation_id", "")) if isinstance(cfg, dict) else ""
+        client_org = str(cast(dict[str, object], cfg).get("organisation_id", "")) if cfg else ""
         if org_id and client_org != org_id:
             continue
         result.append(_invoice_row(inv, client_org, cid))

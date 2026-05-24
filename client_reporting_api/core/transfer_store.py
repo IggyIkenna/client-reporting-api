@@ -40,7 +40,7 @@ def clear_cache(client_id: str | None = None) -> None:
         _cache.pop(client_id, None)
 
 
-def get_net_deposits(client_id: str) -> dict[str, Decimal | str]:
+def get_net_deposits(client_id: str) -> dict[str, Decimal | dict[str, dict[str, Decimal]] | str]:
     """Compute net deposits per currency and total USD equivalent.
 
     Returns:

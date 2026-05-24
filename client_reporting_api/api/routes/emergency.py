@@ -23,7 +23,7 @@ from unified_trading_library import (  # pyright: ignore[reportPrivateImportUsag
 )
 
 from client_reporting_api.core.entitlement import require_internal
-from client_reporting_api.core.exchange_data_collector import _create_exchange
+from client_reporting_api.core.exchange_data_collector import _create_exchange  # pyright: ignore[reportPrivateUsage]
 from client_reporting_api.core.tranche_router import get_client_config
 
 logger = logging.getLogger(__name__)
@@ -110,13 +110,13 @@ def _get_trading_exchange(client_id: str) -> ccxt.Exchange | None:
     secret_base = f"trade-{client_lower}-{venue}"
 
     try:
-        api_key = get_secret(f"{secret_base}-api-key")
-        api_secret = get_secret(f"{secret_base}-api-secret")
+        api_key: str = get_secret(f"{secret_base}-api-key")
+        api_secret: str = get_secret(f"{secret_base}-api-secret")
     except RuntimeError:
         logger.warning("Trading credentials not found for %s", client_id)
         return None
 
-    passphrase = ""
+    passphrase: str = ""
     if venue == "okx":
         try:
             passphrase = get_secret(f"{secret_base}-passphrase")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -91,8 +91,9 @@ def _account_balance_entry(cid: str) -> dict[str, object] | None:
     last_eq = float(ec[-1].get("equity_usd", 0))
     registry = load_registry()
     client_cfg = registry.get("clients", {}).get(cid, {})
-    venue = str(client_cfg.get("venue", "")) if isinstance(client_cfg, dict) else ""
-    currency = str(client_cfg.get("currency", "")) if isinstance(client_cfg, dict) else ""
+    client_dict = cast(dict[str, object], client_cfg) if client_cfg else {}
+    venue = str(client_dict.get("venue", ""))
+    currency = str(client_dict.get("currency", ""))
     return {
         "venue": venue,
         "currency": currency,

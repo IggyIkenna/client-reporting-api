@@ -6,20 +6,20 @@ import csv
 import io
 import logging
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.backfill_store import (
-    _get_equity,
-    _get_transfer,
-    _is_btc_account,
+    _get_equity,  # pyright: ignore[reportPrivateUsage]
+    _get_transfer,  # pyright: ignore[reportPrivateUsage]
+    _is_btc_account,  # pyright: ignore[reportPrivateUsage]
     get_equity_curve,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.mock_performance_data import (
@@ -38,7 +38,7 @@ _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
-def _csv_stream(rows: list[dict[str, object]], fieldnames: list[str]) -> io.StringIO:
+def _csv_stream(rows: list[dict[str, Any]], fieldnames: list[str]) -> io.StringIO:
     """Convert a list of dicts to CSV in a StringIO buffer."""
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
@@ -90,7 +90,7 @@ def export_daily_summary_csv(
     monthly = summary.get("monthly_returns", [])
 
     fields = ["year", "month", "return_pct", "pnl_usd", "opening_equity", "closing_equity"]
-    buf = _csv_stream(monthly, fields)
+    buf = _csv_stream(cast(list[dict[str, Any]], monthly), fields)
     return StreamingResponse(
         buf,
         media_type="text/csv",
@@ -109,7 +109,7 @@ def export_hourly_snapshots_csv(
     curve = summary.get("equity_curve", [])
 
     fields = ["timestamp", "equity_usd", "hwm_usd", "drawdown_pct"]
-    buf = _csv_stream(curve, fields)
+    buf = _csv_stream(cast(list[dict[str, Any]], curve), fields)
     return StreamingResponse(
         buf,
         media_type="text/csv",
@@ -137,7 +137,7 @@ def export_coin_breakdown_csv(
         "allocation_pct",
         "trade_count",
     ]
-    buf = _csv_stream(MOCK_COIN_BREAKDOWN, fields)
+    buf = _csv_stream(cast(list[dict[str, Any]], MOCK_COIN_BREAKDOWN), fields)
     return StreamingResponse(
         buf,
         media_type="text/csv",

@@ -8,14 +8,14 @@ to floats via ``decimal_safe`` for JSON serialisation.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.invoices._shared import decimal_safe, state_mgr
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 
@@ -98,7 +98,7 @@ def trader_payment_summary(auth: AuthDep) -> dict[str, object]:
     server_costs_count = len(underwater)
     server_costs_total = Decimal("50") * server_costs_count
 
-    return decimal_safe(
+    result = decimal_safe(
         {
             "performance_fees": performance_fees,
             "total_performance_fees": total_perf,
@@ -108,6 +108,7 @@ def trader_payment_summary(auth: AuthDep) -> dict[str, object]:
             "total_trader_credits_outstanding": state_mgr.get_total_trader_credits(),
         }
     )
+    return cast(dict[str, object], result)
 
 
 @router.get("/hwm/{client_id}")

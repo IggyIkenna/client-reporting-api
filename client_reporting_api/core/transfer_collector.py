@@ -20,7 +20,7 @@ from pathlib import Path
 from unified_api_contracts.internal import TransferRecord
 
 from client_reporting_api.core.backfill_store import (
-    _is_btc_account,
+    _is_btc_account,  # pyright: ignore[reportPrivateUsage]
 )
 
 logger = logging.getLogger(__name__)

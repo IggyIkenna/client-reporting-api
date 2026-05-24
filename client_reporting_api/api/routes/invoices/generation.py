@@ -21,7 +21,7 @@ from client_reporting_api.api.routes.invoices._shared import (
     store,
 )
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.tranche_router import load_registry

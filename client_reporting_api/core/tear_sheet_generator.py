@@ -204,20 +204,22 @@ def _compute_client_data(client_id: str) -> _TearSheetData:
     }
 
 
-def _generate_csv_data(client_id: str, data: dict[str, list[float] | list[str]]) -> str:
+def _generate_csv_data(client_id: str, data: _TearSheetData) -> str:
     """Generate CSV content for daily data download."""
     output = io.StringIO()
     writer = csv.writer(output)
-    dates = data.get("dates", [])
-    equity = data.get("equity_series", [])
-    twr = data.get("twr_equity_series", [])
-    dd = data.get("drawdown_series", [])
+    from typing import cast
+
+    dates = cast(list[str], data.get("dates", []))
+    equity = cast(list[float], data.get("equity_series", []))
+    twr = cast(list[float], data.get("twr_equity_series", []))
+    dd = cast(list[float], data.get("drawdown_series", []))
 
     writer.writerow(["Date", "Equity", "TWR_Index", "Drawdown_Pct"])
     for i, date in enumerate(dates):
-        eq_val = equity[i] if i < len(equity) else ""
-        twr_val = twr[i] if i < len(twr) else ""
-        dd_val = dd[i] if i < len(dd) else ""
+        eq_val = equity[i] if i < len(equity) else 0.0
+        twr_val = twr[i] if i < len(twr) else 0.0
+        dd_val = dd[i] if i < len(dd) else 0.0
         writer.writerow([date, eq_val, twr_val, dd_val])
 
     return output.getvalue()
