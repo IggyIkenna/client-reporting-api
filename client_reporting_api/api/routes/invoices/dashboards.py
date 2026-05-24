@@ -7,6 +7,7 @@ to floats via ``decimal_safe`` for JSON serialisation.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Annotated, cast
 
@@ -59,7 +60,7 @@ def client_fee_detail(client_id: str, auth: AuthDep) -> dict[str, object]:
 
 
 def _performance_fee_rows(
-    at_hwm: list[dict[str, object]],
+    at_hwm: Sequence[dict[str, object]],
 ) -> tuple[list[dict[str, object]], Decimal]:
     """Project at-HWM entries to trader-fee rows; return (rows, total_fee)."""
     rows: list[dict[str, object]] = []
@@ -93,7 +94,7 @@ def trader_payment_summary(auth: AuthDep) -> dict[str, object]:
     at_hwm = summary.get("at_hwm", [])
     underwater = summary.get("underwater", [])
 
-    performance_fees, total_perf = _performance_fee_rows(at_hwm)
+    performance_fees, total_perf = _performance_fee_rows(cast(Sequence[dict[str, object]], at_hwm))
 
     server_costs_count = len(underwater)
     server_costs_total = Decimal("50") * server_costs_count

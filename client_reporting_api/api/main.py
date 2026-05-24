@@ -123,7 +123,8 @@ async def standard_error_handler(request: Request, exc: HTTPException) -> JSONRe
     """Return errors in a standard envelope: {error: {code, message, details}, request_id}."""
     request_id: str = getattr(request.state, "request_id", str(uuid.uuid4()))
     raw_detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
-    message: str = raw_detail.get("message") or str(exc.detail)
+    message_value = raw_detail.get("message") if isinstance(raw_detail, dict) else None
+    message: str = str(message_value) if message_value is not None else str(exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content={

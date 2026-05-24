@@ -110,8 +110,13 @@ def _get_trading_exchange(client_id: str) -> ccxt.Exchange | None:
     secret_base = f"trade-{client_lower}-{venue}"
 
     try:
-        api_key: str = get_secret(f"{secret_base}-api-key")
-        api_secret: str = get_secret(f"{secret_base}-api-secret")
+        api_key_result = get_secret(f"{secret_base}-api-key")
+        api_secret_result = get_secret(f"{secret_base}-api-secret")
+        if api_key_result is None or api_secret_result is None:
+            logger.warning("Trading credentials returned None for %s", client_id)
+            return None
+        api_key: str = api_key_result
+        api_secret: str = api_secret_result
     except RuntimeError:
         logger.warning("Trading credentials not found for %s", client_id)
         return None
@@ -119,7 +124,8 @@ def _get_trading_exchange(client_id: str) -> ccxt.Exchange | None:
     passphrase: str = ""
     if venue == "okx":
         try:
-            passphrase = get_secret(f"{secret_base}-passphrase")
+            passphrase_result = get_secret(f"{secret_base}-passphrase")
+            passphrase = passphrase_result or ""
         except RuntimeError:
             logger.warning("Trading passphrase not found for %s (OKX)", client_id)
 

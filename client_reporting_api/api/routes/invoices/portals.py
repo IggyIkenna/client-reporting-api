@@ -158,7 +158,7 @@ def portal_trader(auth: AuthDep) -> dict[str, object]:
     performance_fees: list[dict[str, object]] = []
     total_perf = Decimal("0")
     for c in at_hwm:
-        row = _trader_fee_row(c)
+        row = _trader_fee_row(cast(dict[str, object], c))
         if row is None:
             continue
         performance_fees.append(row)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
@@ -57,7 +58,7 @@ def get_aggregated_analytics(
 
 
 @router.get("/performance/{client_id}")
-def get_performance_stats(client_id: str, auth: AuthDep) -> dict[str, object]:
+def get_performance_stats(client_id: str, auth: AuthDep) -> Mapping[str, object]:
     """Full performance stats: Sharpe, Sortino, Calmar, max drawdown, win rate, etc."""
     _enforce_entitlement(auth, client_id)
     cid = client_id.upper()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -109,9 +109,10 @@ def _client_transfers(cid: str) -> list[dict[str, object]]:
     if not pnl_data:
         return []
     out: list[dict[str, object]] = []
-    for t in pnl_data.get("transfers", []):
-        if not isinstance(t, dict):
+    for t_raw in pnl_data.get("transfers", []):
+        if not isinstance(t_raw, dict):
             continue
+        t: dict[str, Any] = cast(dict[str, Any], t_raw)
         amt = float(t.get("amount", 0))
         out.append(
             {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -135,7 +135,8 @@ def get_coin_breakdown(
 
 def _project_position(p: dict[str, object]) -> dict[str, object]:
     """Project one position row from backfill into the UI shape."""
-    info = p.get("info", {}) if isinstance(p.get("info"), dict) else {}
+    info_raw = p.get("info", {})
+    info: dict[str, Any] = cast(dict[str, Any], info_raw) if isinstance(info_raw, dict) else {}
     return {
         "symbol": p.get("symbol", info.get("instId", "")),
         "side": p.get("side", info.get("posSide", "")),

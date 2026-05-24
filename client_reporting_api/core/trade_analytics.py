@@ -213,7 +213,7 @@ def _populate_capital_deployment(analytics: TradeAnalytics, client_id: str) -> N
     equity_curve = _load_json(client_id, "equity_curve.json") or []
     if not equity_curve or analytics.avg_daily_volume_usd <= 0:
         return
-    avg_equity = sum(float(p.get("equity_usd", 0)) for p in equity_curve) / len(equity_curve)
+    avg_equity = sum(float(p.get("equity_usd", 0) or 0) for p in equity_curve) / len(equity_curve)
     if avg_equity > 0:
         analytics.capital_deployment_ratio = round(analytics.avg_daily_volume_usd / avg_equity, 4)
 
@@ -247,7 +247,7 @@ def _compute_monthly_pnl(bills: list[dict[str, str | float | None]]) -> list[dic
             continue
         dt = datetime.fromtimestamp(float(ts) / 1000, tz=UTC)
         month = dt.strftime("%Y-%m")
-        monthly_pnl[month] += float(b.get("change", 0))
+        monthly_pnl[month] += float(b.get("change", 0) or 0)
     sorted_months = sorted(monthly_pnl.keys())
     return [{"month": m, "pnl_usd": round(monthly_pnl[m], 2)} for m in sorted_months]
 

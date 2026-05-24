@@ -49,7 +49,8 @@ def _parse_ccxt_transfer(
     fee_info = raw.get("fee")
     fee_cost = Decimal("0")
     if isinstance(fee_info, dict):
-        fee_cost = Decimal(str(fee_info.get("cost", 0) or 0))
+        cost_value = fee_info.get("cost", 0) or 0
+        fee_cost = Decimal(str(cost_value))
 
     return TransferRecord(
         transfer_id=str(raw.get("id", "")),

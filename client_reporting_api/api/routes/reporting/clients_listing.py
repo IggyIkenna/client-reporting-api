@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends
 from unified_api_contracts.internal import ClientConfig
@@ -26,9 +26,11 @@ def _client_entry_for_listing(
     """Project a client config row to the dict shape the UI selector wants."""
     cfg_dict = cast(dict[str, object], cfg)
     org_id = str(cfg_dict.get("organisation_id", ""))
-    org_info = orgs_raw.get(org_id, {}) if isinstance(orgs_raw, dict) else {}
+    orgs_dict = cast(dict[str, Any], orgs_raw) if isinstance(orgs_raw, dict) else {}
+    org_info: dict[str, Any] = orgs_dict.get(org_id, {})
     strat_id = str(cfg_dict.get("strategy_id", ""))
-    strat_info = strats_raw.get(strat_id, {}) if isinstance(strats_raw, dict) else {}
+    strats_dict = cast(dict[str, Any], strats_raw) if isinstance(strats_raw, dict) else {}
+    strat_info: dict[str, Any] = strats_dict.get(strat_id, {})
     return {
         "id": cid,
         "name": str(cfg_dict.get("full_name", cid)),
@@ -52,10 +54,10 @@ def _project_orgs_for_listing(orgs_raw: object) -> list[dict[str, object]]:
     return [
         {
             "id": oid,
-            "name": str(oinfo.get("name", oid)),
-            "type": str(oinfo.get("type", "client")),
+            "name": str(cast(dict[str, Any], oinfo).get("name", oid)),
+            "type": str(cast(dict[str, Any], oinfo).get("type", "client")),
         }
-        for oid, oinfo in orgs_raw.items()
+        for oid, oinfo in cast(dict[str, Any], orgs_raw).items()
         if isinstance(oinfo, dict)
     ]
 

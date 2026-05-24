@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -115,7 +115,7 @@ def _walk_clients_for_fund_ops(
         total_aum += current_eq
         total_pnl += trading_pnl
 
-        investors.append(_investor_row(cid, cfg, net_deposits))
+        investors.append(_investor_row(cid, cast(dict[str, object], cfg), net_deposits))
         capital_accounts[CLIENT_NAMES.get(cid, cid)] = _capital_account_rows(
             starting, net_deposits_alone, trading_pnl, current_eq
         )

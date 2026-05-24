@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -29,10 +29,12 @@ def _apply_filters(trades: list[dict[str, object]], symbol: str, side: str) -> l
 
 def _project_trade(t: dict[str, object]) -> tuple[dict[str, object], float, float, float]:
     """Project one raw trade into UI shape and return (row, cost, fee, rpnl)."""
-    fee_info = t.get("fee", {})
-    fee_cost = float(fee_info.get("cost", 0) or 0) if isinstance(fee_info, dict) else 0
-    info = t.get("info", {})
-    rpnl = float(info.get("fillPnl", 0) or 0) if isinstance(info, dict) else 0
+    fee_info_raw = t.get("fee", {})
+    fee_info: dict[str, Any] = cast(dict[str, Any], fee_info_raw) if isinstance(fee_info_raw, dict) else {}
+    fee_cost = float(fee_info.get("cost", 0) or 0)
+    info_raw = t.get("info", {})
+    info: dict[str, Any] = cast(dict[str, Any], info_raw) if isinstance(info_raw, dict) else {}
+    rpnl = float(info.get("fillPnl", 0) or 0)
     cost = float(t.get("cost", 0) or 0)
     record = {
         "trade_id": str(t.get("id", "")),

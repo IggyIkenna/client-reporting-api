@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
@@ -56,7 +56,7 @@ def _aggregate_nav_investors(ids: list[str], clients_cfg: object) -> tuple[list[
         cfg = clients_cfg.get(cid, {})
         if not isinstance(cfg, dict):
             continue
-        result = _nav_investor_for_client(cid, cfg)
+        result = _nav_investor_for_client(cid, cast(dict[str, object], cfg))
         if result is None:
             continue
         investor, current_eq, peak = result

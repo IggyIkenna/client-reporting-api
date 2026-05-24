@@ -54,5 +54,6 @@ def decimal_safe(obj: object) -> object:
         dict_obj = cast(dict[Any, Any], obj)
         return {k: decimal_safe(v) for k, v in dict_obj.items()}
     if isinstance(obj, list):
-        return [decimal_safe(item) for item in obj]
+        list_obj = cast(list[Any], obj)
+        return [decimal_safe(item) for item in list_obj]
     return obj
