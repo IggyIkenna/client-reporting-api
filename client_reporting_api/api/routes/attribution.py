@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.attribution_reader import read_attribution_rows
-from client_reporting_api.core.entitlement import _enforce_entitlement
+from client_reporting_api.core.entitlement import _enforce_entitlement  # pyright: ignore[reportPrivateUsage]
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/clients/{client_id}", tags=["attribution"])

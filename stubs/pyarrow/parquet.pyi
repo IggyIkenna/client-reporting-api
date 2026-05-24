@@ -1,11 +1,11 @@
 """Minimal pyarrow.parquet type stubs for basedpyright in client-reporting-api."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import IO
 
 import pyarrow
-
 
 def read_table(
     source: str | Path | IO[bytes],
@@ -32,8 +32,6 @@ def read_table(
     decryption_properties: object = ...,
     dataset_kwargs: dict[str, object] | None = ...,
 ) -> pyarrow.Table: ...
-
-
 def write_table(
     table: pyarrow.Table,
     where: str | Path,

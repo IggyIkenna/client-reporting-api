@@ -7,13 +7,13 @@ Internal users see all clients; external users see only their org.
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.entitlement import (
-    _enforce_entitlement,
+    _enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
 from client_reporting_api.core.mock_performance_data import MOCK_CLIENTS
@@ -37,15 +37,15 @@ def _build_client_entry(
     strategy_id = str(cfg.get("strategy_id", ""))
 
     # Resolve org name from registry
-    orgs = registry.get("organisations", {})
-    org_info = orgs.get(org_id, {}) if isinstance(orgs, dict) else {}
-    org_name = str(org_info.get("name", org_id)) if isinstance(org_info, dict) else org_id
-    org_type = str(org_info.get("type", "client")) if isinstance(org_info, dict) else "client"
+    orgs = cast(dict[str, Any], registry.get("organisations", {}))
+    org_info = cast(dict[str, Any], orgs.get(org_id, {}))
+    org_name = str(org_info.get("name", org_id))
+    org_type = str(org_info.get("type", "client"))
 
     # Resolve strategy name from registry
-    strategies = registry.get("strategies", {})
-    strat_info = strategies.get(strategy_id, {}) if isinstance(strategies, dict) else {}
-    strategy_name = str(strat_info.get("name", strategy_id)) if isinstance(strat_info, dict) else strategy_id
+    strategies = cast(dict[str, Any], registry.get("strategies", {}))
+    strat_info = cast(dict[str, Any], strategies.get(strategy_id, {}))
+    strategy_name = str(strat_info.get("name", strategy_id))
 
     return {
         "id": cid,
