@@ -3,9 +3,7 @@
   "reportMissingTypeStubs": false,
   "reportUnknownMemberType": "none",
   "typeCheckingMode": "strict",
-  "include": [
-    "client_reporting_api"
-  ],
+  "include": ["client_reporting_api"],
   "exclude": [
     "tests",
     "**/__pycache__",

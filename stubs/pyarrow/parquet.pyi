@@ -6,7 +6,6 @@ from typing import IO
 
 import pyarrow
 
-
 def read_table(
     source: str | Path | IO[bytes],
     *,

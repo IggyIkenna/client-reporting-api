@@ -21,6 +21,7 @@ Schedule: run hourly via cron or Cloud Scheduler.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import sys
@@ -90,10 +91,8 @@ def fetch_credentials(client_id: str, venue: str) -> dict[str, str] | None:
         return None
     passphrase = ""
     if venue == "okx":
-        try:
+        with contextlib.suppress(RuntimeError):
             passphrase = get_secret(f"{base}-passphrase")
-        except RuntimeError:
-            pass
     return {"api_key": api_key, "api_secret": api_secret, "passphrase": passphrase}
 
 

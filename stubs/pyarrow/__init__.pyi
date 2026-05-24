@@ -1,7 +1,6 @@
 """Minimal pyarrow type stubs for basedpyright in client-reporting-api."""
 from __future__ import annotations
 
-
 class Schema: ...
 
 
@@ -14,4 +13,4 @@ class Table:
     def from_pylist(
         mapping: list[dict[str, object]],
         schema: Schema | None = ...,
-    ) -> "Table": ...
+    ) -> Table: ...
