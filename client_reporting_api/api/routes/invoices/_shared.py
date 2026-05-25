@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Any, cast
 
 from pydantic import BaseModel
 from unified_trading_library import UnifiedCloudConfig
@@ -46,14 +45,12 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
-def decimal_safe(obj: object) -> Any:
+def decimal_safe(obj: object) -> object:
     """Convert Decimals to floats for JSON serialisation (recursive)."""
     if isinstance(obj, Decimal):
         return float(obj)
     if isinstance(obj, dict):
-        dict_obj = cast(dict[Any, Any], obj)
-        return {k: decimal_safe(v) for k, v in dict_obj.items()}
+        return {k: decimal_safe(v) for k, v in obj.items()}
     if isinstance(obj, list):
-        list_obj = cast(list[Any], obj)
-        return [decimal_safe(item) for item in list_obj]
+        return [decimal_safe(item) for item in obj]
     return obj

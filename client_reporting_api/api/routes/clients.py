@@ -7,14 +7,13 @@ Internal users see all clients; external users see only their org.
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from unified_api_contracts.internal import ClientConfig, CredentialsRegistry
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
 from client_reporting_api.core.entitlement import (
-    enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
+    enforce_entitlement,
     require_internal,
 )
 from client_reporting_api.core.mock_performance_data import MOCK_CLIENTS
@@ -30,33 +29,32 @@ AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 def _build_client_entry(
     cid: str,
-    cfg: ClientConfig,
-    registry: CredentialsRegistry,
+    cfg: dict[str, str | float | bool | dict[str, float]],
+    registry: dict[str, object],
 ) -> dict[str, str | bool]:
     """Build a client entry with org and strategy metadata."""
-    cfg_dict = cast(dict[str, Any], cfg)
-    org_id = str(cfg_dict.get("organisation_id", ""))
-    strategy_id = str(cfg_dict.get("strategy_id", ""))
+    org_id = str(cfg.get("organisation_id", ""))
+    strategy_id = str(cfg.get("strategy_id", ""))
 
     # Resolve org name from registry
-    orgs = cast(dict[str, Any], registry.get("organisations", {}))
-    org_info = cast(dict[str, Any], orgs.get(org_id, {}))
-    org_name = str(org_info.get("name", org_id))
-    org_type = str(org_info.get("type", "client"))
+    orgs = registry.get("organisations", {})
+    org_info = orgs.get(org_id, {}) if isinstance(orgs, dict) else {}
+    org_name = str(org_info.get("name", org_id)) if isinstance(org_info, dict) else org_id
+    org_type = str(org_info.get("type", "client")) if isinstance(org_info, dict) else "client"
 
     # Resolve strategy name from registry
-    strategies = cast(dict[str, Any], registry.get("strategies", {}))
-    strat_info = cast(dict[str, Any], strategies.get(strategy_id, {}))
-    strategy_name = str(strat_info.get("name", strategy_id))
+    strategies = registry.get("strategies", {})
+    strat_info = strategies.get(strategy_id, {}) if isinstance(strategies, dict) else {}
+    strategy_name = str(strat_info.get("name", strategy_id)) if isinstance(strat_info, dict) else strategy_id
 
     return {
         "id": cid,
-        "name": str(cfg_dict.get("full_name", cid)),
-        "venue": str(cfg_dict.get("venue", "")),
-        "currency": str(cfg_dict.get("currency", "")),
-        "tranche": str(cfg_dict.get("tranche", "")),
-        "is_active": bool(cfg_dict.get("is_active", False)),
-        "is_underwater": bool(cfg_dict.get("is_underwater", False)),
+        "name": str(cfg.get("full_name", cid)),
+        "venue": str(cfg.get("venue", "")),
+        "currency": str(cfg.get("currency", "")),
+        "tranche": str(cfg.get("tranche", "")),
+        "is_active": bool(cfg.get("is_active", False)),
+        "is_underwater": bool(cfg.get("is_underwater", False)),
         "organisation_id": org_id,
         "organisation_name": org_name,
         "organisation_type": org_type,
@@ -66,14 +64,18 @@ def _build_client_entry(
 
 
 def _filter_clients(
-    clients_cfg: dict[str, ClientConfig],
-    registry: CredentialsRegistry,
+    clients_cfg: dict[str, object],
+    registry: dict[str, object],
     organisation_id: str | None,
     strategy_id: str | None,
 ) -> list[dict[str, str | bool]]:
     """Build the filtered client entry list for ``list_clients``."""
+    if not isinstance(clients_cfg, dict):
+        return []
     clients: list[dict[str, str | bool]] = []
     for cid, cfg in clients_cfg.items():
+        if not isinstance(cfg, dict):
+            continue
         entry = _build_client_entry(cid, cfg, registry)
         if organisation_id and entry.get("organisation_id") != organisation_id:
             continue
@@ -83,7 +85,7 @@ def _filter_clients(
     return clients
 
 
-def _organisation_list(registry: CredentialsRegistry) -> list[dict[str, str]]:
+def _organisation_list(registry: dict[str, object]) -> list[dict[str, str]]:
     """Project the registry organisations dict to a UI-friendly list."""
     orgs_raw = registry.get("organisations", {})
     if not isinstance(orgs_raw, dict):
@@ -94,11 +96,12 @@ def _organisation_list(registry: CredentialsRegistry) -> list[dict[str, str]]:
             "name": str(oinfo.get("name", oid)),
             "type": str(oinfo.get("type", "client")),
         }
-        for oid, oinfo in cast(dict[str, dict[str, Any]], orgs_raw).items()
+        for oid, oinfo in orgs_raw.items()
+        if isinstance(oinfo, dict)
     ]
 
 
-def _strategy_list(registry: CredentialsRegistry) -> list[dict[str, str]]:
+def _strategy_list(registry: dict[str, object]) -> list[dict[str, str]]:
     """Project the registry strategies dict to a UI-friendly list."""
     strats_raw = registry.get("strategies", {})
     if not isinstance(strats_raw, dict):
@@ -109,7 +112,8 @@ def _strategy_list(registry: CredentialsRegistry) -> list[dict[str, str]]:
             "name": str(sinfo.get("name", sid)),
             "description": str(sinfo.get("description", "")),
         }
-        for sid, sinfo in cast(dict[str, dict[str, Any]], strats_raw).items()
+        for sid, sinfo in strats_raw.items()
+        if isinstance(sinfo, dict)
     ]
 
 
@@ -129,9 +133,10 @@ def list_clients(
     if _cloud_cfg.is_mock_mode():
         return {"clients": MOCK_CLIENTS, "organisations": [], "strategies": []}
 
-    registry = load_registry()
+    registry: dict[str, object] = dict(load_registry())
     clients_cfg = registry.get("clients", {})
-    # clients_cfg is always a dict[str, ClientConfig] from CredentialsRegistry
+    if not isinstance(clients_cfg, dict):
+        clients_cfg = {}
 
     return {
         "clients": _filter_clients(clients_cfg, registry, organisation_id, strategy_id),
@@ -150,10 +155,12 @@ def get_client(client_id: str, auth: AuthDep) -> dict[str, str | bool]:
                 return c
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
 
-    registry = load_registry()
+    registry: dict[str, object] = dict(load_registry())
     clients_cfg = registry.get("clients", {})
+    if not isinstance(clients_cfg, dict):
+        raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
     cfg = clients_cfg.get(client_id)
-    if cfg is None:
+    if cfg is None or not isinstance(cfg, dict):
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
 
     return _build_client_entry(client_id, cfg, registry)
