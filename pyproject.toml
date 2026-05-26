@@ -97,7 +97,7 @@ typeCheckingMode = "strict"
 include = ["client_reporting_api"]
 exclude = ["tests", "**/__pycache__", ".venv*", ".venv-workspace", "build", "dist", "node_modules"]
 reportMissingTypeStubs = false
-reportUnknownMemberType = "none"
+reportUnknownMemberType = "error"
 reportUnknownVariableType = "error"
 
 [[tool.basedpyright.executionEnvironments]]
