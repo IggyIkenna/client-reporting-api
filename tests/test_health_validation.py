@@ -14,7 +14,7 @@ def client() -> TestClient:
 
     with (
         patch("unified_trading_library.core.audit_middleware.log_event"),
-        patch("unified_events_interface.log_event"),
+        patch("unified_trading_library.events.log_event"),
     ):
         yield TestClient(app, raise_server_exceptions=False)
 

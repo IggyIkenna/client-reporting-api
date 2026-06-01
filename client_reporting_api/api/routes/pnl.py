@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
-from unified_config_interface import UnifiedCloudConfig
+from fastapi import APIRouter, Depends, HTTPException, Query
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.pnl_reader import generate_pnl_report
 from client_reporting_api.mock_data import MOCK_PERFORMANCE, MOCK_PNL
 
@@ -14,15 +16,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["pnl"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 @router.get("/pnl")
 def get_pnl(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """Return PnL attribution data for a client/period from GCS."""
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_pnl: client_id=%s period_month=%s", client_id, period_month)
     try:
@@ -34,6 +40,7 @@ def get_pnl(
 
 @router.get("/performance")
 def get_performance(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
@@ -42,7 +49,8 @@ def get_performance(
     In mock mode returns realistic sample performance data.
     In live mode computes from GCS PnL data.
     """
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_PERFORMANCE, "client_id": client_id, "period_month": period_month}
     # Live implementation: compute performance metrics from PnL data
     logger.info("get_performance: client_id=%s period_month=%s", client_id, period_month)

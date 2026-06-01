@@ -16,10 +16,10 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
-from unified_config_interface import UnifiedCloudConfig
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 
 import client_reporting_api._google_auth_sync as _google_auth_sync
+from client_reporting_api.config import get_config
 
 GoogleAuthError = _google_auth_sync.GoogleAuthError
 make_http_request = _google_auth_sync.make_http_request
@@ -28,7 +28,7 @@ verify_oauth2_token_sync = _google_auth_sync.verify_oauth2_token_sync
 logger = logging.getLogger(__name__)
 
 # --- Production guard for DISABLE_AUTH ---
-_auth_cfg = UnifiedCloudConfig()
+_auth_cfg = get_config()
 auth_cfg = _auth_cfg  # public alias for cross-module access
 _disable_auth_raw = _auth_cfg.disable_auth
 _environment = _auth_cfg.environment

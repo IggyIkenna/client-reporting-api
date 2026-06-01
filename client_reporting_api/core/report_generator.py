@@ -74,12 +74,8 @@ def render_btc_investor_note(
     env = _load_jinja_env()
     template = env.get_template("btc_investor_note.html")
 
-    monthly_return_str = (
-        f"+{monthly_return:.2f}%" if monthly_return >= 0 else f"{monthly_return:.2f}%"
-    )
-    inception_return_str = (
-        f"+{inception_return:.2f}%" if inception_return >= 0 else f"{inception_return:.2f}%"
-    )
+    monthly_return_str = f"+{monthly_return:.2f}%" if monthly_return >= 0 else f"{monthly_return:.2f}%"
+    inception_return_str = f"+{inception_return:.2f}%" if inception_return >= 0 else f"{inception_return:.2f}%"
 
     return template.render(
         client_id=client_id,

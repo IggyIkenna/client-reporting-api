@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from unified_internal_contracts import FeeStructure
+from unified_api_contracts.internal import FeeStructure
 
 
 class FeeCalculator:

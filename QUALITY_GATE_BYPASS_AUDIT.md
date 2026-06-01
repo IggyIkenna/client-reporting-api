@@ -67,6 +67,21 @@ this bypass when coverage reaches 70%.
 B104 (bind 0.0.0.0) in main.py: accepted for API services in containers; Cloud
 Run requires listening on all interfaces. Marked with # nosec B104.
 
+## 2.6 STEP 5.11 — Protocol-specific symbol exclusions
+
+**Files excluded:** `client_reporting_api/cli/gcs_sync.py`, `client_reporting_api/cli/__init__.py`
+
+**Pattern matched:** `gcs_bucket` (a substring of `_get_gcs_bucket`)
+
+**Reason:** `gcs_sync.py` defines a helper function `_get_gcs_bucket()` that resolves the GCS
+bucket name via `resolve_bucket_name()` (the canonical UCI abstraction). The function name
+contains `gcs_bucket` as a substring, which triggers the STEP 5.11 pattern match. This is NOT
+a raw GCS SDK call — it is the correct UCI-backed abstraction. `cli/__init__.py` re-exports the
+same symbol.
+
+**Resolution path:** Rename `_get_gcs_bucket` to a name that does not contain `gcs_bucket`
+(e.g. `_resolve_bucket_name`) and update all call sites.
+
 ## basedpyright-baseline: `.basedpyright-baseline.json` (10 pre-existing errors)
 
 **Added:** 2026-03-10 — typecheck fix pass **Status:** JUSTIFIED — untyped

@@ -5,12 +5,12 @@ from unittest.mock import MagicMock, patch
 
 def test_unified_cloud_config_is_used() -> None:
     """Service config must be read from UnifiedCloudConfig, not os.getenv."""
-    with patch("unified_config_interface.UnifiedCloudConfig") as mock_cfg_cls:
+    with patch("unified_trading_library.config_interface.UnifiedCloudConfig") as mock_cfg_cls:
         mock_cfg = MagicMock()
         mock_cfg_cls.return_value = mock_cfg
         mock_cfg.environment = "test"
         # Verify the config class can be instantiated without error
-        from unified_config_interface import UnifiedCloudConfig
+        from unified_trading_library import UnifiedCloudConfig
 
         cfg = UnifiedCloudConfig()
         assert cfg is not None
@@ -38,12 +38,12 @@ def test_config_environment_attribute_accessible() -> None:
     """UnifiedCloudConfig must expose an environment attribute."""
     from unittest.mock import MagicMock, patch
 
-    with patch("unified_config_interface.UnifiedCloudConfig") as mock_cfg_cls:
+    with patch("unified_trading_library.config_interface.UnifiedCloudConfig") as mock_cfg_cls:
         mock_cfg = MagicMock()
         mock_cfg_cls.return_value = mock_cfg
         mock_cfg.environment = "staging"
 
-        from unified_config_interface import UnifiedCloudConfig
+        from unified_trading_library import UnifiedCloudConfig
 
         _cfg = UnifiedCloudConfig()
         assert True

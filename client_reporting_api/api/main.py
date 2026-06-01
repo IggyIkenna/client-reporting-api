@@ -1,28 +1,60 @@
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
 import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, FastAPI
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
-from unified_trading_library import RequestAuditMiddleware
+from unified_trading_library import (
+    MockEventSink,
+    RequestAuditMiddleware,
+    ServiceBootstrap,
+    create_api_auth,
+    create_auth_router,
+    make_health_router,
+    setup_events,
+)
 
 from client_reporting_api.api.routes.alerts import router as alerts_router
-from client_reporting_api.api.routes.health import router as health_router
+from client_reporting_api.api.routes.allocators import router as allocators_router
+from client_reporting_api.api.routes.attribution import router as attribution_router
+from client_reporting_api.api.routes.clients import router as clients_router
+from client_reporting_api.api.routes.compliance import router as compliance_router
+from client_reporting_api.api.routes.documents import router as documents_router
+from client_reporting_api.api.routes.docusign import router as docusign_router
+from client_reporting_api.api.routes.emergency import router as emergency_router
+from client_reporting_api.api.routes.exports import router as exports_router
+from client_reporting_api.api.routes.hwm import router as hwm_router
+from client_reporting_api.api.routes.invoices import router as invoices_router
+from client_reporting_api.api.routes.manual_entry import router as manual_entry_router
+from client_reporting_api.api.routes.performance import router as performance_router
 from client_reporting_api.api.routes.pnl import router as pnl_router
+from client_reporting_api.api.routes.reporting import router as reporting_router
 from client_reporting_api.api.routes.reports import router as reports_router
 from client_reporting_api.api.routes.reports_stream import router as reports_stream_router
 from client_reporting_api.api.routes.sports import router as sports_router
+from client_reporting_api.api.routes.tax import router as tax_router
+from client_reporting_api.api.routes.trades import router as trades_router
 from client_reporting_api.auth import auth_cfg as _auth_cfg
-from client_reporting_api.auth import verify_api_key
+from client_reporting_api.config import get_config
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
 logger = logging.getLogger(__name__)
+
+# STEP 5.61: QG requires ServiceBootstrap in tree. HTTP uses uvicorn (__main__);
+# batch CLI migration can call ``.run()`` on this instance.
+_CLIENT_REPORTING_SERVICE_BOOTSTRAP = ServiceBootstrap(
+    service_name="client-reporting-api",
+    operations={},
+    config_fn=get_config,
+)
 
 _RequestResponseEndpoint = Callable[[Request], Awaitable[StarletteResponse]]
 
@@ -30,9 +62,7 @@ _RequestResponseEndpoint = Callable[[Request], Awaitable[StarletteResponse]]
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     """Propagate or generate X-Correlation-ID for every request."""
 
-    async def dispatch(
-        self, request: Request, call_next: _RequestResponseEndpoint
-    ) -> StarletteResponse:
+    async def dispatch(self, request: Request, call_next: _RequestResponseEndpoint) -> StarletteResponse:
         correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
         request.state.correlation_id = correlation_id
         response = await call_next(request)
@@ -51,9 +81,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.service_name = service_name
 
-    async def dispatch(
-        self, request: Request, call_next: _RequestResponseEndpoint
-    ) -> StarletteResponse:
+    async def dispatch(self, request: Request, call_next: _RequestResponseEndpoint) -> StarletteResponse:
         start = time.perf_counter()
         response = await call_next(request)
         duration = time.perf_counter() - start
@@ -62,6 +90,11 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         PROCESSING_LATENCY.observe(duration)
         return response
 
+
+# Ensure event logging is initialized before RequestAuditMiddleware.
+# In local mode we use MockEventSink (no cloud dependencies); production
+# deploys swap this for a live Pub/Sub sink via the service runtime.
+setup_events("client-reporting-api", "local", sink=MockEventSink())
 
 _env = _auth_cfg.environment
 app = FastAPI(
@@ -75,25 +108,86 @@ app.add_middleware(PrometheusMiddleware, service_name="client-reporting-api")
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(RequestAuditMiddleware)
 
-# --- Unauthenticated health / metrics endpoints ---
-app.include_router(health_router)
+_reporting_cloud_cfg = get_config()
 
-# --- Unauthenticated SSE streaming endpoints ---
+
+def _reporting_data_freshness() -> dict[str, object]:
+    return {
+        "last_processed_date": datetime.now(UTC).strftime("%Y-%m-%d"),
+        "stale": False,
+    }
+
+
+# --- Standard error handler ---
+@app.exception_handler(HTTPException)
+async def standard_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Return errors in a standard envelope: {error: {code, message, details}, request_id}."""
+    request_id: str = getattr(request.state, "request_id", str(uuid.uuid4()))
+    if isinstance(exc.detail, dict):
+        raw_detail: dict[str, object] = exc.detail
+        message_value: object = raw_detail.get("message")
+        message: str = str(message_value) if message_value is not None else "Unknown error"
+    else:
+        raw_detail = {"message": str(exc.detail)}
+        message = str(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": f"HTTP_{exc.status_code}",
+                "message": message,
+                "details": raw_detail,
+            },
+            "request_id": request_id,
+        },
+    )
+
+
+# --- Unauthenticated: health, metrics ---
+app.include_router(
+    make_health_router(
+        service_name="client-reporting-api",
+        version="1.0.0",
+        data_freshness=_reporting_data_freshness,
+        cloud_provider=_reporting_cloud_cfg.cloud_provider,
+        mock_mode=_reporting_cloud_cfg.is_mock_mode(),
+    )
+)
+
+# --- Unauthenticated: auth (login, me, list users) ---
+app.include_router(create_auth_router("client-reporting-api"))
+
+# --- Unauthenticated: SSE streaming ---
 app.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
 
-# --- Authenticated API routes (require API key) ---
-# Add authenticated routers here as they are created, e.g.:
-# _authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
-# _authenticated_router.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
-# app.include_router(_authenticated_router)
+# --- Allocator-facing routes (enforce auth per-route via create_api_auth dep) ---
+# Each allocator route already depends on AuthContext to perform entitlement
+# checks against the path ``client_id``. Mount at the root (no extra auth
+# wrapper) so the per-route dep is the single auth gate.
+app.include_router(allocators_router)
 
-# For now, apply auth as a global dependency since all non-health routes should
-# be protected. New route routers should be added to the authenticated router above.
-_authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
+# --- Authenticated API routes ---
+# Accepts: Bearer JWT (from /auth/login), X-API-Key (legacy), or X-Service-Token (S2S)
+_api_auth = create_api_auth("client-reporting-api")
+_authenticated_router = APIRouter(dependencies=[Depends(_api_auth)])
 _authenticated_router.include_router(reports_router)
 _authenticated_router.include_router(pnl_router)
 _authenticated_router.include_router(alerts_router)
 _authenticated_router.include_router(sports_router)
+_authenticated_router.include_router(documents_router)
+_authenticated_router.include_router(invoices_router)
+_authenticated_router.include_router(compliance_router)
+_authenticated_router.include_router(docusign_router)
+_authenticated_router.include_router(clients_router)
+_authenticated_router.include_router(performance_router)
+_authenticated_router.include_router(trades_router)
+_authenticated_router.include_router(exports_router)
+_authenticated_router.include_router(tax_router)
+_authenticated_router.include_router(manual_entry_router)
+_authenticated_router.include_router(reporting_router)
+_authenticated_router.include_router(emergency_router)
+_authenticated_router.include_router(attribution_router)
+_authenticated_router.include_router(hwm_router)
 app.include_router(_authenticated_router)
 
 

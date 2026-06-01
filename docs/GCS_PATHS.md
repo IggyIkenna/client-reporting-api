@@ -22,5 +22,5 @@ hardcoded.
 
 ## Event Logging
 
-Service lifecycle events are logged via `unified-events-interface`
+Service lifecycle events are logged via `unified-trading-library`
 `setup_events()` with `sink="cloud_logging"` (Cloud Logging, not GCS).

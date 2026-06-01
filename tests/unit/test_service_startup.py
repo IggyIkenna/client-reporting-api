@@ -97,6 +97,4 @@ class TestClientReportingApiHealthProbes:
         from client_reporting_api.api.main import app
 
         routes = {r.path for r in app.routes}  # type: ignore[attr-defined]
-        assert "/api/v1/stream/reports" in routes, (
-            "SSE route /api/v1/stream/reports must be registered"
-        )
+        assert "/api/v1/stream/reports" in routes, "SSE route /api/v1/stream/reports must be registered"

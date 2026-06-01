@@ -3,15 +3,12 @@ from pathlib import Path
 from typing import cast
 
 import yaml
-from unified_internal_contracts import ClientConfig, CredentialsRegistry
+from unified_api_contracts.internal import ClientConfig, CredentialsRegistry
 
 logger = logging.getLogger(__name__)
 
 _REGISTRY_PATH = (
-    Path(__file__).parent.parent.parent.parent
-    / "execution-services"
-    / "configs"
-    / "credentials-registry.yaml"
+    Path(__file__).parent.parent.parent.parent / "execution-service" / "configs" / "credentials-registry.yaml"
 )
 
 

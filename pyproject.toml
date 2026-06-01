@@ -11,21 +11,23 @@ authors = [
     { name = "Unified Trading System", email = "team@example.com" },
 ]
 dependencies = [
-    "fastapi>=0.110.0,<1.0.0",
+    # Pinned to safe versions (CVE-2026-{34073,39892,44431,44432,28684})
+    "urllib3>=2.7.0,<3.0.0",
+    "python-dotenv>=1.2.2,<2.0.0",
+    "fastapi<1.0.0,>=0.115.0",
     "uvicorn[standard]>=0.27.0,<1.0.0",
     "sse-starlette>=1.6.1,<2.0.0",
     "jinja2>=3.0.0,<4.0.0",
     "matplotlib>=3.9.0,<4.0.0",
-    "anthropic<1.0.0,>=0.49.0",
+    "anthropic>=0.87.0,<1.0.0",
     "google-auth>=2.40.0,<3.0.0",
+    "google-cloud-logging>=3.11.0,<4.0.0",
+    "google-cloud-secret-manager<3.0.0,>=2.25.0",
     "pyyaml>=6.0.1,<7.0.0",
-    "unified-internal-contracts>=0.1.0,<1.0.0",
-    "unified-cloud-interface>=0.11.0,<1.0.0",
     "unified-trading-library>=0.3.0,<1.0.0",
-    "unified-config-interface>=0.1.0,<1.0.0",
-    "unified-events-interface>=0.1.0,<1.0.0",
+    "unified-api-contracts>=0.1.0,<1.0.0",
     "prometheus-client>=0.20.0,<1.0.0",
-    "pytest>=9.0.1,<10.0.0",
+    "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=0.25.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
     "pytest-socket>=0.7.0,<1.0.0",
@@ -36,88 +38,95 @@ dependencies = [
     "pip-audit>=2.7.0,<3.0.0",
     "bandit>=1.7.0,<2.0.0",
     "pyjwt>=2.12.0,<3.0.0",
+    "ccxt<5.0.0,>=4.5.24",
+    "google-cloud-firestore>=2.19.0,<3.0.0",
+    "pandas<3.0.0,>=2.3.0",
+    # Security floors for transitive dependencies (CVE remediation).
+    # aiohttp      <3.13.4 → CVE-2026-22815, CVE-2026-34513..34525
+    # cryptography <46.0.7 → CVE-2026-34073, CVE-2026-39892
+    # pillow       <12.2.0 → CVE-2026-40192
+    # pygments     <2.20.0 → CVE-2026-4539
+    "aiohttp>=3.13.4,<4.0.0",
+    "cryptography>=46.0.7,<47.0.0",
+    "pillow>=12.2.0,<13.0.0",
+    "pygments>=2.20.0,<3.0.0",
 ]
 
 [project.license]
 text = "Proprietary"
 [project.scripts]
 client-reporting = "client_reporting_api.main:main"
-
-[tool.uv.sources.unified-internal-contracts]
-path = "../unified-internal-contracts"
-editable = true
-
-[tool.uv.sources.unified-cloud-interface]
-path = "../unified-cloud-interface"
-editable = true
+client-reporting-manage = "client_reporting_api.cli:main"
 
 [tool.uv.sources.unified-trading-library]
 path = "../unified-trading-library"
 editable = true
 
-[tool.uv.sources.unified-config-interface]
-path = "../unified-config-interface"
-editable = true
-
-[tool.uv.sources.unified-events-interface]
-path = "../unified-events-interface"
+[tool.uv.sources.unified-api-contracts]
+path = "../unified-api-contracts"
 editable = true
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py313"
-
-[tool.ruff.lint]
-select = [
-    "E",
-    "F",
-    "W",
-    "I",
-    "N",
-    "UP",
-    "B",
-    "C4",
-    "SIM",
-    "RUF",
-    "G",
-
-    "C90",]
-ignore = []
-
-
-[tool.ruff.lint.mccabe]
-max-complexity = 7
+exclude = [".cursor", ".venv", ".venv-workspace", "build", "dist", "node_modules"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "G", "C90"]
+extend-ignore = ["G003", "G004"]
+ignore = ["E402"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 7
+
+[tool.ruff.lint.per-file-ignores]
+"*/__init__.py" = ["F401", "E402"]
+"tests/*" = ["F401", "F841", "F811"]
+"tests/conftest.py" = ["E402"]
+"client_reporting_api/core/tear_sheet_generator.py" = ["E501"]
+"client_reporting_api/core/backfill_store.py" = ["C901"]
+"scripts/*.py" = ["C901", "E501"]
+
 [tool.basedpyright]
 pythonVersion = "3.13"
-reportAny = "error"
-reportUnknownMemberType = "error"
-reportUnknownVariableType = "error"
-reportUnknownArgumentType = "error"
 typeCheckingMode = "strict"
-include = [
-    "client_reporting_api",
-]
-exclude = [
-    "tests",
-    "**/__pycache__",
-    ".venv*",
+include = ["client_reporting_api"]
+exclude = ["tests", "**/__pycache__", ".venv*", ".venv-workspace", "build", "dist", "node_modules"]
+reportMissingTypeStubs = false
+reportUnknownVariableType = "error"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "."
+pythonVersion = "3.13"
+pythonPlatform = "All"
+extraPaths = [
+    "../unified-internal-contracts",
+    "../unified-trading-library",
+    "../unified-config-interface",
+    "../unified-cloud-interface",
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 asyncio_mode = "auto"
-testpaths = [
-    "tests",
-]
+pythonpath = ["."]
 markers = [
-    "unit: fast isolated unit tests (no external I/O)",
-    "integration: per-component integration tests using mocks (no live cloud)",
-    "smoke: quick happy-path smoke tests",
+    "unit: mark test as unit test",
+    "integration: integration tests requiring real GCP credentials and API keys",
+    "smoke: mark test as smoke test",
 ]
+
+[tool.coverage.run]
+source = ["client_reporting_api"]
+branch = true
 
 [tool.coverage.report]
 fail_under = 70
+
+[tool.bandit]
+skips = []

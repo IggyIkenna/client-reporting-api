@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Query
-from unified_config_interface import UnifiedCloudConfig
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
+from client_reporting_api.core.entitlement import enforce_entitlement
 from client_reporting_api.core.sports_pnl_reader import (
     generate_clv_report,
     generate_sports_pnl_report,
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sports", tags=["sports"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 MOCK_SPORTS_PNL: dict[str, object] = {
     "total_pnl": "12450.30",
@@ -214,11 +218,13 @@ MOCK_RISK: dict[str, object] = {
 
 @router.get("/pnl")
 def get_sports_pnl(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """Sports P&L breakdown by venue, strategy, and period."""
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_SPORTS_PNL, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_pnl: client_id=%s period_month=%s", client_id, period_month)
     return generate_sports_pnl_report(client_id=client_id, period_month=period_month)
@@ -226,11 +232,13 @@ def get_sports_pnl(
 
 @router.get("/clv")
 def get_sports_clv(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
     """CLV (Closing Line Value) analysis — edge per venue/strategy."""
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_CLV_DATA, "client_id": client_id, "period_month": period_month}
     logger.info("get_sports_clv: client_id=%s period_month=%s", client_id, period_month)
     return generate_clv_report(client_id=client_id, period_month=period_month)
@@ -238,10 +246,12 @@ def get_sports_clv(
 
 @router.get("/venue-performance")
 def get_venue_performance(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Per-venue performance metrics (ROI, volume, limiting status)."""
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_VENUE_PERFORMANCE, "client_id": client_id}
     logger.info("get_venue_performance: client_id=%s", client_id)
     return generate_venue_performance_report(client_id=client_id)
@@ -249,10 +259,12 @@ def get_venue_performance(
 
 @router.get("/positions")
 def get_sports_positions(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Open sports positions — pending bets, exposure."""
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_POSITIONS, "client_id": client_id}
     logger.info("get_sports_positions: client_id=%s", client_id)
     return read_sports_positions(client_id=client_id)
@@ -260,10 +272,12 @@ def get_sports_positions(
 
 @router.get("/risk")
 def get_sports_risk(
+    auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> dict[str, object]:
     """Current sports risk exposure — liability, correlation, limits."""
-    if _cloud_cfg.cloud_mock_mode:
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
         return {**MOCK_RISK, "client_id": client_id}
     logger.info("get_sports_risk: client_id=%s", client_id)
     return read_sports_risk(client_id=client_id)

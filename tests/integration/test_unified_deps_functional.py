@@ -7,7 +7,7 @@ Exercises actual code paths for every unified-* dep used by client-reporting-api
                              setup_tracing
   - unified-cloud-interface: get_data_source, DataSource (pnl_reader, sports_pnl_reader)
   - unified-internal-contracts: FeeStructure, ClientConfig, CredentialsRegistry
-  - unified-events-interface: setup_events, log_event
+  - unified-trading-library: setup_events, log_event
 
 All tests run credential-free (CLOUD_PROVIDER=local CLOUD_MOCK_MODE=true).
 """
@@ -39,11 +39,11 @@ class TestUnifiedConfigInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_config_interface import UnifiedCloudConfig
+            from unified_trading_library import UnifiedCloudConfig
 
             cfg = UnifiedCloudConfig()
             assert cfg.cloud_provider == "local"
-            assert cfg.cloud_mock_mode is True
+            assert cfg.is_mock_mode() is True
 
     @pytest.mark.integration
     def test_config_disable_auth_flag(self) -> None:
@@ -58,7 +58,7 @@ class TestUnifiedConfigInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_config_interface import UnifiedCloudConfig
+            from unified_trading_library import UnifiedCloudConfig
 
             cfg = UnifiedCloudConfig()
             assert cfg.disable_auth is True
@@ -76,7 +76,7 @@ class TestUnifiedConfigInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_config_interface import UnifiedCloudConfig
+            from unified_trading_library import UnifiedCloudConfig
 
             cfg = UnifiedCloudConfig()
             # Should NOT raise - only production raises
@@ -85,7 +85,7 @@ class TestUnifiedConfigInterfaceFunctional:
 
 
 # ---------------------------------------------------------------------------
-# unified-events-interface: setup_events, log_event
+# unified-trading-library: setup_events, log_event
 # ---------------------------------------------------------------------------
 
 
@@ -95,7 +95,7 @@ class TestUnifiedEventsInterfaceFunctional:
     @pytest.mark.integration
     def test_setup_events_in_test_mode(self) -> None:
         """setup_events('test') initializes without error."""
-        from unified_events_interface import setup_events
+        from unified_trading_library import setup_events
 
         # Should not raise — test mode silences all real sinks
         setup_events("client-reporting-api-integ-test", "test")
@@ -103,7 +103,7 @@ class TestUnifiedEventsInterfaceFunctional:
     @pytest.mark.integration
     def test_log_event_callable_after_setup(self) -> None:
         """log_event can be called after setup_events without error."""
-        from unified_events_interface import log_event, setup_events
+        from unified_trading_library import log_event, setup_events
 
         setup_events("client-reporting-api-integ-test-2", "test")
         # Should not raise
@@ -126,7 +126,7 @@ class TestUnifiedEventsInterfaceFunctional:
             },
             clear=False,
         ):
-            from unified_events_interface import log_event
+            from unified_trading_library import log_event
 
             # log_event is callable (the actual auth test is in unit tests)
             assert callable(log_event)
@@ -222,7 +222,7 @@ class TestUnifiedCloudInterfaceFunctional:
     @pytest.mark.integration
     def test_get_data_source_importable(self) -> None:
         """get_data_source and DataSource are importable from UCI."""
-        from unified_cloud_interface import DataSource, get_data_source
+        from unified_trading_library import DataSource, get_data_source
 
         assert callable(get_data_source)
         assert DataSource is not None
@@ -332,7 +332,7 @@ class TestUnifiedInternalContractsFunctional:
     @pytest.mark.integration
     def test_fee_structure_used_in_fee_calculator(self) -> None:
         """FeeCalculator uses FeeStructure from UIC to compute period fees."""
-        from unified_internal_contracts import FeeStructure
+        from unified_api_contracts.internal import FeeStructure
 
         from client_reporting_api.core.fee_calculator import FeeCalculator
 
@@ -363,7 +363,7 @@ class TestUnifiedInternalContractsFunctional:
     @pytest.mark.integration
     def test_fee_structure_with_introducer(self) -> None:
         """FeeCalculator computes introducer fee when introducer is configured."""
-        from unified_internal_contracts import FeeStructure
+        from unified_api_contracts.internal import FeeStructure
 
         from client_reporting_api.core.fee_calculator import FeeCalculator
 
@@ -396,7 +396,7 @@ class TestUnifiedInternalContractsFunctional:
     @pytest.mark.integration
     def test_client_config_and_credentials_registry_types(self) -> None:
         """ClientConfig and CredentialsRegistry TypedDicts are usable."""
-        from unified_internal_contracts import ClientConfig, CredentialsRegistry
+        from unified_api_contracts.internal import ClientConfig, CredentialsRegistry
 
         # These are TypedDicts — verify they can be used as type annotations
         config: ClientConfig = {

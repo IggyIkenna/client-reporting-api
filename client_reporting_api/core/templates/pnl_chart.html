@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ client_name }} — PnL Chart</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #f8f9fa;
+    color: #1a1a2e;
+  }
+  .container {
+    max-width: 1100px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  .header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    padding: 32px 40px;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #e94560, #0f3460, #e94560);
+  }
+  .header h1 { font-size: 24px; font-weight: 700; }
+  .header .subtitle { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    padding: 24px 40px;
+    border-bottom: 1px solid #e9ecef;
+  }
+  .stat { text-align: center; }
+  .stat .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6c757d;
+  }
+  .stat .value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .value.positive { color: #28a745; }
+  .stat .value.negative { color: #dc3545; }
+  .chart-wrap {
+    padding: 24px 40px 40px;
+  }
+  canvas { width: 100% !important; }
+  .transfer-log {
+    padding: 0 40px 32px;
+  }
+  .transfer-log h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #6c757d;
+    margin-bottom: 12px;
+  }
+  .transfer-log table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .transfer-log th {
+    text-align: left;
+    padding: 8px 0;
+    border-bottom: 2px solid #1a1a2e;
+    color: #6c757d;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .transfer-log td {
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .transfer-log .deposit { color: #28a745; }
+  .transfer-log .withdrawal { color: #dc3545; }
+  @media print {
+    body { background: #fff; }
+    .container { box-shadow: none; margin: 0; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>{{ client_name }}</h1>
+    <div class="subtitle">Trading PnL — {{ dates[0] }} to {{ dates[-1] }} ({{ dates | length }} days)</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Starting Equity</div>
+      <div class="value">{{ unit }}{{ '{:,.4f}'.format(starting_equity) if is_btc else '{:,.0f}'.format(starting_equity) }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Current Equity</div>
+      <div class="value">{{ unit }}{{ '{:,.4f}'.format(current_equity) if is_btc else '{:,.0f}'.format(current_equity) }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Net {{ 'BTC' if is_btc else '' }} Deposits</div>
+      <div class="value">{{ unit }}{{ '{:,.4f}'.format(net_deposits) if is_btc else '{:,.0f}'.format(net_deposits) }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Trading PnL{{ ' (BTC)' if is_btc else '' }}</div>
+      <div class="value {{ 'positive' if trading_pnl >= 0 else 'negative' }}">{{ unit }}{{ '{:,.4f}'.format(trading_pnl) if is_btc else '{:,.0f}'.format(trading_pnl) }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">PnL %</div>
+      <div class="value {{ 'positive' if pnl_pct >= 0 else 'negative' }}">{{ '{:.1f}'.format(pnl_pct) }}%</div>
+    </div>
+    {% if is_btc %}
+    <div class="stat">
+      <div class="label">USDT Trading PnL</div>
+      <div class="value {{ 'positive' if usdt_pnl >= 0 else 'negative' }}">${{ '{:,.0f}'.format(usdt_pnl) }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="pnlChart" height="320"></canvas>
+  </div>
+
+  {% if transfers %}
+  <div class="transfer-log">
+    <h3>Transfers</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          {% if is_btc %}<th>BTC</th><th>USDT</th>{% else %}<th>Amount</th>{% endif %}
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for t in transfers %}
+        <tr>
+          <td>{{ t.date }}</td>
+          {% if is_btc %}
+          <td class="{{ 'deposit' if t.btc_change > 0 else ('withdrawal' if t.btc_change < 0 else '') }}">
+            {% if t.btc_change != 0 %}{{ '{:+.4f}'.format(t.btc_change) }}{% else %}—{% endif %}
+          </td>
+          <td class="{{ 'deposit' if t.usdt_change > 0 else ('withdrawal' if t.usdt_change < 0 else '') }}">
+            {% if t.usdt_change != 0 %}${{ '{:+,.0f}'.format(t.usdt_change) }}{% else %}—{% endif %}
+          </td>
+          {% else %}
+          <td class="{{ 'deposit' if t.amount > 0 else 'withdrawal' }}">
+            {{ '$' if t.amount >= 0 else '-$' }}{{ '{:,.0f}'.format(t.amount if t.amount >= 0 else -t.amount) }}
+          </td>
+          {% endif %}
+          <td>{{ 'Deposit' if t.amount > 0 else 'Withdrawal' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+const ctx = document.getElementById('pnlChart').getContext('2d');
+const dates = {{ dates | tojson }};
+const pnl = {{ pnl_series | tojson }};
+const equity = {{ equity_series | tojson }};
+
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Trading PnL ({{ "BTC" if is_btc else "$" }})',
+        data: pnl,
+        borderColor: pnl[pnl.length-1] >= 0 ? '#28a745' : '#dc3545',
+        backgroundColor: (pnl[pnl.length-1] >= 0 ? 'rgba(40,167,69,0.08)' : 'rgba(220,53,69,0.08)'),
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHitRadius: 8,
+        borderWidth: 2.5,
+      },
+      {
+        label: 'Balance ({{ "BTC" if is_btc else "$" }})',
+        data: equity,
+        borderColor: '#6c757d',
+        borderDash: [5, 3],
+        fill: false,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHitRadius: 8,
+        borderWidth: 1.5,
+        hidden: true,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            const isBtc = {{ 'true' if is_btc else 'false' }};
+            if (isBtc) return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(4) + ' BTC';
+            return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits: 0});
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { maxTicksLimit: 12, font: { size: 11 } },
+        grid: { display: false },
+      },
+      y: {
+        ticks: {
+          callback: function(v) {
+            const isBtc = {{ 'true' if is_btc else 'false' }};
+            if (isBtc) return v.toFixed(3) + ' BTC';
+            return '$' + v.toLocaleString();
+          },
+          font: { size: 11 },
+        },
+        grid: { color: 'rgba(0,0,0,0.05)' },
+      },
+    },
+  },
+});
+</script>
+</body>
+</html>

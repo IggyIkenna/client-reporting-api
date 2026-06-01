@@ -6,7 +6,7 @@ import logging
 from typing import cast
 
 import pandas as pd
-from unified_cloud_interface import DataSource, get_data_source
+from unified_trading_library import DataSource, get_data_source
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,7 @@ def generate_pnl_report(
         A dict containing status, client_id, period_month, and rows of PnL data.
     """
     prefix = f"pnl/{period_month}/{client_id}/"
-    logger.info(
-        "Generating PnL report: client=%s period=%s prefix=%s", client_id, period_month, prefix
-    )
+    logger.info("Generating PnL report: client=%s period=%s prefix=%s", client_id, period_month, prefix)
 
     source = get_data_source(routing_key=_PNL_ROUTING_KEY, prefix=prefix)
     df = _read_pnl_dataframe(source)
