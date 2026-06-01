@@ -2,11 +2,14 @@
 
 These tests exercise the public API of ``trade_analytics``,
 ``monthly_report_generator``, ``pnl_chart_generator``,
-``dashboard_generator``, and ``invoice_state`` against the real backfill
-fixtures shipped under ``data/backfill/`` so that the refactored helper
-functions are at least walked end-to-end. They intentionally accept any
-non-error result (PnL, equity values, etc. depend on live data) — the goal is
-coverage of the happy-path control flow, not numerical regression checks.
+``dashboard_generator``, and ``invoice_state`` against backfill fixtures so
+that the refactored helper functions are at least walked end-to-end.  In CI
+the ``seeded_backfill_dir`` fixture from ``conftest.py`` provides a minimal
+synthetic dataset; locally, real backfilled data can be used instead.
+
+Tests intentionally accept any non-error result (PnL, equity values, etc.
+depend on data) — the goal is coverage of the happy-path control flow, not
+numerical regression checks.
 """
 
 from __future__ import annotations
@@ -50,20 +53,51 @@ from client_reporting_api.core.trade_analytics import (
     compute_coin_breakdown,
 )
 
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backfill"
+# ---------------------------------------------------------------------------
+# Real-data detection (used locally; CI always uses seeded_backfill_dir).
+# ---------------------------------------------------------------------------
+_REAL_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "backfill"
 
 
-def _real_clients_with_data() -> list[str]:
-    """Return the subset of CLIENT_IDS that actually have backfill data on disk."""
-    return [cid for cid in trade_analytics.CLIENT_IDS if (_DATA_DIR / cid).exists()]
+def _real_clients_on_disk() -> list[str]:
+    """Return CLIENT_IDS that have actual backfill data present on disk."""
+    return [cid for cid in trade_analytics.CLIENT_IDS if (_REAL_DATA_DIR / cid).exists()]
 
 
 @pytest.fixture(scope="module")
-def real_clients() -> list[str]:
-    clients = _real_clients_with_data()
+def real_clients(seeded_backfill_dir: Path) -> list[str]:  # type: ignore[return]
+    """Provide a list of client IDs with backfill data for smoke tests.
+
+    Priority:
+    1. Real data from ``data/backfill/`` when present (developer machine).
+    2. Synthetic seed fixtures from ``seeded_backfill_dir`` (CI / clean checkout).
+
+    When using synthetic data, patches ``_DATA_DIR`` in ``trade_analytics`` and
+    ``invoice_state`` at module scope (uses direct attribute mutation + generator
+    teardown since ``monkeypatch`` is function-scoped and cannot be used in
+    module-scoped fixtures).
+    """
+    real = _real_clients_on_disk()
+    if real:
+        # Real data present — modules keep their original paths.
+        yield real  # type: ignore[misc]
+        return
+
+    # Synthetic data: redirect _DATA_DIR in both modules for the test module lifetime.
+    orig_ta = trade_analytics._DATA_DIR
+    orig_is = invoice_state._DATA_DIR
+    trade_analytics._DATA_DIR = seeded_backfill_dir
+    invoice_state._DATA_DIR = seeded_backfill_dir
+
+    clients = [cid for cid in trade_analytics.CLIENT_IDS if (seeded_backfill_dir / cid).exists()]
     if not clients:
-        pytest.skip("No backfilled client data present — skipping coverage smoke tests")
-    return clients
+        trade_analytics._DATA_DIR = orig_ta
+        invoice_state._DATA_DIR = orig_is
+        pytest.skip("seeded_backfill_dir is empty — cannot run data-dependent smoke tests")
+
+    yield clients  # type: ignore[misc]
+    trade_analytics._DATA_DIR = orig_ta
+    invoice_state._DATA_DIR = orig_is
 
 
 # ── trade_analytics ────────────────────────────────────────────────────────
