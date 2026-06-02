@@ -37,7 +37,7 @@ dependencies = [
     "basedpyright==1.38.2",
     "pip-audit>=2.7.0,<3.0.0",
     "bandit>=1.7.0,<2.0.0",
-    "pyjwt>=2.12.0,<3.0.0",
+    "pyjwt>=2.13.0,<3.0.0",
     "ccxt<5.0.0,>=4.5.24",
     "google-cloud-firestore>=2.19.0,<3.0.0",
     "pandas<3.0.0,>=2.3.0",
