@@ -83,11 +83,18 @@ MOCK_INVOICES: list[dict[str, str | int | float | bool]] = [
 
 
 def _seed_mock_invoices() -> None:
-    """Insert every ``MOCK_INVOICES`` entry into the store (idempotent)."""
+    """Insert or update every ``MOCK_INVOICES`` entry into the store.
+
+    Seed always wins over cached dev-session mutations so tests see
+    the canonical seed state regardless of accumulated local cache.
+    """
     for inv in MOCK_INVOICES:
+        inv_data = {**inv, "id": inv["invoice_id"]}
         existing = store.get("invoices", str(inv["invoice_id"]))
         if existing is None:
-            store.create("invoices", {**inv, "id": inv["invoice_id"]})
+            store.create("invoices", inv_data)
+        else:
+            store.update("invoices", str(inv["invoice_id"]), inv_data)
 
 
 _seed_mock_invoices()

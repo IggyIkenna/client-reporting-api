@@ -37,16 +37,16 @@ dependencies = [
     "basedpyright==1.38.2",
     "pip-audit>=2.7.0,<3.0.0",
     "bandit>=1.7.0,<2.0.0",
-    "pyjwt>=2.12.0,<3.0.0",
+    "pyjwt>=2.13.0,<3.0.0",
     "ccxt<5.0.0,>=4.5.24",
     "google-cloud-firestore>=2.19.0,<3.0.0",
     "pandas<3.0.0,>=2.3.0",
     # Security floors for transitive dependencies (CVE remediation).
-    # aiohttp      <3.13.4 → CVE-2026-22815, CVE-2026-34513..34525
+    # aiohttp      <3.14.0 → CVE-2026-22815, CVE-2026-34513..34525, CVE-2026-34993 (CookieJar.load RCE)
     # cryptography <46.0.7 → CVE-2026-34073, CVE-2026-39892
     # pillow       <12.2.0 → CVE-2026-40192
     # pygments     <2.20.0 → CVE-2026-4539
-    "aiohttp>=3.13.4,<4.0.0",
+    "aiohttp>=3.14.0,<4.0.0",
     "cryptography>=46.0.7,<47.0.0",
     "pillow>=12.2.0,<13.0.0",
     "pygments>=2.20.0,<3.0.0",
@@ -97,6 +97,7 @@ typeCheckingMode = "strict"
 include = ["client_reporting_api"]
 exclude = ["tests", "**/__pycache__", ".venv*", ".venv-workspace", "build", "dist", "node_modules"]
 reportMissingTypeStubs = false
+reportUnknownMemberType = "error"
 reportUnknownVariableType = "error"
 
 [[tool.basedpyright.executionEnvironments]]
