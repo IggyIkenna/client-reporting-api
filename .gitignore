@@ -123,3 +123,8 @@ logs/
 # --- Optional: Jupyter (uncomment if repo has notebooks) ---
 # .ipynb_checkpoints/
 # profile_default/
+
+# QG sentinels — generated locally by quality-gates.sh, NEVER committed
+# (CLAUDE.md "Generated artifacts + QG sentinels are gitignored" + cicd_contract_hardening item H)
+.qg_last_passed_sha
+.qg_content_sentinel
