@@ -5,7 +5,6 @@ Verifies that:
 2. Core FastAPI app can be instantiated with auth disabled.
 3. /health and /readiness probes return expected status.
 4. SSE /api/v1/stream/reports endpoint is registered.
-5. S2S verify_service_token is callable.
 """
 
 from __future__ import annotations
@@ -30,24 +29,6 @@ class TestClientReportingApiStartup:
         import client_reporting_api
 
         assert client_reporting_api.__name__ == "client_reporting_api"
-
-    def test_import_auth_module(self) -> None:
-        """auth.py must import cleanly."""
-        import client_reporting_api.auth
-
-        assert client_reporting_api.auth.__name__ == "client_reporting_api.auth"
-
-    def test_verify_service_token_exists(self) -> None:
-        """verify_service_token must be exported from auth module."""
-        from client_reporting_api.auth import verify_service_token
-
-        assert callable(verify_service_token)
-
-    def test_verify_api_key_exists(self) -> None:
-        """verify_api_key must be exported from auth module."""
-        from client_reporting_api.auth import verify_api_key
-
-        assert callable(verify_api_key)
 
     def test_app_instantiates(self) -> None:
         """FastAPI app must exist and have the correct title."""

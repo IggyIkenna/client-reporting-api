@@ -24,7 +24,6 @@ import unified_trading_library.cloud_interface.api_auth as _uci_auth
 from fastapi.testclient import TestClient
 from unified_trading_library import AuthContext
 
-import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes.invoices import analytics as _ana_mod
 from client_reporting_api.api.routes.invoices import transitions as _trans_mod
@@ -63,15 +62,12 @@ def _make_external_auth(client_id: str = "PR") -> AuthContext:
 @pytest.fixture(autouse=True)
 def _disable_auth_globally() -> Generator[None]:
     """Patch UCI auth config so all token checks pass through."""
-    original_auth = _auth_module.DISABLE_AUTH
-    _auth_module.DISABLE_AUTH = True
     _original_fn = _uci_auth._get_auth_config.__wrapped__
     _uci_auth._get_auth_config.cache_clear()
     _uci_auth._get_auth_config = functools.lru_cache(maxsize=1)(lambda: (True, True, None))
 
     yield
 
-    _auth_module.DISABLE_AUTH = original_auth
     _uci_auth._get_auth_config = functools.lru_cache(maxsize=1)(_original_fn)
     _uci_auth._get_auth_config.cache_clear()
 

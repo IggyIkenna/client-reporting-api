@@ -10,7 +10,6 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 
 # Suppress cloud_mock_mode deprecation warnings from test fixture save/restore
@@ -24,13 +23,9 @@ def _disable_auth_and_mock_mode() -> Generator[None]:
     Tests mock generate_pnl_report directly, so is_mock_mode() must return False
     to avoid the mock-mode short-circuit in route handlers.
     """
-    original_auth = _auth_module.DISABLE_AUTH
-    _auth_module.DISABLE_AUTH = True
-
     # Routes use UTL's `create_api_auth` which reads `disable_auth` via an
-    # @lru_cache of UnifiedCloudConfig — setting the module-level DISABLE_AUTH
-    # in client_reporting_api.auth has no effect on the route's auth dependency.
-    # Patch UTL's _get_auth_config directly for the test duration (2026-05-17).
+    # @lru_cache of UnifiedCloudConfig. Patch UTL's _get_auth_config directly
+    # for the test duration (2026-05-17).
     from unified_trading_library.cloud_interface import (  # noqa: qg-deep-import
         api_auth as _utl_api_auth,  # test needs @lru_cache _get_auth_config
     )
@@ -56,7 +51,6 @@ def _disable_auth_and_mock_mode() -> Generator[None]:
 
     yield
 
-    _auth_module.DISABLE_AUTH = original_auth
     _utl_api_auth._get_auth_config = _orig_get_auth_config  # type: ignore[misc,assignment]
     _utl_api_auth._get_auth_config.cache_clear()
     reports_cfg.data_mode = orig_reports_data_mode  # type: ignore[misc]

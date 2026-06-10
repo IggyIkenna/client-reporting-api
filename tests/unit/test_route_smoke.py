@@ -14,7 +14,6 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
-import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -22,9 +21,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 @pytest.fixture(autouse=True)
 def _enable_mock_mode() -> Generator[None]:
-    """Enable mock mode + DISABLE_AUTH for the route-level dep, mirroring
-    ``tests/unit/test_performance_routes.py``.
-    """
+    """Enable mock mode + DISABLE_AUTH for the route-level dep."""
     original_env = {
         "DISABLE_AUTH": os.environ.get("DISABLE_AUTH"),
         "DATA_MODE": os.environ.get("DATA_MODE"),
@@ -39,12 +36,9 @@ def _enable_mock_mode() -> Generator[None]:
     _utl_api_auth = importlib.import_module("unified_trading_library.cloud_interface.api_auth")
     _utl_api_auth._get_auth_config.cache_clear()
 
-    original_auth = _auth_module.DISABLE_AUTH
-    _auth_module.DISABLE_AUTH = True
     try:
         yield
     finally:
-        _auth_module.DISABLE_AUTH = original_auth
         for key, val in original_env.items():
             if val is None:
                 os.environ.pop(key, None)

@@ -42,7 +42,6 @@ from client_reporting_api.api.routes.reports_stream import router as reports_str
 from client_reporting_api.api.routes.sports import router as sports_router
 from client_reporting_api.api.routes.tax import router as tax_router
 from client_reporting_api.api.routes.trades import router as trades_router
-from client_reporting_api.auth import auth_cfg as _auth_cfg
 from client_reporting_api.config import get_config
 from client_reporting_api.metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 
@@ -96,7 +95,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 # deploys swap this for a live Pub/Sub sink via the service runtime.
 setup_events("client-reporting-api", "local", sink=MockEventSink())
 
-_env = _auth_cfg.environment
+_env = get_config().environment
 app = FastAPI(
     title="Client Reporting Service",
     version="1.0.0",
