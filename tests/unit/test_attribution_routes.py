@@ -13,7 +13,6 @@ import pytest
 from fastapi.testclient import TestClient
 from unified_trading_library import AuthContext
 
-import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes import attribution as _attr_mod
 
@@ -25,13 +24,9 @@ from client_reporting_api.api.routes import attribution as _attr_mod
 @pytest.fixture(autouse=True)
 def _mock_mode() -> Generator[None]:
     """Enable mock mode and disable auth for all tests in this module."""
-    original_auth = _auth_module.DISABLE_AUTH
-    _auth_module.DISABLE_AUTH = True
-
     # Routes use UTL's create_api_auth which reads disable_auth via @lru_cache
-    # of UnifiedCloudConfig — setting the module-level DISABLE_AUTH has no
-    # effect on the route's auth dependency. Patch UTL's _get_auth_config
-    # directly (2026-05-17, per client_reporting_api_coverage_below_floor).
+    # of UnifiedCloudConfig. Patch UTL's _get_auth_config directly (2026-05-17,
+    # per client_reporting_api_coverage_below_floor).
     from unified_trading_library.cloud_interface import (  # noqa: qg-deep-import
         api_auth as _utl_api_auth,  # test needs @lru_cache _get_auth_config
     )
@@ -48,7 +43,6 @@ def _mock_mode() -> Generator[None]:
 
     yield
 
-    _auth_module.DISABLE_AUTH = original_auth
     _utl_api_auth._get_auth_config = _orig_utl_get_auth_config  # type: ignore[misc,assignment]
     _utl_api_auth._get_auth_config.cache_clear()
     cfg.data_mode = orig_data_mode  # type: ignore[misc]

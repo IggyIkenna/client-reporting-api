@@ -8,7 +8,6 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
-import client_reporting_api.auth as _auth_module
 from client_reporting_api.api.main import app
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -21,8 +20,7 @@ def _enable_mock_mode() -> Generator[None]:
     The route-level FastAPI auth dependency built by
     ``unified_trading_library.create_api_auth`` instantiates a fresh
     ``UnifiedCloudConfig`` per request, so we must set the underlying env
-    vars (DISABLE_AUTH / DATA_MODE) in addition to flipping the
-    module-level ``DISABLE_AUTH`` constant for the local middleware.
+    vars (DISABLE_AUTH / DATA_MODE).
     """
     original_env = {
         "DISABLE_AUTH": os.environ.get("DISABLE_AUTH"),
@@ -34,16 +32,11 @@ def _enable_mock_mode() -> Generator[None]:
     os.environ["CLOUD_MOCK_MODE"] = "true"
 
     # UTL caches the auth config tuple via @lru_cache. Clear the cache so the
-    # new env vars are picked up by the route-level dependency. The cache lives
-    # on a module-private function; reach it via the same import the dependency
-    # itself uses (the public ``create_api_auth`` symbol).
+    # new env vars are picked up by the route-level dependency.
     import importlib
 
     _utl_api_auth = importlib.import_module("unified_trading_library.cloud_interface.api_auth")
     _utl_api_auth._get_auth_config.cache_clear()
-
-    original_auth = _auth_module.DISABLE_AUTH
-    _auth_module.DISABLE_AUTH = True
 
     from client_reporting_api.api.routes import (
         clients as _clients_mod,
@@ -68,7 +61,6 @@ def _enable_mock_mode() -> Generator[None]:
 
     yield
 
-    _auth_module.DISABLE_AUTH = original_auth
     for cfg, dm, cm in originals:
         cfg.data_mode = dm  # type: ignore[misc]
         cfg.cloud_mock_mode = cm  # type: ignore[misc]

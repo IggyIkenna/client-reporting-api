@@ -13,8 +13,8 @@ def test_main_calls_setup_events_with_live_mode() -> None:
 
     with (
         patch(
-            "client_reporting_api.main._auth_cfg",
-            mock_cfg,
+            "client_reporting_api.main._get_config",
+            return_value=mock_cfg,
         ),
         patch(
             "client_reporting_api.main.PubSubEventSink",

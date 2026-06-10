@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 def _init_events() -> None:
     """Initialize unified_trading_library.events in test mode before any test runs.
 
-    GoogleOAuthMiddleware calls log_event() which requires setup_events() to
-    have been called first.  Mode 'test' silences all real sinks.
+    log_event() requires setup_events() to have been called first.
+    Mode 'test' silences all real sinks.
     """
     setup_events("client-reporting-api", "test")
 

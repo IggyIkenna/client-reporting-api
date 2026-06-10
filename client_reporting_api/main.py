@@ -3,13 +3,13 @@ import logging
 import uvicorn
 from unified_trading_library import PubSubEventSink, setup_events, setup_tracing
 
-from client_reporting_api.auth import auth_cfg as _auth_cfg
+from client_reporting_api.config import get_config as _get_config
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    config = _auth_cfg
+    config = _get_config()
     sink = PubSubEventSink(
         project_id=config.gcp_project_id,
         topic="client-reporting-api-events",
