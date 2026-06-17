@@ -40,7 +40,7 @@ ODUM_PAYMENT_INFO = {
     "company_name": "Odum Research Ltd",
     "network": "Ethereum (ERC-20)",
     "currency": "USDT",
-    "deposit_address": "0x28B73A50B13e1CCc8c1059C12e15e737b7E348d9",
+    "deposit_address": "0x28B73A50B13e1CCc8c1059C12e15e737b7E348d9",  # QG-allow: defi-citation — Odum invoice wallet
     "notes": "Please send exact amount. Include invoice ID in memo/reference.",
 }
 
