@@ -24,6 +24,7 @@ from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_
 from client_reporting_api.core.attribution_reader import read_attribution_rows
 from client_reporting_api.core.entitlement import enforce_entitlement  # pyright: ignore[reportPrivateUsage]
 from client_reporting_api.core.ledger_views import (
+    attribution_breakdown,
     compute_ledger_views,
     read_ledger_rows,
     realized_pnl_total,
@@ -326,3 +327,29 @@ def get_client_attribution(
         return _mock_attribution(client_id, date_from, date_to)
     rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
     return _attribution_from_rows(client_id, rows)
+
+
+@router.get("/attribution/breakdown")
+def get_client_attribution_breakdown(
+    client_id: str,
+    auth: AuthDep,
+    date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),  # noqa: B008
+    date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """Per-venue / per-instrument / per-factor / per-layer attribution rollups (P2.5.1).
+
+    Folds the client's ``PnLAttributionRow`` records into GROUP-BY sums by venue,
+    instrument, factor and layer (plus the grand total) — the operator's
+    "where did the P&L come from" breakdown. Empty (no attribution shards yet) →
+    honest all-empty rollups + ``"0"`` total, never mock.
+    """
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
+        mock_rows = _mock_attribution(client_id, date_from, date_to)["rows"]
+        breakdown = attribution_breakdown(list(mock_rows) if isinstance(mock_rows, list) else [])
+        breakdown["client_id"] = client_id
+        return breakdown
+    rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
+    breakdown = attribution_breakdown(rows)
+    breakdown["client_id"] = client_id
+    return breakdown
