@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated
@@ -22,6 +23,11 @@ from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_
 
 from client_reporting_api.core.attribution_reader import read_attribution_rows
 from client_reporting_api.core.entitlement import enforce_entitlement  # pyright: ignore[reportPrivateUsage]
+from client_reporting_api.core.ledger_views import (
+    compute_ledger_views,
+    read_ledger_rows,
+    realized_pnl_total,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/clients/{client_id}", tags=["attribution"])
@@ -69,28 +75,6 @@ def _mock_pnl(client_id: str, date_from: date | None, date_to: date | None) -> d
                 "total_pnl": "500.00",
                 "strategy_alpha_total": "450.00",
                 "execution_alpha_total": "50.00",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-        ],
-    }
-
-
-def _mock_positions(client_id: str) -> dict[str, object]:
-    return {
-        "client_id": client_id,
-        "positions": [
-            {
-                "archetype_id": "carry_staked_basis",
-                "strategy_leg_id": "leg_0",
-                "trade_id": None,
-                "venue": "hyperliquid",
-                "instrument": "BTC-PERP",
-                "qty": "0.5",
-                "mark_price": "62000.00",
-                "cost_basis": "61500.00",
-                "realized_pnl": "0.00",
-                "unrealized_pnl": "250.00",
-                "share_class": "USDT",
                 "timestamp": datetime.now(UTC).isoformat(),
             }
         ],
@@ -158,8 +142,15 @@ def _nav_from_rows(
 def _pnl_from_rows(
     client_id: str,
     rows: list[dict[str, object]],
+    realized_pnl_total: Decimal,
 ) -> dict[str, object]:
-    """Aggregate attribution rows into per-date PnL entries."""
+    """Aggregate attribution rows into per-date PnL entries.
+
+    ``realized_pnl_total`` is the ledger-derived realised PnL (``Σ`` over the
+    client's ``PositionLedgerRow``s) — it replaces the former hardcoded
+    ``"0.00"``. It is attributed to the latest period (most recent date) since
+    realised PnL is a running cumulative figure, not a per-attribution-row split.
+    """
     by_date: dict[str, dict[str, Decimal]] = {}
     for row in rows:
         ts = row.get("timestamp")
@@ -182,19 +173,27 @@ def _pnl_from_rows(
         elif layer == "EXECUTION":
             by_date[row_date]["execution"] += amount
 
+    sorted_dates = sorted(by_date)
+    latest_date = sorted_dates[-1] if sorted_dates else None
     entries = [
         {
             "period_tag": d,
-            "realized_pnl": "0.00",
+            "realized_pnl": str(realized_pnl_total) if d == latest_date else "0",
             "unrealized_pnl": str(totals["total"]),
-            "total_pnl": str(totals["total"]),
+            "total_pnl": str(totals["total"] + (realized_pnl_total if d == latest_date else Decimal(0))),
             "strategy_alpha_total": str(totals["strategy"]),
             "execution_alpha_total": str(totals["execution"]),
             "timestamp": f"{d}T00:00:00+00:00",
         }
-        for d, totals in sorted(by_date.items())
+        for d in sorted_dates
+        for totals in [by_date[d]]
     ]
-    return {"client_id": client_id, "share_class": "USDT", "entries": entries}
+    return {
+        "client_id": client_id,
+        "share_class": "USDT",
+        "realized_pnl_total": str(realized_pnl_total),
+        "entries": entries,
+    }
 
 
 def _attribution_from_rows(
@@ -202,7 +201,7 @@ def _attribution_from_rows(
     rows: list[dict[str, object]],
 ) -> dict[str, object]:
     """Project raw attribution parquet rows to API response."""
-    out = []
+    out: list[dict[str, object]] = []
     for row in rows:
         ts = row.get("timestamp")
         out.append(
@@ -220,6 +219,27 @@ def _attribution_from_rows(
             }
         )
     return {"client_id": client_id, "rows": out}
+
+
+def _ledger_views(client_id: str, as_of_date: date | None) -> dict[str, object]:
+    """Compute the ledger-derived positions / balances / PnL totals for a client.
+
+    Reads the client's ``LedgerRow`` tape via the pluggable :func:`read_ledger_rows`
+    seam (empty until engine-wiring populates the GCS ledger) and folds it into
+    the operator views. Marks / share-class maps are empty for now (the seam
+    returns no rows yet), so the result is an honest zero/empty response — NOT
+    mock data. When real ledger rows arrive the marks/share-class maps are
+    supplied alongside them at the read seam.
+    """
+    rows = read_ledger_rows(client_id, as_of_date=as_of_date)
+    marks: Mapping[str, Decimal] = {}
+    share_class_of: Mapping[str, str] = {}
+    return compute_ledger_views(
+        rows,
+        marks=marks,
+        as_of=datetime.now(UTC),
+        share_class_of=share_class_of,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -249,26 +269,45 @@ def get_client_pnl(
     date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),  # noqa: B008
     date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
 ) -> dict[str, object]:
-    """Daily PnL series for a client. Returns strategy_alpha + execution_alpha split per day."""
+    """Daily PnL series for a client. Returns strategy_alpha + execution_alpha split per day.
+
+    ``realized_pnl`` is ledger-derived (``Σ`` over the client's ``PositionLedgerRow``s),
+    NOT the former hardcoded ``"0.00"``. Until the GCS ledger is populated the
+    ledger seam returns no rows → the realised total is an honest ``"0"``.
+    """
     enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_pnl(client_id, date_from, date_to)
     rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
-    return _pnl_from_rows(client_id, rows)
+    ledger_rows = read_ledger_rows(client_id, as_of_date=date_to)
+    realized_total = realized_pnl_total(
+        ledger_rows,
+        marks={},
+        as_of=datetime.now(UTC),
+        share_class_of={},
+    )
+    return _pnl_from_rows(client_id, rows, realized_total)
 
 
 @router.get("/positions")
 def get_client_positions(
     client_id: str,
     auth: AuthDep,
+    as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
 ) -> dict[str, object]:
-    """Current open positions for a client.
+    """Current open positions for a client — REAL, ledger-derived (P3.4 + P5.1).
 
-    Positions snapshot is sourced from position-balance-monitor-service parquet.
-    MVP returns mock data — real feed plugged in Phase 8 demo run.
+    Returns the client's ``PositionLedgerRow`` list (``Σ delta`` with average-cost
+    realised/unrealised PnL) plus per-venue / per-instrument / per-share_class
+    balance rollups and the realised+unrealised PnL totals. The ledger source is
+    a pluggable seam (:func:`read_ledger_rows`) returning ``[]`` until the
+    engine-wiring phase populates the GCS ledger — so today this is an HONEST
+    empty/zero response (positions ``[]``, totals ``"0"``), never mock data.
     """
     enforce_entitlement(auth, client_id)
-    return _mock_positions(client_id)
+    views = _ledger_views(client_id, as_of)
+    views["client_id"] = client_id
+    return views
 
 
 @router.get("/attribution")
