@@ -17,6 +17,7 @@ from unified_trading_library import (  # pyright: ignore[reportPrivateImportUsag
 )
 
 from client_reporting_api.cli.backfill_command import cmd_backfill
+from client_reporting_api.cli.daily_digest_command import cmd_daily_ledger_digest
 from client_reporting_api.cli.onboard_command import cmd_onboard
 from client_reporting_api.cli.status_command import cmd_status
 from client_reporting_api.cli.update_command import cmd_update
@@ -61,6 +62,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_backfill_parser(sub)
     _add_update_parser(sub)
     _add_status_parser(sub)
+    _add_daily_ledger_digest_parser(sub)
     return parser
 
 
@@ -102,6 +104,19 @@ def _add_status_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
     p_status = sub.add_parser("status", help="Show all clients and data freshness")
     p_status.add_argument("--client", help="Specific client ID")
     p_status.set_defaults(func=cmd_status)
+
+
+def _add_daily_ledger_digest_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p_digest = sub.add_parser(
+        "daily-ledger-digest",
+        help="Build + POST the daily ledger digest to alerting-service (P7.1-C cron stage C)",
+    )
+    p_digest.add_argument("--client-id", required=True, help="Client whose run-ledger to digest")
+    p_digest.add_argument("--date", help="Digest date YYYY-MM-DD (default: yesterday, T+1)")
+    p_digest.add_argument("--seed-nav", default="0", help="NAV seed for the HWM series (default 0)")
+    p_digest.add_argument("--channel", default="#uts-live-alerts", help="Slack channel target")
+    p_digest.add_argument("--dry-run", action="store_true", help="Build + log only, do not POST")
+    p_digest.set_defaults(func=cmd_daily_ledger_digest)
 
 
 def main() -> None:
