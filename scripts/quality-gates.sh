@@ -81,10 +81,22 @@ HARDCODED_PROTO_EXCLUDE_GLOBS=("--glob=!**/cli/gcs_sync.py" "--glob=!**/cli/__in
 # Type check + pytest + codex often exceed 300s on large trees locally.
 PIP_AUDIT_EXTRA_ARGS="--ignore-vuln PYSEC-2024-277 --ignore-vuln PYSEC-2025-183"
 MAX_DURATION=600
-WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$(git rev-parse --show-toplevel)/.." && pwd)}"
 # CODEX_MAX_VIOLATIONS pinned 2026-06-11 per plans/active/codex_violations_ratchet_to_five_2026_06_10.md (census-honest: 0 current violations; ratchet-down only).
 CODEX_MAX_VIOLATIONS=0
-source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
+BASE_QG_SCRIPT="${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
+if [ ! -f "${BASE_QG_SCRIPT}" ]; then
+    # In-image (CI test-in-image) runs have no PM repo / no git → the base script is absent.
+    # Mirror the fleet-canonical mtds guard: skip the in-image gate pass gracefully rather than
+    # crashing on a `//unified-trading-pm/...` path (the real gate ran locally + at the staging PR).
+    if [ "${CLOUD_BUILD:-false}" = "true" ]; then
+        echo "quality-gates base script unavailable in image; skipping in-image gate pass"
+        exit 0
+    fi
+    echo "Missing base quality-gates script: ${BASE_QG_SCRIPT}" >&2
+    exit 1
+fi
+source "${BASE_QG_SCRIPT}"
 
 # Codex enforcement: lifecycle triple (STARTED / STOPPED / FAILED) via UTL — not duplicated in service code.
 # See: unified-trading-pm/codex/03-observability/lifecycle-events.md § Lifecycle Event QG Enforcement
