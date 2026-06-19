@@ -155,10 +155,10 @@ def read_ledger_rows(
     """
     runs_prefix = client_runs_prefix(client_id, cloud=cloud)
     bucket, prefix = _split_gs(runs_prefix)
-    storage = get_storage_client()
 
     rows: list[LedgerRow] = []
     try:
+        storage = get_storage_client()
         for blob_meta in storage.list_blobs(bucket, prefix=prefix):
             path = blob_meta.name
             if not _is_instruction_blob(path, as_of_date):
