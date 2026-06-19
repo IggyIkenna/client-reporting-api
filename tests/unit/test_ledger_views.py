@@ -278,7 +278,6 @@ class TestReadLedgerRowsJsonl:
     ``LedgerRow``s (stripping the recon-only keys ``LedgerRow`` forbids)."""
 
     def test_round_trip_from_client_ledger_root(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from unified_api_contracts import LedgerAssetClass
         from unified_api_contracts.internal import FillModel, TradeFillRecord, make_trade_key
         from unified_trading_library.ledger import client_ledger_root, write_run_ledger  # noqa: qg-deep-import
 
@@ -304,7 +303,7 @@ class TestReadLedgerRowsJsonl:
             def bucket(self, name: str) -> _WBucket:
                 return _WBucket()
 
-        ik = "hyperliquid:PERP:BTC-PERP"
+        ik = "hyperliquid:PERPETUAL:BTC-PERP"
         ts = datetime(2026, 5, 1, 10, 0, 0, tzinfo=UTC)
         fill = TradeFillRecord(
             trade_key=make_trade_key(ik, "i1", ts),
@@ -327,9 +326,6 @@ class TestReadLedgerRowsJsonl:
             client_id="client-A",
             asset_group="cefi",
             quote_currency="USDT",
-            asset_symbol_of={ik: "BTC-PERP"},
-            asset_canonical_id_of={ik: "btc"},
-            asset_class_of={ik: LedgerAssetClass.PERP},
             storage_client=_WClient(),
         )
 
@@ -361,8 +357,20 @@ class TestAttributionBreakdown:
         from client_reporting_api.core.ledger_views import attribution_breakdown
 
         rows = [
-            {"venue": "hyperliquid", "instrument_id": "BTC-PERP", "factor": "CARRY", "layer": "STRATEGY", "amount": "300"},  # noqa: E501
-            {"venue": "hyperliquid", "instrument_id": "BTC-PERP", "factor": "SLIPPAGE", "layer": "EXECUTION", "amount": "-50"},  # noqa: E501
+            {
+                "venue": "hyperliquid",
+                "instrument_id": "BTC-PERP",
+                "factor": "CARRY",
+                "layer": "STRATEGY",
+                "amount": "300",
+            },
+            {
+                "venue": "hyperliquid",
+                "instrument_id": "BTC-PERP",
+                "factor": "SLIPPAGE",
+                "layer": "EXECUTION",
+                "amount": "-50",
+            },
             {"venue": "binance", "instrument_id": "ETH-PERP", "factor": "CARRY", "layer": "STRATEGY", "amount": "120"},
         ]
         out = attribution_breakdown(rows)
