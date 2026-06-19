@@ -8,6 +8,7 @@ Entitlement logic is tested via dependency_overrides (same pattern as allocators
 from __future__ import annotations
 
 from collections.abc import Generator
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -164,20 +165,23 @@ class TestGetPnl:
 
 
 class TestGetPositions:
-    def test_returns_200_with_mock_data(self, _client_a_auth: None) -> None:
+    def test_returns_200_honest_empty_ledger(self, _client_a_auth: None) -> None:
+        # Real ledger-derived (P3.4 + P5.1) — the ledger seam is empty until
+        # engine-wiring populates GCS, so this is an HONEST empty/zero response.
         client = TestClient(app, raise_server_exceptions=True)
         response = client.get("/api/v1/clients/client-A/positions")
         assert response.status_code == 200
         payload = response.json()
         assert payload["client_id"] == "client-A"
-        assert "positions" in payload
-        assert isinstance(payload["positions"], list)
-        assert len(payload["positions"]) >= 1
-        pos = payload["positions"][0]
-        assert "venue" in pos
-        assert "instrument" in pos
-        assert "qty" in pos
-        assert "unrealized_pnl" in pos
+        assert payload["positions"] == []  # honest empty, NOT mock data
+        balances = payload["balances"]
+        assert balances["by_venue"] == []
+        assert balances["by_instrument"] == []
+        assert balances["by_share_class"] == []
+        totals = payload["totals"]
+        assert totals["realized_pnl"] == "0"  # NOT "0.00" placeholder
+        assert totals["unrealized_pnl"] == "0"
+        assert totals["total_pnl"] == "0"
 
     def test_entitlement_blocks_other_client(self, _client_a_auth: None) -> None:
         client = TestClient(app, raise_server_exceptions=True)
@@ -321,32 +325,43 @@ class TestNavFromRows:
 
 class TestPnlFromRows:
     def test_empty_rows_returns_empty_entries(self) -> None:
-        result = _attr_mod._pnl_from_rows("client-A", [])
+        result = _attr_mod._pnl_from_rows("client-A", [], Decimal("0"))
         assert result["client_id"] == "client-A"
         assert result["share_class"] == "USDT"
         assert result["entries"] == []
+        assert result["realized_pnl_total"] == "0"
 
     def test_aggregates_by_date(self) -> None:
-        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS)
+        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS, Decimal("0"))
         entries = result["entries"]
         assert len(entries) == 2  # 2026-05-01 and 2026-05-02
 
     def test_strategy_and_execution_split(self) -> None:
-        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS)
+        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS, Decimal("0"))
         entries = result["entries"]
         may1 = next(e for e in entries if e["period_tag"] == "2026-05-01")
         assert may1["strategy_alpha_total"] == "300.00"
         assert may1["execution_alpha_total"] == "50.00"
         assert may1["total_pnl"] == "350.00"
 
+    def test_realized_pnl_total_attributed_to_latest_period(self) -> None:
+        # Ledger-derived realised PnL replaces the former hardcoded "0.00".
+        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS, Decimal("1991.4"))
+        entries = result["entries"]
+        may1 = next(e for e in entries if e["period_tag"] == "2026-05-01")
+        may2 = next(e for e in entries if e["period_tag"] == "2026-05-02")
+        assert may1["realized_pnl"] == "0"  # earlier period
+        assert may2["realized_pnl"] == "1991.4"  # latest period carries the running total
+        assert result["realized_pnl_total"] == "1991.4"
+
     def test_skips_invalid_amount(self) -> None:
         rows = [{"timestamp": "2026-05-01T00:00:00+00:00", "layer": "STRATEGY", "amount": "bad"}]
-        result = _attr_mod._pnl_from_rows("client-X", rows)
+        result = _attr_mod._pnl_from_rows("client-X", rows, Decimal("0"))
         assert result["entries"] == []
 
     def test_handles_missing_timestamp(self) -> None:
         rows = [{"timestamp": None, "layer": "STRATEGY", "amount": "100.00"}]
-        result = _attr_mod._pnl_from_rows("client-X", rows)
+        result = _attr_mod._pnl_from_rows("client-X", rows, Decimal("0"))
         assert len(result["entries"]) == 1
         assert result["entries"][0]["period_tag"] == "unknown"
 
