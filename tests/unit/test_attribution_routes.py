@@ -458,6 +458,7 @@ class TestLivePaths:
         orig_is_mock = cfg.is_mock_mode
         object.__setattr__(cfg, "is_mock_mode", lambda: False)
         try:
+            # (a) NO PricingLedger marks → honest "no_marks": unrealized null, NOT a fabricated 0.
             with (
                 patch(
                     "client_reporting_api.api.routes.attribution.read_ledger_rows",
@@ -467,6 +468,10 @@ class TestLivePaths:
                     "client_reporting_api.api.routes.attribution.resolve_canonical_run",
                     return_value="paper-20260620004135-bbbb",
                 ),
+                patch(
+                    "client_reporting_api.api.routes.attribution.read_marks",
+                    return_value={},
+                ),
             ):
                 client = TestClient(app, raise_server_exceptions=True)
                 response = client.get("/api/v1/clients/client-A/pnl")
@@ -475,6 +480,35 @@ class TestLivePaths:
             assert payload["run_id"] == "paper-20260620004135-bbbb"
             assert len(payload["entries"]) == 2  # UNISWAP_V3:ETH + LIDO:ETH
             assert payload["realized_pnl_total"] == "0"  # all-open run
+            assert payload["marks_status"] == "no_marks"
+            assert payload["unrealized_pnl_total"] is None  # honest null, not "0"
+            assert payload["total_pnl"] == "0"  # = realised only while unmarked
+            assert all(e["unrealized_pnl"] is None for e in payload["entries"])
+
+            # (b) WITH PricingLedger marks → marks-driven non-zero unrealized.
+            with (
+                patch(
+                    "client_reporting_api.api.routes.attribution.read_ledger_rows",
+                    return_value=ledger_rows,
+                ),
+                patch(
+                    "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                    return_value="paper-20260620004135-bbbb",
+                ),
+                patch(
+                    "client_reporting_api.api.routes.attribution.read_marks",
+                    return_value={"ETH": Decimal("3100")},
+                ),
+            ):
+                client = TestClient(app, raise_server_exceptions=True)
+                response = client.get("/api/v1/clients/client-A/pnl")
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["marks_status"] == "marked"
+            # net ETH = 2 (UNISWAP BUY) + 33 (LIDO SUPPLY) = 35 @ blended avg_cost,
+            # marked at 3100 → non-zero, real mark-to-market (was 0 with marks={}).
+            assert payload["unrealized_pnl_total"] is not None
+            assert Decimal(payload["unrealized_pnl_total"]) != Decimal("0")
         finally:
             object.__setattr__(cfg, "is_mock_mode", orig_is_mock)
 

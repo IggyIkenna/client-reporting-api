@@ -57,6 +57,19 @@ logger = logging.getLogger(__name__)
 _INSTRUCTION_LEDGER_SUFFIX = ".jsonl"
 _LEDGER_TYPE_INSTRUCTION = "ledger_type=instruction"
 
+#: The PricingLedger partition. A run's mark snapshots land under
+#: ``…/run_id=R/ledger_type=pricing/…jsonl`` as ``LedgerRow``s with
+#: ``event_type=mark_update`` (the canonical PricingLedger discriminator — UAC
+#: ``PricingLedger = LedgerRow`` alias, writer = MTDS / the paper engine). Each
+#: mark row carries the canonical ``asset_canonical_id`` + the mark in ``price``.
+#: The marks reader lists this prefix for the SAME canonical run the
+#: positions/PnL views resolve, so the unrealized P&L is marked against the run's
+#: own mark snapshots — never a foreign run's, never re-derived.
+_LEDGER_TYPE_PRICING = "ledger_type=pricing"
+
+#: ``LedgerRow.event_type`` value that discriminates a PricingLedger mark row.
+_MARK_UPDATE_EVENT_TYPE = "mark_update"
+
 #: The batch-rerun subtree marker. A run's batch rerun lands under
 #: ``…/run_id=R/__batch__/B/ledger/…`` — those JSONL objects are the BATCH copy of
 #: the SAME fills and MUST NOT be folded into the paper run's positions/PnL/trades
@@ -275,6 +288,80 @@ def read_canonical_run_fills(
         logger.warning("read_canonical_run_fills: load failed for client=%s run=%s: %s", client_id, run_id, exc)
         return run_id, []
     return run_id, fills
+
+
+def _parse_mark_jsonl(raw: str, into: dict[str, Decimal]) -> None:
+    """Fold one PricingLedger JSONL object's ``mark_update`` rows into ``into``.
+
+    Last-write-wins per ``asset_canonical_id``: a later line for the same asset
+    overwrites the earlier mark (caller lists objects in lexicographic order, so
+    the freshest snapshot wins). Non-``mark_update`` rows, rows without a usable
+    ``asset_canonical_id`` / ``price``, and unparseable prices are skipped.
+    """
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        record = json.loads(stripped)
+        if str(record.get("event_type", "")) != _MARK_UPDATE_EVENT_TYPE:
+            continue
+        asset_canonical_id = record.get("asset_canonical_id")
+        price = record.get("price")
+        if not isinstance(asset_canonical_id, str) or not asset_canonical_id or price is None:
+            continue
+        try:
+            into[asset_canonical_id] = Decimal(str(price))
+        except (ArithmeticError, ValueError):
+            continue
+
+
+def read_marks(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> dict[str, Decimal]:
+    """Read THE canonical run's PricingLedger marks → ``{asset_canonical_id -> mark}``.
+
+    Lists the run's ``ledger_type=pricing`` JSONL objects under the SAME
+    client-addressable ``client_ledger_root`` the instruction tape lives under
+    (so the marks belong to the EXACT run the positions/PnL views fold — never a
+    foreign run's, never re-derived), keeps only ``event_type=mark_update`` rows,
+    and projects each to ``asset_canonical_id -> Decimal(price)``. The
+    ``asset_canonical_id`` key is what :func:`materialize_position_ledger` joins
+    marks on (per the UTL marks convention), so the dict drops straight into
+    ``compute_pnl_entries(marks=...)`` -> unrealized = ``Sum (mark - avg_cost) * net_qty``.
+
+    A later mark for the same asset (a newer snapshot in the same run) wins —
+    objects are listed in lexicographic key order and folded last-write-wins, so
+    the freshest mark per asset is used.
+
+    Returns ``{}`` when the run has no PricingLedger objects yet — the HONEST
+    "no marks" path: the caller surfaces unrealized as null/"no marks", never a
+    fabricated 0 that reads as a real mark-to-market.
+    """
+    if not run_id:
+        return {}
+    marks: dict[str, Decimal] = {}
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        bucket, root_prefix = _split_gs(ledger_root)
+        pricing_prefix = f"{root_prefix}{_LEDGER_TYPE_PRICING}/"
+        storage = get_storage_client()
+        for blob_meta in sorted(
+            storage.list_blobs(bucket, prefix=pricing_prefix),
+            key=lambda b: str(getattr(b, "name", "")),
+        ):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX):
+                continue
+            if _BATCH_MARKER in path:
+                continue  # never read the batch-rerun copy's marks into the paper view
+            raw = storage.download_bytes(bucket, path).decode("utf-8")
+            _parse_mark_jsonl(raw, marks)
+    except Exception as exc:
+        logger.warning("read_marks: pricing-ledger read failed for client=%s run=%s: %s", client_id, run_id, exc)
+        return {}
+    return marks
 
 
 def _decimal_str(value: Decimal | None) -> str | None:

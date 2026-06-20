@@ -16,7 +16,7 @@ import logging
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
@@ -29,6 +29,7 @@ from client_reporting_api.core.ledger_views import (
     compute_pnl_entries,
     read_canonical_run_fills,
     read_ledger_rows,
+    read_marks,
     resolve_canonical_run,
 )
 from client_reporting_api.core.recon_view import latest_recon_verdict
@@ -171,22 +172,29 @@ def _attribution_from_rows(
 def _ledger_views(client_id: str, as_of_date: date | None) -> dict[str, object]:
     """Compute the ledger-derived positions / balances / PnL totals for a client.
 
-    Reads the client's ``LedgerRow`` tape via the pluggable :func:`read_ledger_rows`
-    seam (empty until engine-wiring populates the GCS ledger) and folds it into
-    the operator views. Marks / share-class maps are empty for now (the seam
-    returns no rows yet), so the result is an honest zero/empty response — NOT
-    mock data. When real ledger rows arrive the marks/share-class maps are
-    supplied alongside them at the read seam.
+    Resolves THE canonical paper run, reads its InstructionLedger ``LedgerRow``
+    tape (:func:`read_ledger_rows`) AND its PricingLedger marks
+    (:func:`read_marks` → ``{asset_canonical_id -> mark}``), and folds both into
+    the operator views — so positions carry mark-to-market unrealized P&L from
+    the run's own mark snapshots. When the run has no PricingLedger objects yet
+    ``marks`` is ``{}`` → unrealized is an honest 0 per position (no marks to
+    apply), distinguished by the ``marks_status`` field. ``share_class_of`` is
+    derived per-position by the ledger writer (carried on each row), so no
+    separate map is threaded here.
     """
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of_date)
     rows = read_ledger_rows(client_id, as_of_date=as_of_date)
-    marks: Mapping[str, Decimal] = {}
+    marks: Mapping[str, Decimal] = read_marks(client_id, run_id) if run_id else {}
     share_class_of: Mapping[str, str] = {}
-    return compute_ledger_views(
+    views = compute_ledger_views(
         rows,
         marks=marks,
         as_of=datetime.now(UTC),
         share_class_of=share_class_of,
     )
+    views["run_id"] = run_id
+    views["marks_status"] = "marked" if marks else "no_marks"
+    return views
 
 
 # ---------------------------------------------------------------------------
@@ -229,23 +237,45 @@ def get_client_pnl(
     the dedicated ``/attribution`` + ``/attribution/breakdown`` endpoints.
 
     All-opening runs legitimately show ``realized_pnl=0`` per leg (correct avg-cost
-    accounting — nothing has closed); ``unrealized`` carries the mark-to-market.
-    Honest zero/empty when the client has no run.
+    accounting — nothing has closed); ``unrealized`` carries the mark-to-market
+    DERIVED FROM THE PricingLedger marks (fix 2026-06-20): the canonical run's
+    ``ledger_type=pricing`` mark snapshots are read into a ``{asset_canonical_id ->
+    mark}`` map and folded into the position ledger, so
+    ``unrealized_pnl = Sum (mark - avg_cost) * net_qty`` populates per position + the
+    total. When the run has NO PricingLedger objects yet the response is an HONEST
+    "no marks" state (``marks_status="no_marks"`` + ``unrealized_pnl_total=null``),
+    NOT a fabricated 0 that reads as a real mark-to-market. Honest zero/empty when
+    the client has no run.
     """
     enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_pnl(client_id, date_from, date_to)
     run_id = resolve_canonical_run(client_id, as_of_date=date_to)
     ledger_rows = read_ledger_rows(client_id, as_of_date=date_to)
+    marks = read_marks(client_id, run_id) if run_id else {}
     pnl = compute_pnl_entries(
         ledger_rows,
-        marks={},
+        marks=marks,
         as_of=datetime.now(UTC),
         share_class_of={},
     )
     pnl["client_id"] = client_id
     pnl["share_class"] = "USDT"
     pnl["run_id"] = run_id
+    pnl["marks_status"] = "marked" if marks else "no_marks"
+    if not marks:
+        # HONEST absence: with no PricingLedger marks the position ledger marks
+        # everything at avg_cost → unrealized is structurally 0. Surface that as a
+        # typed "no marks yet" null on the run-level totals + per entry, so the UI
+        # never renders a fabricated 0 as a real mark-to-market. Realised P&L +
+        # net_qty + avg_cost are unaffected (mark-independent).
+        pnl["unrealized_pnl_total"] = None
+        pnl["total_pnl"] = pnl.get("realized_pnl_total")  # total = realised only while unmarked
+        entries = pnl.get("entries")
+        if isinstance(entries, list):
+            for entry in cast("list[dict[str, object]]", entries):
+                entry["unrealized_pnl"] = None
+                entry["total_pnl"] = entry.get("realized_pnl")
     return pnl
 
 
