@@ -121,13 +121,19 @@ def _split_gs(uri: str) -> tuple[str, str]:
     return parsed.netloc, parsed.path.lstrip("/")
 
 
-def _parse_instruction_jsonl(raw: str) -> list[LedgerRow]:
+def _parse_instruction_jsonl(raw: str, instrument_key_by_row_id: dict[str, str]) -> list[LedgerRow]:
     """Parse newline-delimited InstructionLedger JSON into ``LedgerRow``s.
 
     The writer stamps reconciliation-only keys (``direction`` / ``fill_model`` /
     ``instrument_key`` / ``strategy_instruction_id`` / ``correlation_id``)
     ALONGSIDE the ``LedgerRow`` dump; ``LedgerRow`` is ``extra="forbid"``, so only
     its own fields (minus the clobbered ``direction``) are kept before validating.
+
+    The stamped canonical ``instrument_key`` (``VENUE:INSTRUMENT_TYPE:SYMBOL``) is
+    captured into ``instrument_key_by_row_id`` keyed by the row's ``row_id`` — the
+    materialiser joins marks + groups positions on THIS canonical key (not on
+    ``asset_canonical_id``, which collides across same-asset legs on different
+    venues). It is the key the writer literally read/stamped, not a reconstruction.
     """
     parsed: list[LedgerRow] = []
     for line in raw.splitlines():
@@ -136,7 +142,11 @@ def _parse_instruction_jsonl(raw: str) -> list[LedgerRow]:
             continue
         record = json.loads(stripped)
         ledger_fields = {k: v for k, v in record.items() if k in _LEDGER_ROW_FIELDS}
-        parsed.append(LedgerRow.model_validate(ledger_fields))
+        row = LedgerRow.model_validate(ledger_fields)
+        parsed.append(row)
+        instrument_key = record.get("instrument_key")
+        if isinstance(instrument_key, str) and instrument_key:
+            instrument_key_by_row_id[row.row_id] = instrument_key
     return parsed
 
 
@@ -206,7 +216,7 @@ def read_ledger_rows(
     client_id: str,
     as_of_date: date | None = None,
     cloud: str = "gcp",
-) -> list[LedgerRow]:
+) -> tuple[list[LedgerRow], dict[str, str]]:
     """Read the canonical run's ``LedgerRow`` tape from the GCS run ledger.
 
     Resolves THE single canonical paper run (:func:`resolve_canonical_run` — the
@@ -222,15 +232,19 @@ def read_ledger_rows(
     recon view (which reads only the newest run). All per-client views now key off
     the ONE canonical run, so they are mutually coherent.
 
-    Returns the canonical run's ``INSTRUCTION`` (TRADE) rows.
-    :func:`compute_ledger_views` folds these into positions / balances / PnL.
-    (PassiveLedger accruals would ride a separate ``ledger_type=passive`` prefix
-    written by the carry-engine wiring; only ``instruction`` exists today — when
-    passive lands it is read here too and routed to realised PnL, never the
+    Returns ``(rows, instrument_key_by_row_id)`` — the canonical run's
+    ``INSTRUCTION`` (TRADE) rows plus the ``row_id -> canonical instrument_key``
+    map read from the stamped JSONL. :func:`compute_ledger_views` /
+    :func:`compute_pnl_entries` pass that map straight into
+    ``materialize_position_ledger`` so positions group + marks join on the
+    canonical ``VENUE:INSTRUMENT_TYPE:SYMBOL`` key (no same-asset/cross-venue
+    collision). (PassiveLedger accruals would ride a separate ``ledger_type=passive``
+    prefix written by the carry-engine wiring; only ``instruction`` exists today —
+    when passive lands it is read here too and routed to realised PnL, never the
     position fold.)
 
-    When the client has no run ledger yet this returns ``[]`` — the HONEST empty
-    path: callers materialise zero positions / zero PnL, never mock data.
+    When the client has no run ledger yet this returns ``([], {})`` — the HONEST
+    empty path: callers materialise zero positions / zero PnL, never mock data.
 
     Args:
         client_id: the client whose ledger to read (single-client scope — funds
@@ -241,9 +255,10 @@ def read_ledger_rows(
     """
     run_id = resolve_canonical_run(client_id, as_of_date=as_of_date, cloud=cloud)
     if run_id is None:
-        return []
+        return [], {}
 
     rows: list[LedgerRow] = []
+    instrument_key_by_row_id: dict[str, str] = {}
     try:
         ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
         bucket, root_prefix = _split_gs(ledger_root)
@@ -256,11 +271,11 @@ def read_ledger_rows(
             if _BATCH_MARKER in path:
                 continue  # never fold the batch-rerun copy into the paper view
             raw = storage.download_bytes(bucket, path).decode("utf-8")
-            rows.extend(_parse_instruction_jsonl(raw))
+            rows.extend(_parse_instruction_jsonl(raw, instrument_key_by_row_id))
     except Exception as exc:
         logger.warning("read_ledger_rows: ledger read failed for client=%s run=%s: %s", client_id, run_id, exc)
 
-    return rows
+    return rows, instrument_key_by_row_id
 
 
 def read_canonical_run_fills(
@@ -290,13 +305,34 @@ def read_canonical_run_fills(
     return run_id, fills
 
 
+def _legacy_mark_key(record: Mapping[str, object]) -> str | None:
+    """Best-effort canonical mark key for a legacy pricing row missing ``instrument_key``.
+
+    Old PricingLedger rows predate the stamped key; reconstruct the per-leg
+    ``{venue}:{asset_canonical_id}`` shape (the same legacy shape the materialiser
+    falls back to) so they still disambiguate per-venue. Returns ``None`` when
+    neither a usable venue+asset nor an instrument_key is present.
+    """
+    venue = record.get("venue")
+    asset_canonical_id = record.get("asset_canonical_id")
+    if isinstance(venue, str) and venue and isinstance(asset_canonical_id, str) and asset_canonical_id:
+        return f"{venue}:{asset_canonical_id}"
+    return None
+
+
 def _parse_mark_jsonl(raw: str, into: dict[str, Decimal]) -> None:
     """Fold one PricingLedger JSONL object's ``mark_update`` rows into ``into``.
 
-    Last-write-wins per ``asset_canonical_id``: a later line for the same asset
+    Keyed by the canonical ``instrument_key`` (``VENUE:INSTRUMENT_TYPE:SYMBOL`` —
+    the stamped per-leg key), so a LIDO staking ETH mark and a Uniswap DEX ETH mark
+    are DISTINCT entries (the prior ``asset_canonical_id`` key collapsed them →
+    last-write-wins → the staking leg got the DEX mark → phantom unrealized P&L).
+    Last-write-wins per instrument_key: a later line for the same instrument
     overwrites the earlier mark (caller lists objects in lexicographic order, so
-    the freshest snapshot wins). Non-``mark_update`` rows, rows without a usable
-    ``asset_canonical_id`` / ``price``, and unparseable prices are skipped.
+    the freshest snapshot wins). A legacy row without a stamped ``instrument_key``
+    falls back to ``{venue}:{asset_canonical_id}`` (the same legacy shape the
+    materialiser uses). Non-``mark_update`` rows, rows without a usable key /
+    ``price``, and unparseable prices are skipped.
     """
     for line in raw.splitlines():
         stripped = line.strip()
@@ -305,12 +341,13 @@ def _parse_mark_jsonl(raw: str, into: dict[str, Decimal]) -> None:
         record = json.loads(stripped)
         if str(record.get("event_type", "")) != _MARK_UPDATE_EVENT_TYPE:
             continue
-        asset_canonical_id = record.get("asset_canonical_id")
+        instrument_key = record.get("instrument_key")
+        key = instrument_key if isinstance(instrument_key, str) and instrument_key else _legacy_mark_key(record)
         price = record.get("price")
-        if not isinstance(asset_canonical_id, str) or not asset_canonical_id or price is None:
+        if not key or price is None:
             continue
         try:
-            into[asset_canonical_id] = Decimal(str(price))
+            into[key] = Decimal(str(price))
         except (ArithmeticError, ValueError):
             continue
 
@@ -320,16 +357,19 @@ def read_marks(
     run_id: str,
     cloud: str = "gcp",
 ) -> dict[str, Decimal]:
-    """Read THE canonical run's PricingLedger marks → ``{asset_canonical_id -> mark}``.
+    """Read THE canonical run's PricingLedger marks → ``{instrument_key -> mark}``.
 
     Lists the run's ``ledger_type=pricing`` JSONL objects under the SAME
     client-addressable ``client_ledger_root`` the instruction tape lives under
     (so the marks belong to the EXACT run the positions/PnL views fold — never a
     foreign run's, never re-derived), keeps only ``event_type=mark_update`` rows,
-    and projects each to ``asset_canonical_id -> Decimal(price)``. The
-    ``asset_canonical_id`` key is what :func:`materialize_position_ledger` joins
-    marks on (per the UTL marks convention), so the dict drops straight into
-    ``compute_pnl_entries(marks=...)`` -> unrealized = ``Sum (mark - avg_cost) * net_qty``.
+    and projects each to ``instrument_key -> Decimal(price)``. The canonical
+    ``instrument_key`` (``VENUE:INSTRUMENT_TYPE:SYMBOL``) is what
+    :func:`materialize_position_ledger` joins marks on (per the UTL marks
+    convention), so each leg gets its OWN mark — a LIDO ETH leg and a Uniswap ETH
+    leg no longer collide on a shared ``asset_canonical_id``. The dict drops
+    straight into ``compute_pnl_entries(marks=...)`` -> unrealized =
+    ``Sum (mark - avg_cost) * net_qty``.
 
     A later mark for the same asset (a newer snapshot in the same run) wins —
     objects are listed in lexicographic key order and folded last-write-wins, so
@@ -413,13 +453,17 @@ def realized_pnl_total(
     marks: Mapping[str, Decimal],
     as_of: datetime,
     share_class_of: Mapping[str, str],
+    instrument_key_by_row_id: Mapping[str, str] | None = None,
 ) -> Decimal:
     """Return the ledger-derived realised PnL total (typed Decimal).
 
     Σ over the ``PositionLedgerRow`` realised PnL (avg-cost trade closes, net of
     fees) PLUS the PASSIVE accrual cash flows. This is the value that replaces the
     former hardcoded ``realized_pnl="0.00"`` in the pnl route. ``Decimal(0)`` for
-    an empty ledger (honest zero, not a placeholder).
+    an empty ledger (honest zero, not a placeholder). ``instrument_key_by_row_id``
+    (``row_id -> canonical instrument_key``) makes positions group on the per-leg
+    canonical key (realised PnL is mark-independent, but consistent grouping keeps
+    it coherent with the unrealised leg).
     """
 
     trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
@@ -429,6 +473,7 @@ def realized_pnl_total(
         marks=marks,
         as_of=as_of,
         share_class_of=share_class_of,
+        instrument_key_by_row_id=instrument_key_by_row_id,
     )
     passive_pnl = sum((r.delta for r in passive_rows), Decimal(0))
     return sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0)) + passive_pnl
@@ -440,6 +485,7 @@ def compute_pnl_entries(
     marks: Mapping[str, Decimal],
     as_of: datetime,
     share_class_of: Mapping[str, str],
+    instrument_key_by_row_id: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Ledger-derived P&L breakdown — one entry per materialised position.
 
@@ -463,6 +509,7 @@ def compute_pnl_entries(
         marks=marks,
         as_of=as_of,
         share_class_of=share_class_of,
+        instrument_key_by_row_id=instrument_key_by_row_id,
     )
     passive_pnl = sum((r.delta for r in passive_rows), Decimal(0))
     realized_total = sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0)) + passive_pnl
@@ -520,6 +567,7 @@ def compute_ledger_views(
     marks: Mapping[str, Decimal],
     as_of: datetime,
     share_class_of: Mapping[str, str],
+    instrument_key_by_row_id: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Fold a client's ledger tape into the operator-facing views.
 
@@ -529,10 +577,13 @@ def compute_ledger_views(
 
     Args:
         rows: the client's ``LedgerRow`` tape (TRADE fills + PASSIVE accruals).
-        marks: ``asset_canonical_id -> mark price`` (joins on the per-group key).
+        marks: ``instrument_key -> mark price`` (joins on the canonical per-leg key).
         as_of: UTC instant the snapshot is valid at (must be tz-aware UTC).
         share_class_of: ``asset_canonical_id -> share_class`` (falls back to the
             canonical id when absent).
+        instrument_key_by_row_id: ``row_id -> canonical instrument_key`` (from the
+            stamped JSONL) so positions group + marks join on the per-leg canonical
+            key, never the colliding ``asset_canonical_id``.
 
     Returns:
         A dict with ``positions`` (list of position dicts), ``balances`` (the
@@ -556,6 +607,7 @@ def compute_ledger_views(
         marks=marks,
         as_of=as_of,
         share_class_of=share_class_of,
+        instrument_key_by_row_id=instrument_key_by_row_id,
     )
 
     passive_pnl = sum((r.delta for r in passive_rows), Decimal(0))

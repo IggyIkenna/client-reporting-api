@@ -61,6 +61,7 @@ def build_daily_ledger_digest_event(
     share_class_of: Mapping[str, str],
     seed_nav: Decimal,
     channel: str,
+    instrument_key_by_row_id: Mapping[str, str] | None = None,
 ) -> AlertEvent:
     """Build the daily ledger-digest ``AlertEvent`` (always INFO).
 
@@ -72,13 +73,21 @@ def build_daily_ledger_digest_event(
         client_id: the client whose book this digest covers.
         digest_date: the trading day the digest summarises.
         rows: the client's ``LedgerRow`` tape for the day (TRADE + PASSIVE).
-        marks: ``asset_canonical_id -> mark price``.
+        marks: ``instrument_key -> mark price`` (the canonical per-leg key).
         share_class_of: ``asset_canonical_id -> share_class``.
         seed_nav: the NAV seed (starting equity) for the HWM series.
         channel: Slack channel target (surfaced for alerting-service routing).
+        instrument_key_by_row_id: ``row_id -> canonical instrument_key`` so
+            positions group + marks join on the per-leg canonical key.
     """
     as_of = datetime.combine(digest_date, datetime.min.time(), tzinfo=UTC)
-    views = compute_ledger_views(rows, marks=marks, as_of=as_of, share_class_of=share_class_of)
+    views = compute_ledger_views(
+        rows,
+        marks=marks,
+        as_of=as_of,
+        share_class_of=share_class_of,
+        instrument_key_by_row_id=instrument_key_by_row_id,
+    )
     totals = cast(dict[str, str], views["totals"])
     balances = cast(dict[str, object], views["balances"])
     by_venue = cast("list[dict[str, object]]", balances.get("by_venue", []))
