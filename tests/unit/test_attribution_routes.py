@@ -8,14 +8,22 @@ Entitlement logic is tested via dependency_overrides (same pattern as allocators
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from unified_api_contracts import (
+    EventOrigin,
+    EventType,
+    LedgerAssetClass,
+    LedgerRow,
+)
 from unified_trading_library import AuthContext
 
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes import attribution as _attr_mod
+from client_reporting_api.core.ledger_views import compute_pnl_entries
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -244,8 +252,36 @@ class TestGetAttribution:
 
 
 # ---------------------------------------------------------------------------
-# Pure helper functions — _nav_from_rows / _pnl_from_rows / _attribution_from_rows
+# Pure helper functions — _nav_from_rows / compute_pnl_entries / _attribution_from_rows
 # ---------------------------------------------------------------------------
+
+_PNL_AS_OF = datetime(2026, 5, 23, 0, 0, 0, tzinfo=UTC)
+_PNL_TS = datetime(2026, 5, 22, 0, 0, 0, tzinfo=UTC)
+
+
+def _pnl_trade_row(*, venue: str, asset: str, side: str, qty: str, price: str) -> LedgerRow:
+    """Build a TRADE LedgerRow for compute_pnl_entries tests (signed by side)."""
+    signed = Decimal(qty) if side.upper() in ("BUY", "LONG", "SUPPLY") else -Decimal(qty)
+    return LedgerRow(
+        event_id=f"{venue}:{asset}:{side}",
+        row_id=f"{venue}:{asset}:{side}",
+        event_origin=EventOrigin.INSTRUCTION,
+        event_type=EventType.TRADE,
+        trade_id=f"{venue}:SPOT:{asset}|inst|{_PNL_TS.isoformat()}",
+        timestamp_utc=_PNL_TS,
+        asset_group="defi",
+        venue=venue,
+        account_id="acct",
+        client_id="client-A",
+        asset_symbol=asset,
+        asset_canonical_id=asset,
+        asset_class=LedgerAssetClass.SPOT_TOKEN,
+        delta=signed,
+        price=Decimal(price),
+        quote_currency="USDC",
+        fees_in_quote=Decimal("0"),
+    )
+
 
 _SAMPLE_ROWS: list[dict[str, object]] = [
     {
@@ -323,47 +359,33 @@ class TestNavFromRows:
         assert len(snapshots) == 0  # bad amount is suppressed via contextlib.suppress
 
 
-class TestPnlFromRows:
-    def test_empty_rows_returns_empty_entries(self) -> None:
-        result = _attr_mod._pnl_from_rows("client-A", [], Decimal("0"))
-        assert result["client_id"] == "client-A"
-        assert result["share_class"] == "USDT"
+class TestLedgerDerivedPnl:
+    """``/pnl`` is now ledger-derived (compute_pnl_entries), not attribution-parquet
+    derived — so a fresh paper run with fills has a non-empty ``entries`` list."""
+
+    def test_empty_ledger_is_honest_zero(self) -> None:
+        result = compute_pnl_entries([], marks={}, as_of=_PNL_AS_OF, share_class_of={})
         assert result["entries"] == []
         assert result["realized_pnl_total"] == "0"
+        assert result["unrealized_pnl_total"] == "0"
+        assert result["total_pnl"] == "0"
 
-    def test_aggregates_by_date(self) -> None:
-        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS, Decimal("0"))
+    def test_one_open_leg_yields_one_entry_zero_realized(self) -> None:
+        rows = [_pnl_trade_row(venue="LIDO", asset="ETH", side="SUPPLY", qty="33.33", price="1")]
+        result = compute_pnl_entries(rows, marks={}, as_of=_PNL_AS_OF, share_class_of={})
         entries = result["entries"]
-        assert len(entries) == 2  # 2026-05-01 and 2026-05-02
+        assert len(entries) == 1
+        # All-open run: realised is correctly zero (nothing closed).
+        assert entries[0]["realized_pnl"] == "0"
+        assert entries[0]["net_qty"] == "33.33"
+        assert entries[0]["venue"] == "LIDO"
 
-    def test_strategy_and_execution_split(self) -> None:
-        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS, Decimal("0"))
-        entries = result["entries"]
-        may1 = next(e for e in entries if e["period_tag"] == "2026-05-01")
-        assert may1["strategy_alpha_total"] == "300.00"
-        assert may1["execution_alpha_total"] == "50.00"
-        assert may1["total_pnl"] == "350.00"
-
-    def test_realized_pnl_total_attributed_to_latest_period(self) -> None:
-        # Ledger-derived realised PnL replaces the former hardcoded "0.00".
-        result = _attr_mod._pnl_from_rows("client-A", _SAMPLE_ROWS, Decimal("1991.4"))
-        entries = result["entries"]
-        may1 = next(e for e in entries if e["period_tag"] == "2026-05-01")
-        may2 = next(e for e in entries if e["period_tag"] == "2026-05-02")
-        assert may1["realized_pnl"] == "0"  # earlier period
-        assert may2["realized_pnl"] == "1991.4"  # latest period carries the running total
-        assert result["realized_pnl_total"] == "1991.4"
-
-    def test_skips_invalid_amount(self) -> None:
-        rows = [{"timestamp": "2026-05-01T00:00:00+00:00", "layer": "STRATEGY", "amount": "bad"}]
-        result = _attr_mod._pnl_from_rows("client-X", rows, Decimal("0"))
-        assert result["entries"] == []
-
-    def test_handles_missing_timestamp(self) -> None:
-        rows = [{"timestamp": None, "layer": "STRATEGY", "amount": "100.00"}]
-        result = _attr_mod._pnl_from_rows("client-X", rows, Decimal("0"))
-        assert len(result["entries"]) == 1
-        assert result["entries"][0]["period_tag"] == "unknown"
+    def test_unrealized_from_mark(self) -> None:
+        rows = [_pnl_trade_row(venue="UNISWAP_V3", asset="ETH", side="BUY", qty="2", price="3000")]
+        result = compute_pnl_entries(rows, marks={"ETH": Decimal("3100")}, as_of=_PNL_AS_OF, share_class_of={})
+        # 2 * (3100 - 3000) = 200 unrealised.
+        assert result["unrealized_pnl_total"] == "200"
+        assert result["entries"][0]["unrealized_pnl"] == "200"
 
 
 class TestAttributionFromRows:
@@ -421,26 +443,118 @@ class TestLivePaths:
             cfg.cloud_mock_mode = orig_mock  # type: ignore[misc]
             cfg.data_mode = "mock"  # type: ignore[misc]
 
-    def test_pnl_live_path_calls_reader(self, _client_a_auth: None) -> None:
+    def test_pnl_live_path_is_ledger_derived(self, _client_a_auth: None) -> None:
+        # /pnl now derives entries from the canonical-run ledger (positions),
+        # NOT from the attribution parquet — so a run with fills yields non-empty
+        # entries even when the attribution parquet is empty.
         from unittest.mock import patch
 
         cfg = _attr_mod._cloud_cfg
-        orig_mock = cfg.cloud_mock_mode
-        cfg.cloud_mock_mode = False  # type: ignore[misc]
-        cfg.data_mode = "live"  # type: ignore[misc]
+        ledger_rows = [
+            _pnl_trade_row(venue="UNISWAP_V3", asset="ETH", side="BUY", qty="2", price="3000"),
+            _pnl_trade_row(venue="LIDO", asset="ETH", side="SUPPLY", qty="33", price="1"),
+        ]
+        # pydantic blocks plain setattr → flip mock off via the instance method.
+        orig_is_mock = cfg.is_mock_mode
+        object.__setattr__(cfg, "is_mock_mode", lambda: False)
         try:
-            with patch(
-                "client_reporting_api.api.routes.attribution.read_attribution_rows",
-                return_value=_SAMPLE_ROWS,
+            with (
+                patch(
+                    "client_reporting_api.api.routes.attribution.read_ledger_rows",
+                    return_value=ledger_rows,
+                ),
+                patch(
+                    "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                    return_value="paper-20260620004135-bbbb",
+                ),
             ):
                 client = TestClient(app, raise_server_exceptions=True)
                 response = client.get("/api/v1/clients/client-A/pnl")
             assert response.status_code == 200
             payload = response.json()
-            assert len(payload["entries"]) > 0
+            assert payload["run_id"] == "paper-20260620004135-bbbb"
+            assert len(payload["entries"]) == 2  # UNISWAP_V3:ETH + LIDO:ETH
+            assert payload["realized_pnl_total"] == "0"  # all-open run
         finally:
-            cfg.cloud_mock_mode = orig_mock  # type: ignore[misc]
-            cfg.data_mode = "mock"  # type: ignore[misc]
+            object.__setattr__(cfg, "is_mock_mode", orig_is_mock)
+
+    def test_trades_live_path_is_ledger_derived(self, _client_a_auth: None) -> None:
+        from unittest.mock import patch
+
+        from unified_api_contracts.internal import FillModel, TradeFillRecord, make_trade_key
+
+        ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
+        ik = "DERIBIT:PERPETUAL:ETH-PERP"
+        fill = TradeFillRecord(
+            trade_key=make_trade_key(ik, "i1", ts),
+            instrument_key=ik,
+            strategy_instruction_id="i1",
+            tick_timestamp=ts,
+            venue="DERIBIT",
+            side="LONG",
+            qty=Decimal("30.8"),
+            fill_price=Decimal("3000"),
+            fees_in_quote=Decimal("0"),
+            fill_model=FillModel.BENCHMARK,
+        )
+        with patch(
+            "client_reporting_api.api.routes.attribution.read_canonical_run_fills",
+            return_value=("paper-20260620004135-bbbb", [fill]),
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/v1/clients/client-A/trades")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["run_id"] == "paper-20260620004135-bbbb"
+        assert payload["total"] == 1
+        trade = payload["trades"][0]
+        assert trade["venue"] == "DERIBIT"
+        assert trade["side"] == "buy"  # LONG → buy
+        assert trade["quantity"] == "30.8"
+        assert trade["fill_price"] == "3000"
+        assert trade["notional_usd"] == "92400.0"
+
+    def test_instructions_live_path_surfaces_qty(self, _client_a_auth: None) -> None:
+        from unittest.mock import patch
+
+        rows = [_pnl_trade_row(venue="UNISWAP_V3", asset="ETH", side="BUY", qty="100000", price="3000")]
+        with (
+            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=rows),
+            patch(
+                "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                return_value="paper-20260620004135-bbbb",
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/v1/clients/client-A/instructions")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["run_id"] == "paper-20260620004135-bbbb"
+        ins = payload["instructions"][0]
+        # qty surfaced under target_qty + size + quantity aliases (non-blank).
+        assert ins["target_qty"] == "100000"
+        assert ins["size"] == "100000"
+        assert ins["quantity"] == "100000"
+
+    def test_transfers_typed_honest_empty_when_no_transfer_rows(self, _client_a_auth: None) -> None:
+        from unittest.mock import patch
+
+        # Run exists with only TRADE rows → typed NO_TRANSFER_ROWS, not a bare 0.
+        rows = [_pnl_trade_row(venue="LIDO", asset="ETH", side="SUPPLY", qty="33", price="1")]
+        with (
+            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=rows),
+            patch(
+                "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                return_value="paper-20260620004135-bbbb",
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/v1/clients/client-A/transfers")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["transfers"] == []
+        assert payload["status"] == "NO_TRANSFER_ROWS"
+        assert payload["note"]  # explicit human-readable reason, never silent
 
     def test_attribution_live_path_calls_reader(self, _client_a_auth: None) -> None:
         from unittest.mock import patch
