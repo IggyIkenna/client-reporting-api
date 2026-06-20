@@ -489,11 +489,17 @@ class TestCanonicalRunResolution:
         ik = "LIDO:STAKING:ETH"
         # Two paper runs, each with ONE identical SUPPLY fill of 33.0 ETH.
         _write_run(
-            store, monkeypatch, client_id="firm", run_id="paper-20260620002237-aaaa",
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620002237-aaaa",
             fills=[_eth_fill(ik=ik, instr="i1", side="SUPPLY", qty="33.0", price="1", ts=ts)],
         )
         _write_run(
-            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
             fills=[_eth_fill(ik=ik, instr="i1", side="SUPPLY", qty="33.0", price="1", ts=ts)],
         )
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
@@ -512,12 +518,18 @@ class TestCanonicalRunResolution:
         ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
         ik = "UNISWAP_V3:DEX_POOL:ETH"
         _write_run(
-            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
             fills=[_eth_fill(ik=ik, instr="i1", side="BUY", qty="2", price="3000", ts=ts)],
         )
         # A batch rerun copy under __batch__/ — must NOT count as a run nor be folded.
         _write_run(
-            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
             fills=[_eth_fill(ik=ik, instr="i1", side="BUY", qty="2", price="3000", ts=ts)],
             as_batch=True,
         )
@@ -546,7 +558,10 @@ class TestReadCanonicalRunFills:
         ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
         ik = "DERIBIT:PERPETUAL:ETH-PERP"
         _write_run(
-            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
             fills=[_eth_fill(ik=ik, instr="i1", side="LONG", qty="30.8", price="3000", ts=ts)],
         )
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
@@ -569,10 +584,24 @@ class TestComputePnlEntries:
         from client_reporting_api.core.ledger_views import compute_pnl_entries
 
         rows = [
-            _trade_row(row_id="a", side_delta=Decimal("2"), price=Decimal("3000"), fees=Decimal("0"),
-                       ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC), venue="UNISWAP_V3", asset_canonical_id="eth"),
-            _trade_row(row_id="b", side_delta=Decimal("33"), price=Decimal("1"), fees=Decimal("0"),
-                       ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC), venue="LIDO", asset_canonical_id="eth"),
+            _trade_row(
+                row_id="a",
+                side_delta=Decimal("2"),
+                price=Decimal("3000"),
+                fees=Decimal("0"),
+                ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC),
+                venue="UNISWAP_V3",
+                asset_canonical_id="eth",
+            ),
+            _trade_row(
+                row_id="b",
+                side_delta=Decimal("33"),
+                price=Decimal("1"),
+                fees=Decimal("0"),
+                ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC),
+                venue="LIDO",
+                asset_canonical_id="eth",
+            ),
         ]
         out = compute_pnl_entries(rows, marks={}, as_of=_AS_OF, share_class_of={})
         # Two distinct (venue, asset) groups → two entries; all-open → realized 0.
@@ -585,8 +614,15 @@ class TestComputePnlEntries:
         from client_reporting_api.core.ledger_views import compute_pnl_entries
 
         rows = [
-            _trade_row(row_id="a", side_delta=Decimal("2"), price=Decimal("3000"), fees=Decimal("0"),
-                       ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC), venue="UNISWAP_V3", asset_canonical_id="eth"),
+            _trade_row(
+                row_id="a",
+                side_delta=Decimal("2"),
+                price=Decimal("3000"),
+                fees=Decimal("0"),
+                ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC),
+                venue="UNISWAP_V3",
+                asset_canonical_id="eth",
+            ),
         ]
         out = compute_pnl_entries(rows, marks={"eth": Decimal("3100")}, as_of=_AS_OF, share_class_of={})
         assert out["unrealized_pnl_total"] == "200"  # 2 * (3100 - 3000)
@@ -597,3 +633,145 @@ class TestComputePnlEntries:
         out = compute_pnl_entries([], marks={}, as_of=_AS_OF, share_class_of={})
         assert out["entries"] == []
         assert out["total_pnl"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# read_marks — PricingLedger marks → {asset_canonical_id -> Decimal} (fix 2026-06-20)
+# ---------------------------------------------------------------------------
+
+
+def _write_pricing(
+    store: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    client_id: str,
+    run_id: str,
+    marks: dict[str, str],
+    object_name: str = "marks.jsonl",
+) -> None:
+    """Write a PricingLedger JSONL (event_type=mark_update rows) into the fake store.
+
+    Lands under the SAME canonical client_ledger_root the instruction tape lives
+    under, at ``ledger_type=pricing/<object_name>`` — exactly the prefix
+    ``read_marks`` lists. One mark_update LedgerRow per (asset_canonical_id, mark).
+    """
+    import json
+
+    from unified_trading_library.ledger import client_ledger_root  # noqa: qg-deep-import
+
+    monkeypatch.setenv("GCP_PROJECT_ID", "test-proj")
+    root = client_ledger_root(client_id, run_id, cloud="gcp")
+    # root is gs://bucket/ledger/client_id=.../run_id=.../ — strip the gs://bucket/ prefix to a key.
+    key_prefix = root.split("/", 3)[3]
+    key = f"{key_prefix}{_LEDGER_TYPE_PRICING_KEY}/{object_name}"
+    lines = []
+    for asset_canonical_id, mark in marks.items():
+        lines.append(
+            json.dumps(
+                {
+                    "event_type": "mark_update",
+                    "asset_canonical_id": asset_canonical_id,
+                    "price": mark,
+                    "venue": "MARK",
+                    "asset_symbol": asset_canonical_id.upper(),
+                }
+            )
+        )
+    store[key] = "\n".join(lines)
+
+
+_LEDGER_TYPE_PRICING_KEY = "ledger_type=pricing"
+
+
+class TestReadMarks:
+    """read_marks reads the canonical run's PricingLedger into a marks map, keyed
+    by asset_canonical_id (the key materialize_position_ledger joins marks on)."""
+
+    def test_reads_marks_for_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        store: dict[str, str] = {}
+        _write_pricing(
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
+            marks={"eth": "3100", "btc": "66000"},
+        )
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+
+        marks = lv.read_marks("firm", "paper-20260620004135-bbbb")
+        assert marks == {"eth": Decimal("3100"), "btc": Decimal("66000")}
+
+    def test_no_pricing_ledger_is_honest_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage({}))  # type: ignore[attr-defined]
+        assert lv.read_marks("firm", "paper-20260620004135-bbbb") == {}
+
+    def test_empty_run_id_is_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage({}))  # type: ignore[attr-defined]
+        assert lv.read_marks("firm", "") == {}
+
+    def test_batch_pricing_copy_excluded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        store: dict[str, str] = {}
+        _write_pricing(
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
+            marks={"eth": "3100"},
+        )
+        # A __batch__ pricing copy must NOT be read into the paper view.
+        import json as _json
+
+        from unified_trading_library.ledger import client_ledger_root as _clr  # noqa: qg-deep-import
+
+        root = _clr("firm", "paper-20260620004135-bbbb", cloud="gcp")
+        key_prefix = root.split("/", 3)[3]
+        batch_key = f"{key_prefix}__batch__/b/ledger/{_LEDGER_TYPE_PRICING_KEY}/marks.jsonl"
+        store[batch_key] = _json.dumps(
+            {"event_type": "mark_update", "asset_canonical_id": "eth", "price": "9999", "venue": "MARK"}
+        )
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+
+        marks = lv.read_marks("firm", "paper-20260620004135-bbbb")
+        assert marks == {"eth": Decimal("3100")}  # batch copy's 9999 excluded
+
+    def test_marks_drive_unrealized_pnl_end_to_end(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The full reader path: an opening fill + a PricingLedger mark → non-zero
+        unrealized in compute_pnl_entries fed by read_ledger_rows + read_marks."""
+        import client_reporting_api.core.ledger_views as lv
+
+        store: dict[str, str] = {}
+        ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
+        ik = "UNISWAP_V3:DEX_POOL:ETH"
+        _write_run(
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
+            fills=[_eth_fill(ik=ik, instr="i1", side="BUY", qty="2", price="3000", ts=ts)],
+        )
+        # asset_canonical_id derived by the writer from instrument_key ETH -> "ETH".
+        _write_pricing(
+            store,
+            monkeypatch,
+            client_id="firm",
+            run_id="paper-20260620004135-bbbb",
+            marks={"ETH": "3100"},
+        )
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+
+        run_id = lv.resolve_canonical_run("firm")
+        assert run_id == "paper-20260620004135-bbbb"
+        rows = lv.read_ledger_rows("firm")
+        marks = lv.read_marks("firm", run_id)
+        assert marks == {"ETH": Decimal("3100")}
+        out = lv.compute_pnl_entries(rows, marks=marks, as_of=_AS_OF, share_class_of={})
+        # 2 ETH * (3100 - 3000) = 200 unrealized, marks-driven (was 0 with marks={}).
+        assert out["unrealized_pnl_total"] == "200"
