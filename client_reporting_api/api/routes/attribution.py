@@ -29,6 +29,7 @@ from client_reporting_api.core.ledger_views import (
     read_ledger_rows,
     realized_pnl_total,
 )
+from client_reporting_api.core.recon_view import latest_recon_verdict
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/clients/{client_id}", tags=["attribution"])
@@ -353,3 +354,126 @@ def get_client_attribution_breakdown(
     breakdown = attribution_breakdown(rows)
     breakdown["client_id"] = client_id
     return breakdown
+
+
+# ---------------------------------------------------------------------------
+# Paper-trading dashboard ledger panels (P2.5.2): instructions / transfers /
+# reconciliation. Read the SAME GCS InstructionLedger the engine writes (via
+# read_ledger_rows) so the operator dashboard renders a REAL paper run. Honest
+# empty/PENDING when no run exists — never mock.
+# ---------------------------------------------------------------------------
+
+_TRANSFER_EVENT_TYPES = frozenset({"transfer", "deposit", "withdrawal", "bridge"})
+
+
+def _side_from_delta(delta: Decimal, direction: object) -> str:
+    """UI side ('long'/'short'/'flat') from the row direction or the signed delta."""
+    if isinstance(direction, str) and direction:
+        upper = direction.upper()
+        if upper in ("LONG", "BUY", "SUPPLY"):
+            return "long"
+        if upper in ("SHORT", "SELL", "WITHDRAW"):
+            return "short"
+    if delta > 0:
+        return "long"
+    if delta < 0:
+        return "short"
+    return "flat"
+
+
+@router.get("/instructions")
+def get_client_instructions(
+    client_id: str,
+    auth: AuthDep,
+    limit: int = Query(100, description="Max instructions to return (most-recent first)"),
+) -> dict[str, object]:
+    """Strategy-instruction tape (the InstructionLedger) for the paper-trading dashboard.
+
+    Reads the client's REAL InstructionLedger rows from GCS (``read_ledger_rows``)
+    and projects the TRADE rows to the dashboard's ``LedgerInstruction`` shape:
+    what the strategy decided each tick (action / venue / instrument / side /
+    target qty / benchmark price). Honest empty when the client has no run yet.
+    """
+    enforce_entitlement(auth, client_id)
+    rows = read_ledger_rows(client_id)
+    instructions: list[dict[str, object]] = []
+    for row in rows:
+        if str(row.event_type) != "trade":
+            continue
+        delta = row.delta
+        trade_id = row.trade_id or ""
+        instructions.append(
+            {
+                "instruction_id": trade_id,
+                "strategy_id": row.asset_canonical_id,
+                "action": "TRADE",
+                "venue": row.venue,
+                "instrument_key": trade_id.split("|")[0],
+                "side": _side_from_delta(delta, str(row.direction) if row.direction else None),
+                "target_qty": str(abs(delta)),
+                "benchmark_price": str(row.price if row.price is not None else "0"),
+                "timestamp": row.timestamp_utc.isoformat(),
+                "correlation_id": row.event_id,
+                "status": "filled",
+            }
+        )
+    instructions = instructions[-limit:]
+    return {"client_id": client_id, "instructions": instructions, "total": len(instructions)}
+
+
+@router.get("/transfers")
+def get_client_transfers(
+    client_id: str,
+    auth: AuthDep,
+) -> dict[str, object]:
+    """Wallet transfers / money movements (TRANSFER / DEPOSIT / BRIDGE ledger rows).
+
+    Single-client scope (funds never cross clients). Reads the REAL ledger rows and
+    projects the non-trade money-movement events. Honest empty when none.
+    """
+    enforce_entitlement(auth, client_id)
+    rows = read_ledger_rows(client_id)
+    transfers: list[dict[str, object]] = []
+    for row in rows:
+        evt = str(row.event_type).lower()
+        if evt not in _TRANSFER_EVENT_TYPES:
+            continue
+        delta = row.delta
+        venue = row.venue
+        price = row.price if row.price is not None else Decimal("0")
+        transfers.append(
+            {
+                "transfer_id": row.event_id,
+                "event_type": evt.upper(),
+                "from_venue": "" if delta >= 0 else venue,
+                "to_venue": venue if delta >= 0 else "",
+                "asset_symbol": row.asset_symbol,
+                "share_class": row.asset_canonical_id,
+                "amount": str(delta),
+                "notional_usd": str(abs(delta) * price),
+                "timestamp": row.timestamp_utc.isoformat(),
+                "client_id": client_id,
+            }
+        )
+    return {"client_id": client_id, "transfers": transfers, "total": len(transfers)}
+
+
+@router.get("/reconciliation/latest")
+def get_client_reconciliation_latest(
+    client_id: str,
+    auth: AuthDep,
+) -> dict[str, object]:
+    """Latest daily T+1 reconcile_day determinism verdict (paper ≡ batch, ε=0).
+
+    The headline "is paper deterministic?" badge for the dashboard. Reads the
+    client's paper InstructionLedger + its batch-rerun ledger (written under the
+    paper run's ``__batch__/`` prefix by the batch-rerun stage) and keys the fills
+    by ``trade_id`` (the deterministic UAC trade_key) — DETERMINISTIC iff every
+    paper fill matches a batch fill on (price, qty-sign) with no unmatched. This is
+    the SAME keyed comparison ``reconcile_day`` performs; computed inline here to
+    keep client-reporting-api service-dep-clean (no BLRS import). Honest verdicts:
+    NO_DATA (no run) / PENDING (paper present, batch rerun not yet) / DETERMINISTIC
+    / DRIFT (a real bug, with the per-trade deviations).
+    """
+    enforce_entitlement(auth, client_id)
+    return latest_recon_verdict(client_id)
