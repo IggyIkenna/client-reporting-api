@@ -391,3 +391,209 @@ class TestAttributionBreakdown:
         out = attribution_breakdown([])
         assert out["by_venue"] == []
         assert out["total_amount"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# Canonical-run resolution + run-scoped reads + ledger-derived PnL (fix 2026-06-20)
+# ---------------------------------------------------------------------------
+
+
+class _FakeBlob:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+def _fake_storage(store: dict[str, str]) -> object:
+    """A fake storage client (the get_storage_client return) backed by an in-memory store."""
+
+    class _Storage:
+        def list_blobs(self, bucket: str, prefix: str = "") -> list[object]:
+            return [_FakeBlob(k) for k in sorted(store) if k.startswith(prefix)]
+
+        def download_bytes(self, bucket: str, path: str) -> bytes:
+            return store[path].encode("utf-8")
+
+    return _Storage()
+
+
+def _write_run(
+    store: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    client_id: str,
+    run_id: str,
+    fills: list[object],
+    as_batch: bool = False,
+) -> None:
+    """Write a run's instruction ledger into the fake store via UTL write_run_ledger."""
+    from unified_trading_library.ledger import client_ledger_root, write_run_ledger  # noqa: qg-deep-import
+
+    monkeypatch.setenv("GCP_PROJECT_ID", "test-proj")
+    root = client_ledger_root(client_id, run_id, cloud="gcp")
+    if as_batch:
+        root = f"{root.rstrip('/')}/__batch__/batch-{run_id}/ledger/"
+
+    class _Blob:
+        def __init__(self, key: str) -> None:
+            self._key = key
+
+        def upload_from_string(self, data: str, content_type: str = "") -> None:
+            store[self._key] = data
+
+    class _WBucket:
+        def blob(self, gcs_path: str) -> _Blob:
+            return _Blob(gcs_path)
+
+    class _WClient:
+        def bucket(self, name: str) -> _WBucket:
+            return _WBucket()
+
+    write_run_ledger(
+        fills,
+        ledger_root=root,
+        run_id=run_id,
+        account_id="acct-1",
+        client_id=client_id,
+        asset_group="defi",
+        quote_currency="USDC",
+        storage_client=_WClient(),
+    )
+
+
+def _eth_fill(*, ik: str, instr: str, side: str, qty: str, price: str, ts: datetime) -> object:
+    from unified_api_contracts.internal import FillModel, TradeFillRecord, make_trade_key
+
+    return TradeFillRecord(
+        trade_key=make_trade_key(ik, instr, ts),
+        instrument_key=ik,
+        strategy_instruction_id=instr,
+        tick_timestamp=ts,
+        venue=ik.split(":")[0],
+        side=side,
+        qty=Decimal(qty),
+        fill_price=Decimal(price),
+        fees_in_quote=Decimal("0"),
+        fill_model=FillModel.BENCHMARK,
+    )
+
+
+class TestCanonicalRunResolution:
+    """Every per-client view must resolve THE SAME canonical run — the newest paper
+    run — NOT read all runs concatenated (which doubled positions/PnL)."""
+
+    def test_newest_of_two_runs_is_canonical_and_no_doubling(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        store: dict[str, str] = {}
+        ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
+        ik = "LIDO:STAKING:ETH"
+        # Two paper runs, each with ONE identical SUPPLY fill of 33.0 ETH.
+        _write_run(
+            store, monkeypatch, client_id="firm", run_id="paper-20260620002237-aaaa",
+            fills=[_eth_fill(ik=ik, instr="i1", side="SUPPLY", qty="33.0", price="1", ts=ts)],
+        )
+        _write_run(
+            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            fills=[_eth_fill(ik=ik, instr="i1", side="SUPPLY", qty="33.0", price="1", ts=ts)],
+        )
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+
+        # Canonical = lexicographically newest timestamped run.
+        assert lv.resolve_canonical_run("firm") == "paper-20260620004135-bbbb"
+        # read_ledger_rows reads ONLY that run — exactly ONE row, not two (no doubling).
+        rows = lv.read_ledger_rows("firm")
+        assert len(rows) == 1
+        assert rows[0].delta == Decimal("33.0")
+
+    def test_batch_rerun_objects_excluded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        store: dict[str, str] = {}
+        ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
+        ik = "UNISWAP_V3:DEX_POOL:ETH"
+        _write_run(
+            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            fills=[_eth_fill(ik=ik, instr="i1", side="BUY", qty="2", price="3000", ts=ts)],
+        )
+        # A batch rerun copy under __batch__/ — must NOT count as a run nor be folded.
+        _write_run(
+            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            fills=[_eth_fill(ik=ik, instr="i1", side="BUY", qty="2", price="3000", ts=ts)],
+            as_batch=True,
+        )
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+
+        assert lv.resolve_canonical_run("firm") == "paper-20260620004135-bbbb"
+        rows = lv.read_ledger_rows("firm")
+        assert len(rows) == 1  # batch copy excluded → no doubling
+
+    def test_no_run_is_honest_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage({}))  # type: ignore[attr-defined]
+        assert lv.resolve_canonical_run("nobody") is None
+        assert lv.read_ledger_rows("nobody") == []
+        run_id, fills = lv.read_canonical_run_fills("nobody")
+        assert run_id is None
+        assert fills == []
+
+
+class TestReadCanonicalRunFills:
+    def test_returns_keyed_fills_for_canonical_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.ledger_views as lv
+
+        store: dict[str, str] = {}
+        ts = datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC)
+        ik = "DERIBIT:PERPETUAL:ETH-PERP"
+        _write_run(
+            store, monkeypatch, client_id="firm", run_id="paper-20260620004135-bbbb",
+            fills=[_eth_fill(ik=ik, instr="i1", side="LONG", qty="30.8", price="3000", ts=ts)],
+        )
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+        # load_instruction_ledger_fills (UTL) uses UTL's own get_storage_client —
+        # patch it at the run_writer module so the fills reader hits the same store.
+        import unified_trading_library.ledger.run_writer as _rw  # noqa: qg-deep-import
+
+        monkeypatch.setattr(_rw, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
+
+        run_id, fills = lv.read_canonical_run_fills("firm")
+        assert run_id == "paper-20260620004135-bbbb"
+        assert len(fills) == 1
+        assert fills[0].instrument_key == ik
+        assert fills[0].qty == Decimal("30.8")
+        assert fills[0].fill_price == Decimal("3000")
+
+
+class TestComputePnlEntries:
+    def test_all_open_legs_zero_realized_one_entry_each(self) -> None:
+        from client_reporting_api.core.ledger_views import compute_pnl_entries
+
+        rows = [
+            _trade_row(row_id="a", side_delta=Decimal("2"), price=Decimal("3000"), fees=Decimal("0"),
+                       ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC), venue="UNISWAP_V3", asset_canonical_id="eth"),
+            _trade_row(row_id="b", side_delta=Decimal("33"), price=Decimal("1"), fees=Decimal("0"),
+                       ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC), venue="LIDO", asset_canonical_id="eth"),
+        ]
+        out = compute_pnl_entries(rows, marks={}, as_of=_AS_OF, share_class_of={})
+        # Two distinct (venue, asset) groups → two entries; all-open → realized 0.
+        assert len(out["entries"]) == 2
+        assert out["realized_pnl_total"] == "0"
+        for e in out["entries"]:
+            assert e["realized_pnl"] == "0"
+
+    def test_unrealized_from_mark(self) -> None:
+        from client_reporting_api.core.ledger_views import compute_pnl_entries
+
+        rows = [
+            _trade_row(row_id="a", side_delta=Decimal("2"), price=Decimal("3000"), fees=Decimal("0"),
+                       ts=datetime(2026, 5, 16, 0, 0, 0, tzinfo=UTC), venue="UNISWAP_V3", asset_canonical_id="eth"),
+        ]
+        out = compute_pnl_entries(rows, marks={"eth": Decimal("3100")}, as_of=_AS_OF, share_class_of={})
+        assert out["unrealized_pnl_total"] == "200"  # 2 * (3100 - 3000)
+
+    def test_empty_is_honest_zero(self) -> None:
+        from client_reporting_api.core.ledger_views import compute_pnl_entries
+
+        out = compute_pnl_entries([], marks={}, as_of=_AS_OF, share_class_of={})
+        assert out["entries"] == []
+        assert out["total_pnl"] == "0"

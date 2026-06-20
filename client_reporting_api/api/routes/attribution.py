@@ -26,8 +26,10 @@ from client_reporting_api.core.entitlement import enforce_entitlement  # pyright
 from client_reporting_api.core.ledger_views import (
     attribution_breakdown,
     compute_ledger_views,
+    compute_pnl_entries,
+    read_canonical_run_fills,
     read_ledger_rows,
-    realized_pnl_total,
+    resolve_canonical_run,
 )
 from client_reporting_api.core.recon_view import latest_recon_verdict
 
@@ -141,63 +143,6 @@ def _nav_from_rows(
     return {"client_id": client_id, "share_class": "USDT", "mode": "DEMO", "snapshots": snapshots}
 
 
-def _pnl_from_rows(
-    client_id: str,
-    rows: list[dict[str, object]],
-    realized_pnl_total: Decimal,
-) -> dict[str, object]:
-    """Aggregate attribution rows into per-date PnL entries.
-
-    ``realized_pnl_total`` is the ledger-derived realised PnL (``Σ`` over the
-    client's ``PositionLedgerRow``s) — it replaces the former hardcoded
-    ``"0.00"``. It is attributed to the latest period (most recent date) since
-    realised PnL is a running cumulative figure, not a per-attribution-row split.
-    """
-    by_date: dict[str, dict[str, Decimal]] = {}
-    for row in rows:
-        ts = row.get("timestamp")
-        row_date = str(ts)[:10] if ts else "unknown"
-        layer = str(row.get("layer", ""))
-        amount_str = str(row.get("amount", "0"))
-        try:
-            amount = Decimal(amount_str)
-        except ArithmeticError:
-            continue
-        if row_date not in by_date:
-            by_date[row_date] = {
-                "total": Decimal("0"),
-                "strategy": Decimal("0"),
-                "execution": Decimal("0"),
-            }
-        by_date[row_date]["total"] += amount
-        if layer == "STRATEGY":
-            by_date[row_date]["strategy"] += amount
-        elif layer == "EXECUTION":
-            by_date[row_date]["execution"] += amount
-
-    sorted_dates = sorted(by_date)
-    latest_date = sorted_dates[-1] if sorted_dates else None
-    entries = [
-        {
-            "period_tag": d,
-            "realized_pnl": str(realized_pnl_total) if d == latest_date else "0",
-            "unrealized_pnl": str(totals["total"]),
-            "total_pnl": str(totals["total"] + (realized_pnl_total if d == latest_date else Decimal(0))),
-            "strategy_alpha_total": str(totals["strategy"]),
-            "execution_alpha_total": str(totals["execution"]),
-            "timestamp": f"{d}T00:00:00+00:00",
-        }
-        for d in sorted_dates
-        for totals in [by_date[d]]
-    ]
-    return {
-        "client_id": client_id,
-        "share_class": "USDT",
-        "realized_pnl_total": str(realized_pnl_total),
-        "entries": entries,
-    }
-
-
 def _attribution_from_rows(
     client_id: str,
     rows: list[dict[str, object]],
@@ -271,24 +216,37 @@ def get_client_pnl(
     date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),  # noqa: B008
     date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
 ) -> dict[str, object]:
-    """Daily PnL series for a client. Returns strategy_alpha + execution_alpha split per day.
+    """Realised + unrealised P&L for a client, DERIVED FROM THE LEDGER (fix 2026-06-20).
 
-    ``realized_pnl`` is ledger-derived (``Σ`` over the client's ``PositionLedgerRow``s),
-    NOT the former hardcoded ``"0.00"``. Until the GCS ledger is populated the
-    ledger seam returns no rows → the realised total is an honest ``"0"``.
+    Folds the canonical run's InstructionLedger TRADE tape into the
+    ``PositionLedger`` (avg-cost) and emits a per-position ``entries`` list plus the
+    realised/unrealised roll-ups — coherent with the ``/positions`` view (same
+    ledger, same canonical run). The former implementation keyed ``entries`` off an
+    attribution parquet that is empty for a fresh paper run → it returned
+    ``entries:[]`` even though the run has 21 fills. P&L now comes from the ledger
+    itself, so it is non-empty whenever the run has positions. The per-factor
+    STRATEGY/EXECUTION alpha attribution (when an attribution parquet exists) rides
+    the dedicated ``/attribution`` + ``/attribution/breakdown`` endpoints.
+
+    All-opening runs legitimately show ``realized_pnl=0`` per leg (correct avg-cost
+    accounting — nothing has closed); ``unrealized`` carries the mark-to-market.
+    Honest zero/empty when the client has no run.
     """
     enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_pnl(client_id, date_from, date_to)
-    rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
+    run_id = resolve_canonical_run(client_id, as_of_date=date_to)
     ledger_rows = read_ledger_rows(client_id, as_of_date=date_to)
-    realized_total = realized_pnl_total(
+    pnl = compute_pnl_entries(
         ledger_rows,
         marks={},
         as_of=datetime.now(UTC),
         share_class_of={},
     )
-    return _pnl_from_rows(client_id, rows, realized_total)
+    pnl["client_id"] = client_id
+    pnl["share_class"] = "USDT"
+    pnl["run_id"] = run_id
+    return pnl
 
 
 @router.get("/positions")
@@ -395,6 +353,7 @@ def get_client_instructions(
     target qty / benchmark price). Honest empty when the client has no run yet.
     """
     enforce_entitlement(auth, client_id)
+    run_id = resolve_canonical_run(client_id)
     rows = read_ledger_rows(client_id)
     instructions: list[dict[str, object]] = []
     for row in rows:
@@ -402,6 +361,7 @@ def get_client_instructions(
             continue
         delta = row.delta
         trade_id = row.trade_id or ""
+        qty_str = str(abs(delta))
         instructions.append(
             {
                 "instruction_id": trade_id,
@@ -410,7 +370,11 @@ def get_client_instructions(
                 "venue": row.venue,
                 "instrument_key": trade_id.split("|")[0],
                 "side": _side_from_delta(delta, str(row.direction) if row.direction else None),
-                "target_qty": str(abs(delta)),
+                "target_qty": qty_str,
+                # `size`/`quantity` aliases so any UI panel field name surfaces the
+                # qty (the LedgerInstruction renders `target_qty`; aliases are belt+braces).
+                "size": qty_str,
+                "quantity": qty_str,
                 "benchmark_price": str(row.price if row.price is not None else "0"),
                 "timestamp": row.timestamp_utc.isoformat(),
                 "correlation_id": row.event_id,
@@ -418,7 +382,57 @@ def get_client_instructions(
             }
         )
     instructions = instructions[-limit:]
-    return {"client_id": client_id, "instructions": instructions, "total": len(instructions)}
+    return {"client_id": client_id, "run_id": run_id, "instructions": instructions, "total": len(instructions)}
+
+
+@router.get("/trades")
+def get_client_trades(
+    client_id: str,
+    auth: AuthDep,
+    limit: int = Query(500, description="Max trades to return (most-recent first)"),
+) -> dict[str, object]:
+    """Trade fills derived from the canonical paper run's InstructionLedger.
+
+    The dashboard's executed-fills tape: resolves the SAME canonical run as the
+    positions/pnl/instructions/reconciliation views and projects each
+    :class:`TradeFillRecord` (timestamp / venue / side / instrument_key / qty /
+    fill_price / notional) to the UI's ``LedgerTrade`` shape. These are the exact
+    fills the reconciliation matched, so the tape is coherent across panels.
+
+    Mirrors the legacy ``/api/v1/trades?client_id=`` route's ledger source under
+    the per-client ``/api/v1/clients/{client_id}/trades`` path. Honest empty when
+    the client has no run yet.
+    """
+    enforce_entitlement(auth, client_id)
+    run_id, fills = read_canonical_run_fills(client_id)
+    trades: list[dict[str, object]] = []
+    for fill in fills:
+        qty = abs(fill.qty)
+        price = fill.fill_price
+        side_upper = fill.side.strip().upper()
+        ui_side = "buy" if side_upper in ("BUY", "LONG", "SUPPLY", "YES", "BACK") else "sell"
+        trades.append(
+            {
+                "trade_id": fill.trade_key,
+                "venue": fill.venue,
+                "symbol": fill.instrument_key,
+                "instrument_key": fill.instrument_key,
+                "side": ui_side,
+                "quantity": str(qty),
+                "fill_price": str(price),
+                "price": str(price),
+                "fee": str(fill.fees_in_quote),
+                "fee_currency": "USDC",
+                "realized_pnl": "0",
+                "timestamp": fill.tick_timestamp.isoformat(),
+                "order_id": fill.strategy_instruction_id,
+                "trade_type": "paper",
+                "notional_usd": str(qty * price),
+            }
+        )
+    trades.sort(key=lambda t: str(t.get("timestamp", "")), reverse=True)
+    trades = trades[:limit]
+    return {"client_id": client_id, "run_id": run_id, "trades": trades, "total": len(trades)}
 
 
 @router.get("/transfers")
@@ -428,10 +442,17 @@ def get_client_transfers(
 ) -> dict[str, object]:
     """Wallet transfers / money movements (TRANSFER / DEPOSIT / BRIDGE ledger rows).
 
-    Single-client scope (funds never cross clients). Reads the REAL ledger rows and
-    projects the non-trade money-movement events. Honest empty when none.
+    Single-client scope (funds never cross clients). Reads the canonical run's
+    ledger rows and projects the non-trade money-movement events (TRANSFER /
+    DEPOSIT / WITHDRAWAL / BRIDGE). When the run carries NO money-movement rows
+    (the carry_staked_basis paper run is all TRADE legs — the capital moves are
+    modelled as trades into the staking/perp legs, not separate TRANSFER rows) the
+    response is a TYPED honest-empty (``status="NO_TRANSFER_ROWS"`` + a ``note``),
+    distinguishing "the run genuinely has no transfers" from "this panel is broken"
+    — never a silent bare ``0`` that reads as a bug.
     """
     enforce_entitlement(auth, client_id)
+    run_id = resolve_canonical_run(client_id)
     rows = read_ledger_rows(client_id)
     transfers: list[dict[str, object]] = []
     for row in rows:
@@ -455,7 +476,27 @@ def get_client_transfers(
                 "client_id": client_id,
             }
         )
-    return {"client_id": client_id, "transfers": transfers, "total": len(transfers)}
+    if run_id is None:
+        status = "NO_RUN"
+        note = "No paper run exists for this client yet."
+    elif not transfers:
+        status = "NO_TRANSFER_ROWS"
+        note = (
+            "This run's ledger carries no money-movement (TRANSFER/DEPOSIT/WITHDRAWAL/BRIDGE) rows — "
+            "the carry_staked_basis run models capital movement as TRADE legs into the staking/perp "
+            "positions, not as separate transfer events. See /positions and /trades for the real flow."
+        )
+    else:
+        status = "OK"
+        note = ""
+    return {
+        "client_id": client_id,
+        "run_id": run_id,
+        "transfers": transfers,
+        "total": len(transfers),
+        "status": status,
+        "note": note,
+    }
 
 
 @router.get("/reconciliation/latest")
