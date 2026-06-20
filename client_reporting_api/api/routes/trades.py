@@ -15,6 +15,7 @@ from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_
 
 from client_reporting_api.core.backfill_store import get_backfill_trades
 from client_reporting_api.core.entitlement import enforce_entitlement
+from client_reporting_api.core.ledger_views import read_canonical_run_fills
 from client_reporting_api.core.live_data_provider import get_collector
 from client_reporting_api.core.mock_performance_data import MOCK_TRADES
 
@@ -31,6 +32,62 @@ def _decimal_to_float(val: Decimal) -> float:
     return float(val)
 
 
+def _num(value: str | float | None) -> float:
+    """Coerce a trade-row numeric field (str/float/None) to float; 0.0 on garbage."""
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+_BUY_SIDES = frozenset({"buy", "long", "supply", "yes", "back"})
+
+
+def _trade_side(side: str) -> str:
+    """Map a ledger fill side to the UI's ``"buy"``/``"sell"`` (the LedgerTrade enum)."""
+    return "buy" if side.strip().lower() in _BUY_SIDES else "sell"
+
+
+def _ledger_run_trades(client_id: str) -> tuple[str | None, list[dict[str, str | float | None]]]:
+    """Project the canonical paper run's InstructionLedger fills to the trade tape.
+
+    The PRIMARY source for a paper-trading client: resolves the SAME canonical run
+    every other ledger panel (positions / pnl / instructions / reconciliation) keys
+    off (so the trades tape is coherent with them — no per-endpoint run drift) and
+    maps each :class:`TradeFillRecord` to the UI's ``LedgerTrade`` shape. These are
+    the exact fills the reconciliation matched, so ``/trades`` shows the real run.
+    Returns ``(canonical_run_id, [])`` when the client has no ledger run yet.
+    """
+    run_id, fills = read_canonical_run_fills(client_id)
+    trades: list[dict[str, str | float | None]] = []
+    for f in fills:
+        qty = f.qty
+        price = f.fill_price
+        notional = abs(qty) * price
+        trades.append(
+            {
+                "trade_id": f.trade_key,
+                "venue": f.venue,
+                "symbol": f.instrument_key,
+                "side": _trade_side(f.side),
+                "quantity": _decimal_to_float(abs(qty)),
+                "price": _decimal_to_float(price),
+                "fee": _decimal_to_float(f.fees_in_quote),
+                "fee_currency": "USDC",
+                "realized_pnl": 0.0,
+                "timestamp": f.tick_timestamp.isoformat(),
+                "order_id": f.strategy_instruction_id,
+                "trade_type": "paper",
+                "notional_usd": _decimal_to_float(notional),
+            }
+        )
+    # Newest first (the panel renders most-recent at the top).
+    trades.sort(key=lambda t: str(t.get("timestamp", "")), reverse=True)
+    return run_id, trades
+
+
 @router.get("")
 def get_trade_history(
     auth: AuthDep,
@@ -40,48 +97,61 @@ def get_trade_history(
     limit: int = Query(50, ge=1, le=500, description="Number of trades"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> dict[str, object]:
-    """Return paginated trade history with fills, fees, and P&L."""
+    """Return paginated trade history with fills, fees, and P&L.
+
+    Source order (fix 2026-06-20): the canonical paper-run InstructionLedger is the
+    PRIMARY source — a paper-trading client's fills live in its GCS ledger, NOT in
+    a live CeFi exchange feed, so the former collector→backfill chain returned an
+    empty tape even though the run executed 21 fills. The ledger tape is derived
+    via the SAME canonical-run resolver the positions/pnl/recon views use, so all
+    panels reflect one run. When the client has no ledger run the legacy live
+    collector + backfill path still serves CeFi exchange clients.
+    """
     enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         return _mock_trades(client_id, symbol, side, limit, offset)
 
-    collector = get_collector()
-    records = collector.get_client_trades(client_id, limit=limit + offset)
+    # PRIMARY: canonical paper-run ledger fills (coherent with the other panels).
+    run_id, trades = _ledger_run_trades(client_id)
+    source = "ledger"
 
-    trades = [
-        {
-            "trade_id": r.trade_id,
-            "venue": r.venue,
-            "symbol": r.symbol,
-            "side": r.side.value if hasattr(r.side, "value") else str(r.side),
-            "quantity": _decimal_to_float(r.quantity),
-            "price": _decimal_to_float(r.price),
-            "fee": _decimal_to_float(r.fee),
-            "fee_currency": r.fee_currency,
-            "realized_pnl": _decimal_to_float(r.realized_pnl),
-            "timestamp": r.timestamp.isoformat(),
-            "order_id": r.order_id,
-            "trade_type": r.trade_type.value if hasattr(r.trade_type, "value") else str(r.trade_type),
-            "notional_usd": _decimal_to_float(r.notional_usd if r.notional_usd else r.quantity * r.price),
-        }
-        for r in records
-    ]
-
-    # Fall back to backfilled trades if live returns empty
-    if not trades:
-        trades = _backfill_trades(client_id)
+    # Legacy CeFi exchange path: only when no paper-run ledger exists for the client.
+    if run_id is None:
+        collector = get_collector()
+        records = collector.get_client_trades(client_id, limit=limit + offset)
+        live_trades: list[dict[str, str | float | None]] = [
+            {
+                "trade_id": r.trade_id,
+                "venue": r.venue,
+                "symbol": r.symbol,
+                "side": r.side.value if hasattr(r.side, "value") else str(r.side),
+                "quantity": _decimal_to_float(r.quantity),
+                "price": _decimal_to_float(r.price),
+                "fee": _decimal_to_float(r.fee),
+                "fee_currency": r.fee_currency,
+                "realized_pnl": _decimal_to_float(r.realized_pnl),
+                "timestamp": r.timestamp.isoformat(),
+                "order_id": r.order_id,
+                "trade_type": r.trade_type.value if hasattr(r.trade_type, "value") else str(r.trade_type),
+                "notional_usd": _decimal_to_float(r.notional_usd if r.notional_usd else r.quantity * r.price),
+            }
+            for r in records
+        ]
+        trades = live_trades if live_trades else _backfill_trades(client_id)
+        source = "live"
 
     if symbol:
         trades = [t for t in trades if t["symbol"] == symbol]
     if side:
-        trades = [t for t in trades if t["side"] == side]
+        wanted = side.strip().lower()
+        trades = [t for t in trades if str(t["side"]).lower() == wanted]
 
     total = len(trades)
     trades = trades[offset : offset + limit]
 
-    total_volume = sum(float(t.get("notional_usd", 0) or 0) for t in trades)
-    total_fees = sum(float(t.get("fee", 0) or 0) for t in trades)
-    net_pnl = sum(float(t.get("realized_pnl", 0) or 0) for t in trades)
+    total_volume = sum(_num(t.get("notional_usd")) for t in trades)
+    total_fees = sum(_num(t.get("fee")) for t in trades)
+    net_pnl = sum(_num(t.get("realized_pnl")) for t in trades)
 
     return {
         "client_id": client_id,
@@ -89,7 +159,8 @@ def get_trade_history(
         "total": total,
         "offset": offset,
         "limit": limit,
-        "source": "live",
+        "source": source,
+        "run_id": run_id,
         "aggregates": {
             "total_trades": total,
             "total_volume_usd": round(total_volume, 2),

@@ -34,8 +34,13 @@ from decimal import Decimal
 from urllib.parse import urlparse
 
 from unified_api_contracts import EventType, LedgerRow, PositionLedgerRow
+from unified_api_contracts.internal import TradeFillRecord
 from unified_trading_library import get_storage_client
-from unified_trading_library.ledger import client_runs_prefix  # noqa: qg-deep-import
+from unified_trading_library.ledger import (  # noqa: qg-deep-import
+    client_ledger_root,
+    client_runs_prefix,
+    load_instruction_ledger_fills,
+)
 from unified_trading_library.ledger.materialize import (  # noqa: qg-deep-import
     materialize_position_ledger,  # not re-exported at UTL top level
 )
@@ -51,6 +56,17 @@ logger = logging.getLogger(__name__)
 #: construction (writer + reader share the convention; no parquet/JSONL drift).
 _INSTRUCTION_LEDGER_SUFFIX = ".jsonl"
 _LEDGER_TYPE_INSTRUCTION = "ledger_type=instruction"
+
+#: The batch-rerun subtree marker. A run's batch rerun lands under
+#: ``…/run_id=R/__batch__/B/ledger/…`` — those JSONL objects are the BATCH copy of
+#: the SAME fills and MUST NOT be folded into the paper run's positions/PnL/trades
+#: (that would double every figure). The canonical-run readers exclude it.
+_BATCH_MARKER = "__batch__"
+
+#: A ``run_id=<rid>/`` path segment. The rid embeds a sortable ``…YYYYmmddHHMMSS…``
+#: timestamp (the paper-run launcher mints ``paper-{ts}-{hex}``), so lexicographic
+#: max over the run_ids is the NEWEST run.
+_RUN_ID_RE = re.compile(r"run_id=(?P<rid>[^/]+)/")
 
 #: The own-field set of ``LedgerRow`` MINUS ``direction``. ``LedgerRow`` is
 #: ``extra="forbid"``, so the reconciliation-only keys the writer stamps alongside
@@ -92,16 +108,6 @@ def _split_gs(uri: str) -> tuple[str, str]:
     return parsed.netloc, parsed.path.lstrip("/")
 
 
-def _is_instruction_blob(path: str, as_of_date: date | None) -> bool:
-    """True iff ``path`` is an InstructionLedger JSONL within the ``as_of_date`` bound."""
-    if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX):
-        return False
-    if _LEDGER_TYPE_INSTRUCTION not in path:
-        return False
-    run_dt = _blob_run_date(path)
-    return not (as_of_date is not None and run_dt is not None and run_dt > as_of_date)
-
-
 def _parse_instruction_jsonl(raw: str) -> list[LedgerRow]:
     """Parse newline-delimited InstructionLedger JSON into ``LedgerRow``s.
 
@@ -121,27 +127,94 @@ def _parse_instruction_jsonl(raw: str) -> list[LedgerRow]:
     return parsed
 
 
+def _candidate_paper_run_id(path: str, as_of_date: date | None) -> str | None:
+    """Return the ``run_id`` iff ``path`` is a candidate paper InstructionLedger JSONL.
+
+    A candidate is a top-level (NOT ``__batch__``) ``ledger_type=instruction`` JSONL
+    within the optional ``as_of_date`` bound. Returns ``None`` for any object that
+    is not such a candidate (a non-JSONL, a manifest, a batch-rerun copy, an
+    out-of-bound run, or a path without a ``run_id=`` segment).
+    """
+    if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX):
+        return None
+    if _LEDGER_TYPE_INSTRUCTION not in path:
+        return None
+    if _BATCH_MARKER in path:
+        return None  # batch rerun copy of an existing run — not a run itself
+    match = _RUN_ID_RE.search(path)
+    if not match:
+        return None
+    if as_of_date is not None:
+        run_dt = _blob_run_date(path)
+        if run_dt is not None and run_dt > as_of_date:
+            return None
+    return match.group("rid")
+
+
+def resolve_canonical_run(
+    client_id: str,
+    as_of_date: date | None = None,
+    cloud: str = "gcp",
+) -> str | None:
+    """Resolve THE single canonical paper run every per-client view must read.
+
+    Lists the per-client ledger prefix ONCE and returns the ``run_id`` of the
+    NEWEST paper run whose top-level InstructionLedger JSONL exists (a COMPLETE
+    run) within the optional ``as_of_date`` bound. Batch-rerun objects (under
+    ``…/__batch__/…``) are NOT runs — they are the batch copy of an existing
+    paper run's fills and are excluded from candidacy.
+
+    This is the SSOT run resolver: every endpoint (instructions / trades /
+    positions / pnl / transfers) keys off the SAME run, so they cannot diverge
+    (the bug where each endpoint independently picked "latest" and disagreed).
+    The recon view's ``_discover_runs`` resolves the same newest paper run; this
+    is the shared definition expressed for the ledger-views readers.
+
+    Returns ``None`` when the client has no paper run yet (honest empty path).
+    """
+    paper_runs: set[str] = set()
+    try:
+        runs_prefix = client_runs_prefix(client_id, cloud=cloud)
+        bucket, prefix = _split_gs(runs_prefix)
+        storage = get_storage_client()
+        for blob_meta in storage.list_blobs(bucket, prefix=prefix):
+            rid = _candidate_paper_run_id(str(getattr(blob_meta, "name", "")), as_of_date)
+            if rid is not None:
+                paper_runs.add(rid)
+    except Exception as exc:
+        logger.warning("resolve_canonical_run: ledger scan failed for client=%s: %s", client_id, exc)
+        return None
+    if not paper_runs:
+        return None
+    return sorted(paper_runs)[-1]  # newest timestamped paper run
+
+
 def read_ledger_rows(
     client_id: str,
     as_of_date: date | None = None,
     cloud: str = "gcp",
 ) -> list[LedgerRow]:
-    """Read a client's ``LedgerRow`` tape from the GCS run ledger.
+    """Read the canonical run's ``LedgerRow`` tape from the GCS run ledger.
 
-    Lists the canonical per-client ledger prefix
-    (``client_runs_prefix(client_id)`` →
-    ``gs://{client-reports}/ledger/client_id={client_id}/``), then parses every
-    ``ledger_type=instruction/{run_id}.jsonl`` object the engine wrote there into
-    UAC :class:`LedgerRow`s. This is the SAME JSONL shape the UTL
-    ``write_run_ledger`` writer emits and ``load_instruction_ledger_fills`` reads —
-    so the engine→API monitoring chain connects by construction (no parquet/JSONL
-    format drift, no path mismatch).
+    Resolves THE single canonical paper run (:func:`resolve_canonical_run` — the
+    newest complete run) and parses ONLY that run's
+    ``ledger_type=instruction/{run_id}.jsonl`` objects into UAC :class:`LedgerRow`s.
+    This is the SAME JSONL shape the UTL ``write_run_ledger`` writer emits and
+    ``load_instruction_ledger_fills`` reads — so the engine→API monitoring chain
+    connects by construction (no parquet/JSONL format drift, no path mismatch).
 
-    Returns the ``INSTRUCTION`` (TRADE) rows across all of the client's runs.
+    **Run-scoped, NOT all-runs (fix 2026-06-20)** — a client can hold MANY paper
+    runs (e.g. a determinism re-run); reading every run's instruction tape into one
+    fold DOUBLES every position/PnL figure and makes this view disagree with the
+    recon view (which reads only the newest run). All per-client views now key off
+    the ONE canonical run, so they are mutually coherent.
+
+    Returns the canonical run's ``INSTRUCTION`` (TRADE) rows.
     :func:`compute_ledger_views` folds these into positions / balances / PnL.
-    (PassiveLedger accruals ride a separate ``ledger_type=passive`` prefix added by
-    the carry engine wiring; only ``instruction`` exists today — when passive lands
-    it is read here too and routed to realised PnL, never the position fold.)
+    (PassiveLedger accruals would ride a separate ``ledger_type=passive`` prefix
+    written by the carry-engine wiring; only ``instruction`` exists today — when
+    passive lands it is read here too and routed to realised PnL, never the
+    position fold.)
 
     When the client has no run ledger yet this returns ``[]`` — the HONEST empty
     path: callers materialise zero positions / zero PnL, never mock data.
@@ -150,25 +223,58 @@ def read_ledger_rows(
         client_id: the client whose ledger to read (single-client scope — funds
             never cross clients; only ``client_id={client_id}`` is ever listed).
         as_of_date: optional inclusive upper-bound run date; runs dated after it
-            are skipped (undated runs are always included).
+            are skipped when resolving the canonical run.
         cloud: ``"gcp"`` or ``"aws"`` — passed to ``client_runs_prefix``.
     """
-    runs_prefix = client_runs_prefix(client_id, cloud=cloud)
-    bucket, prefix = _split_gs(runs_prefix)
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of_date, cloud=cloud)
+    if run_id is None:
+        return []
 
     rows: list[LedgerRow] = []
     try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        bucket, root_prefix = _split_gs(ledger_root)
+        instr_prefix = f"{root_prefix}{_LEDGER_TYPE_INSTRUCTION}/"
         storage = get_storage_client()
-        for blob_meta in storage.list_blobs(bucket, prefix=prefix):
-            path = blob_meta.name
-            if not _is_instruction_blob(path, as_of_date):
+        for blob_meta in storage.list_blobs(bucket, prefix=instr_prefix):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX):
                 continue
+            if _BATCH_MARKER in path:
+                continue  # never fold the batch-rerun copy into the paper view
             raw = storage.download_bytes(bucket, path).decode("utf-8")
             rows.extend(_parse_instruction_jsonl(raw))
     except Exception as exc:
-        logger.warning("read_ledger_rows: ledger scan failed for client=%s: %s", client_id, exc)
+        logger.warning("read_ledger_rows: ledger read failed for client=%s run=%s: %s", client_id, run_id, exc)
 
     return rows
+
+
+def read_canonical_run_fills(
+    client_id: str,
+    as_of_date: date | None = None,
+    cloud: str = "gcp",
+) -> tuple[str | None, list[TradeFillRecord]]:
+    """Return ``(canonical_run_id, fills)`` for the client's canonical paper run.
+
+    The trade-tape source for the ``/trades`` endpoint: resolves the SAME canonical
+    run as every other view, then reads its keyed :class:`TradeFillRecord`s via the
+    UTL SSOT reader ``load_instruction_ledger_fills`` (the inverse of the engine's
+    ``write_run_ledger``). These are the exact fills the reconciliation matches —
+    so ``/trades`` shows the real 21 fills, coherent with ``/reconciliation``.
+
+    Returns ``(None, [])`` when the client has no run yet (honest empty).
+    """
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of_date, cloud=cloud)
+    if run_id is None:
+        return None, []
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        fills = load_instruction_ledger_fills(ledger_root)
+    except Exception as exc:
+        logger.warning("read_canonical_run_fills: load failed for client=%s run=%s: %s", client_id, run_id, exc)
+        return run_id, []
+    return run_id, fills
 
 
 def _decimal_str(value: Decimal | None) -> str | None:
@@ -239,6 +345,64 @@ def realized_pnl_total(
     )
     passive_pnl = sum((r.delta for r in passive_rows), Decimal(0))
     return sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0)) + passive_pnl
+
+
+def compute_pnl_entries(
+    rows: Sequence[LedgerRow],
+    *,
+    marks: Mapping[str, Decimal],
+    as_of: datetime,
+    share_class_of: Mapping[str, str],
+) -> dict[str, object]:
+    """Ledger-derived P&L breakdown — one entry per materialised position.
+
+    Folds the canonical run's TRADE tape into the ``PositionLedger`` (avg-cost) and
+    emits a per-position P&L ``entries`` list (``realized`` from closed legs net of
+    fees, ``unrealized`` from marks) PLUS the ``realized_pnl_total`` /
+    ``unrealized_pnl_total`` / ``total_pnl`` roll-ups + the PASSIVE accrual cash
+    flows. This replaces the former dependence on the attribution parquet (empty
+    for a fresh paper run → empty ``entries``); P&L now derives from the SAME
+    position ledger the ``/positions`` view uses, so the two are coherent.
+
+    All-opening runs (e.g. carry_staked_basis week-1: only BUY/SUPPLY legs, no
+    closes) legitimately have ``realized_pnl=0`` per leg — that is CORRECT
+    avg-cost accounting, not a bug; ``unrealized`` carries the mark-to-market once
+    marks are supplied. Honest zero on an empty ledger.
+    """
+    trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
+    passive_rows = [r for r in rows if r.event_origin.value == "passive"]
+    positions = materialize_position_ledger(
+        trade_rows,
+        marks=marks,
+        as_of=as_of,
+        share_class_of=share_class_of,
+    )
+    passive_pnl = sum((r.delta for r in passive_rows), Decimal(0))
+    realized_total = sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0)) + passive_pnl
+    unrealized_total: Decimal = sum((p.unrealized_pnl or Decimal(0) for p in positions), Decimal(0))
+
+    entries = [
+        {
+            "venue": p.venue,
+            "instrument_key": p.instrument_key,
+            "asset_symbol": p.asset_symbol,
+            "share_class": p.share_class,
+            "net_qty": str(p.net_qty),
+            "avg_cost": _decimal_str(p.avg_cost),
+            "mark_price": _decimal_str(p.mark_price),
+            "realized_pnl": str(p.realized_pnl or Decimal(0)),
+            "unrealized_pnl": str(p.unrealized_pnl or Decimal(0)),
+            "total_pnl": str((p.realized_pnl or Decimal(0)) + (p.unrealized_pnl or Decimal(0))),
+        }
+        for p in positions
+    ]
+    return {
+        "realized_pnl_total": str(realized_total),
+        "unrealized_pnl_total": str(unrealized_total),
+        "total_pnl": str(realized_total + unrealized_total),
+        "passive_pnl_total": str(passive_pnl),
+        "entries": entries,
+    }
 
 
 def _position_view(row: PositionLedgerRow) -> dict[str, object]:
