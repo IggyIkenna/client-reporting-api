@@ -382,7 +382,9 @@ class TestLedgerDerivedPnl:
 
     def test_unrealized_from_mark(self) -> None:
         rows = [_pnl_trade_row(venue="UNISWAP_V3", asset="ETH", side="BUY", qty="2", price="3000")]
-        result = compute_pnl_entries(rows, marks={"ETH": Decimal("3100")}, as_of=_PNL_AS_OF, share_class_of={})
+        # No instrument_key_by_row_id → legacy {venue}:{asset_canonical_id} marks key.
+        marks = {"UNISWAP_V3:ETH": Decimal("3100")}
+        result = compute_pnl_entries(rows, marks=marks, as_of=_PNL_AS_OF, share_class_of={})
         # 2 * (3100 - 3000) = 200 unrealised.
         assert result["unrealized_pnl_total"] == "200"
         assert result["entries"][0]["unrealized_pnl"] == "200"
@@ -454,6 +456,14 @@ class TestLivePaths:
             _pnl_trade_row(venue="UNISWAP_V3", asset="ETH", side="BUY", qty="2", price="3000"),
             _pnl_trade_row(venue="LIDO", asset="ETH", side="SUPPLY", qty="33", price="1"),
         ]
+        # read_ledger_rows now returns (rows, instrument_key_by_row_id); the map keys
+        # each row's row_id to its canonical VENUE:INSTRUMENT_TYPE:SYMBOL (the per-leg
+        # key the materialiser groups + joins marks on — NOT the colliding asset id).
+        instrument_keys = {
+            "UNISWAP_V3:ETH:BUY": "UNISWAP_V3:DEX_POOL:ETH",
+            "LIDO:ETH:SUPPLY": "LIDO:STAKING:ETH",
+        }
+        read_ledger_rows_ret = (ledger_rows, instrument_keys)
         # pydantic blocks plain setattr → flip mock off via the instance method.
         orig_is_mock = cfg.is_mock_mode
         object.__setattr__(cfg, "is_mock_mode", lambda: False)
@@ -462,7 +472,7 @@ class TestLivePaths:
             with (
                 patch(
                     "client_reporting_api.api.routes.attribution.read_ledger_rows",
-                    return_value=ledger_rows,
+                    return_value=read_ledger_rows_ret,
                 ),
                 patch(
                     "client_reporting_api.api.routes.attribution.resolve_canonical_run",
@@ -478,18 +488,21 @@ class TestLivePaths:
             assert response.status_code == 200
             payload = response.json()
             assert payload["run_id"] == "paper-20260620004135-bbbb"
-            assert len(payload["entries"]) == 2  # UNISWAP_V3:ETH + LIDO:ETH
+            assert len(payload["entries"]) == 2  # UNISWAP_V3:DEX_POOL:ETH + LIDO:STAKING:ETH
             assert payload["realized_pnl_total"] == "0"  # all-open run
             assert payload["marks_status"] == "no_marks"
             assert payload["unrealized_pnl_total"] is None  # honest null, not "0"
             assert payload["total_pnl"] == "0"  # = realised only while unmarked
             assert all(e["unrealized_pnl"] is None for e in payload["entries"])
 
-            # (b) WITH PricingLedger marks → marks-driven non-zero unrealized.
+            # (b) WITH PricingLedger marks keyed by the canonical instrument_key → each
+            # leg gets its OWN mark (LIDO@1, Uniswap@3000), so the LIDO leg is NOT
+            # phantom-marked at the DEX price. Marks == avg_cost per leg → uPnL ≈ 0
+            # (the carry/staking yield is a CARRY-attribution concern, not price uPnL).
             with (
                 patch(
                     "client_reporting_api.api.routes.attribution.read_ledger_rows",
-                    return_value=ledger_rows,
+                    return_value=read_ledger_rows_ret,
                 ),
                 patch(
                     "client_reporting_api.api.routes.attribution.resolve_canonical_run",
@@ -497,7 +510,10 @@ class TestLivePaths:
                 ),
                 patch(
                     "client_reporting_api.api.routes.attribution.read_marks",
-                    return_value={"ETH": Decimal("3100")},
+                    return_value={
+                        "LIDO:STAKING:ETH": Decimal("1"),
+                        "UNISWAP_V3:DEX_POOL:ETH": Decimal("3000"),
+                    },
                 ),
             ):
                 client = TestClient(app, raise_server_exceptions=True)
@@ -505,10 +521,14 @@ class TestLivePaths:
             assert response.status_code == 200
             payload = response.json()
             assert payload["marks_status"] == "marked"
-            # net ETH = 2 (UNISWAP BUY) + 33 (LIDO SUPPLY) = 35 @ blended avg_cost,
-            # marked at 3100 → non-zero, real mark-to-market (was 0 with marks={}).
-            assert payload["unrealized_pnl_total"] is not None
-            assert Decimal(payload["unrealized_pnl_total"]) != Decimal("0")
+            # No phantom uPnL: each leg marked at its own price (= avg cost) → 0,
+            # NOT the (3000-1)*33 phantom the asset_canonical_id collision produced.
+            assert Decimal(payload["unrealized_pnl_total"]) == Decimal("0")
+            by_key = {e["instrument_key"]: e for e in payload["entries"]}
+            assert by_key["LIDO:STAKING:ETH"]["mark_price"] == "1"
+            assert by_key["LIDO:STAKING:ETH"]["unrealized_pnl"] == "0"
+            assert by_key["UNISWAP_V3:DEX_POOL:ETH"]["mark_price"] == "3000"
+            assert by_key["UNISWAP_V3:DEX_POOL:ETH"]["unrealized_pnl"] == "0"
         finally:
             object.__setattr__(cfg, "is_mock_mode", orig_is_mock)
 
@@ -553,7 +573,7 @@ class TestLivePaths:
 
         rows = [_pnl_trade_row(venue="UNISWAP_V3", asset="ETH", side="BUY", qty="100000", price="3000")]
         with (
-            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=rows),
+            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=(rows, {})),
             patch(
                 "client_reporting_api.api.routes.attribution.resolve_canonical_run",
                 return_value="paper-20260620004135-bbbb",
@@ -576,7 +596,7 @@ class TestLivePaths:
         # Run exists with only TRADE rows → typed NO_TRANSFER_ROWS, not a bare 0.
         rows = [_pnl_trade_row(venue="LIDO", asset="ETH", side="SUPPLY", qty="33", price="1")]
         with (
-            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=rows),
+            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=(rows, {})),
             patch(
                 "client_reporting_api.api.routes.attribution.resolve_canonical_run",
                 return_value="paper-20260620004135-bbbb",

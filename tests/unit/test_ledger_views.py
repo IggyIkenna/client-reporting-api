@@ -114,8 +114,8 @@ def _tape() -> list[LedgerRow]:
 
 class TestReadLedgerRows:
     def test_returns_empty_until_engine_wiring(self) -> None:
-        assert read_ledger_rows("client-A") == []
-        assert read_ledger_rows("client-A", as_of_date=_AS_OF.date()) == []
+        assert read_ledger_rows("client-A") == ([], {})
+        assert read_ledger_rows("client-A", as_of_date=_AS_OF.date()) == ([], {})
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +149,7 @@ class TestPopulatedLedger:
     def test_position_net_qty_and_avg_cost(self) -> None:
         views = compute_ledger_views(
             _tape(),
-            marks={"btc": Decimal("66000")},
+            marks={"hyperliquid:btc": Decimal("66000")},
             as_of=_AS_OF,
             share_class_of={"btc": "USDT"},
         )
@@ -167,7 +167,7 @@ class TestPopulatedLedger:
     def test_realized_pnl_exact_value(self) -> None:
         views = compute_ledger_views(
             _tape(),
-            marks={"btc": Decimal("66000")},
+            marks={"hyperliquid:btc": Decimal("66000")},
             as_of=_AS_OF,
             share_class_of={"btc": "USDT"},
         )
@@ -182,7 +182,7 @@ class TestPopulatedLedger:
     def test_funding_accrual_does_not_move_net_qty(self) -> None:
         views = compute_ledger_views(
             _tape(),
-            marks={"btc": Decimal("66000")},
+            marks={"hyperliquid:btc": Decimal("66000")},
             as_of=_AS_OF,
             share_class_of={"btc": "USDT"},
         )
@@ -194,7 +194,7 @@ class TestPopulatedLedger:
     def test_unrealized_pnl_exact_value(self) -> None:
         views = compute_ledger_views(
             _tape(),
-            marks={"btc": Decimal("66000")},
+            marks={"hyperliquid:btc": Decimal("66000")},
             as_of=_AS_OF,
             share_class_of={"btc": "USDT"},
         )
@@ -243,7 +243,7 @@ class TestPopulatedLedger:
         ]
         views = compute_ledger_views(
             rows,
-            marks={"btc": Decimal("110"), "eth": Decimal("55")},
+            marks={"hyperliquid:btc": Decimal("110"), "binance:eth": Decimal("55")},
             as_of=_AS_OF,
             share_class_of={"btc": "USDT", "eth": "USDT"},
         )
@@ -339,12 +339,14 @@ class TestReadLedgerRowsJsonl:
 
         monkeypatch.setattr(lv, "get_storage_client", lambda: _RStorage())  # type: ignore[attr-defined]
 
-        rows = lv.read_ledger_rows("client-A")
+        rows, instrument_key_by_row_id = lv.read_ledger_rows("client-A")
         assert len(rows) == 1
         assert rows[0].event_type == EventType.TRADE
         assert rows[0].trade_id == fill.trade_key
         assert rows[0].delta == Decimal("1.0")  # LONG → positive
         assert rows[0].price == Decimal("60000")
+        # The stamped canonical instrument_key is captured for the materialiser.
+        assert instrument_key_by_row_id[rows[0].row_id] == ik
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +509,7 @@ class TestCanonicalRunResolution:
         # Canonical = lexicographically newest timestamped run.
         assert lv.resolve_canonical_run("firm") == "paper-20260620004135-bbbb"
         # read_ledger_rows reads ONLY that run — exactly ONE row, not two (no doubling).
-        rows = lv.read_ledger_rows("firm")
+        rows, _instrument_keys = lv.read_ledger_rows("firm")
         assert len(rows) == 1
         assert rows[0].delta == Decimal("33.0")
 
@@ -536,7 +538,7 @@ class TestCanonicalRunResolution:
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
 
         assert lv.resolve_canonical_run("firm") == "paper-20260620004135-bbbb"
-        rows = lv.read_ledger_rows("firm")
+        rows, _instrument_keys = lv.read_ledger_rows("firm")
         assert len(rows) == 1  # batch copy excluded → no doubling
 
     def test_no_run_is_honest_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -544,7 +546,7 @@ class TestCanonicalRunResolution:
 
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage({}))  # type: ignore[attr-defined]
         assert lv.resolve_canonical_run("nobody") is None
-        assert lv.read_ledger_rows("nobody") == []
+        assert lv.read_ledger_rows("nobody") == ([], {})
         run_id, fills = lv.read_canonical_run_fills("nobody")
         assert run_id is None
         assert fills == []
@@ -624,7 +626,8 @@ class TestComputePnlEntries:
                 asset_canonical_id="eth",
             ),
         ]
-        out = compute_pnl_entries(rows, marks={"eth": Decimal("3100")}, as_of=_AS_OF, share_class_of={})
+        # Rows built directly (no instrument_key_by_row_id) → legacy {venue}:{asset_canonical_id} key.
+        out = compute_pnl_entries(rows, marks={"UNISWAP_V3:eth": Decimal("3100")}, as_of=_AS_OF, share_class_of={})
         assert out["unrealized_pnl_total"] == "200"  # 2 * (3100 - 3000)
 
     def test_empty_is_honest_zero(self) -> None:
@@ -653,7 +656,10 @@ def _write_pricing(
 
     Lands under the SAME canonical client_ledger_root the instruction tape lives
     under, at ``ledger_type=pricing/<object_name>`` — exactly the prefix
-    ``read_marks`` lists. One mark_update LedgerRow per (asset_canonical_id, mark).
+    ``read_marks`` lists. One mark_update LedgerRow per (instrument_key, mark);
+    ``marks`` is now keyed by the canonical ``VENUE:INSTRUMENT_TYPE:SYMBOL`` key
+    (the per-leg key the materialiser joins marks on), and each row stamps that
+    ``instrument_key`` (as the real writer does) so ``read_marks`` keys by it.
     """
     import json
 
@@ -665,15 +671,17 @@ def _write_pricing(
     key_prefix = root.split("/", 3)[3]
     key = f"{key_prefix}{_LEDGER_TYPE_PRICING_KEY}/{object_name}"
     lines = []
-    for asset_canonical_id, mark in marks.items():
+    for instrument_key, mark in marks.items():
+        venue, _itype, symbol = instrument_key.split(":", 2)
         lines.append(
             json.dumps(
                 {
                     "event_type": "mark_update",
-                    "asset_canonical_id": asset_canonical_id,
+                    "instrument_key": instrument_key,
+                    "asset_canonical_id": symbol,
                     "price": mark,
-                    "venue": "MARK",
-                    "asset_symbol": asset_canonical_id.upper(),
+                    "venue": venue,
+                    "asset_symbol": symbol,
                 }
             )
         )
@@ -685,7 +693,8 @@ _LEDGER_TYPE_PRICING_KEY = "ledger_type=pricing"
 
 class TestReadMarks:
     """read_marks reads the canonical run's PricingLedger into a marks map, keyed
-    by asset_canonical_id (the key materialize_position_ledger joins marks on)."""
+    by the canonical instrument_key (the key materialize_position_ledger joins
+    marks on — so same-asset legs on different venues never collide)."""
 
     def test_reads_marks_for_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.core.ledger_views as lv
@@ -696,12 +705,15 @@ class TestReadMarks:
             monkeypatch,
             client_id="firm",
             run_id="paper-20260620004135-bbbb",
-            marks={"eth": "3100", "btc": "66000"},
+            marks={"UNISWAP_V3:DEX_POOL:ETH": "3100", "DERIBIT:PERPETUAL:BTC-PERP": "66000"},
         )
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
 
         marks = lv.read_marks("firm", "paper-20260620004135-bbbb")
-        assert marks == {"eth": Decimal("3100"), "btc": Decimal("66000")}
+        assert marks == {
+            "UNISWAP_V3:DEX_POOL:ETH": Decimal("3100"),
+            "DERIBIT:PERPETUAL:BTC-PERP": Decimal("66000"),
+        }
 
     def test_no_pricing_ledger_is_honest_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.core.ledger_views as lv
@@ -724,7 +736,7 @@ class TestReadMarks:
             monkeypatch,
             client_id="firm",
             run_id="paper-20260620004135-bbbb",
-            marks={"eth": "3100"},
+            marks={"UNISWAP_V3:DEX_POOL:ETH": "3100"},
         )
         # A __batch__ pricing copy must NOT be read into the paper view.
         import json as _json
@@ -735,12 +747,18 @@ class TestReadMarks:
         key_prefix = root.split("/", 3)[3]
         batch_key = f"{key_prefix}__batch__/b/ledger/{_LEDGER_TYPE_PRICING_KEY}/marks.jsonl"
         store[batch_key] = _json.dumps(
-            {"event_type": "mark_update", "asset_canonical_id": "eth", "price": "9999", "venue": "MARK"}
+            {
+                "event_type": "mark_update",
+                "instrument_key": "UNISWAP_V3:DEX_POOL:ETH",
+                "asset_canonical_id": "ETH",
+                "price": "9999",
+                "venue": "UNISWAP_V3",
+            }
         )
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
 
         marks = lv.read_marks("firm", "paper-20260620004135-bbbb")
-        assert marks == {"eth": Decimal("3100")}  # batch copy's 9999 excluded
+        assert marks == {"UNISWAP_V3:DEX_POOL:ETH": Decimal("3100")}  # batch copy's 9999 excluded
 
     def test_marks_drive_unrealized_pnl_end_to_end(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The full reader path: an opening fill + a PricingLedger mark → non-zero
@@ -757,21 +775,24 @@ class TestReadMarks:
             run_id="paper-20260620004135-bbbb",
             fills=[_eth_fill(ik=ik, instr="i1", side="BUY", qty="2", price="3000", ts=ts)],
         )
-        # asset_canonical_id derived by the writer from instrument_key ETH -> "ETH".
+        # The mark is keyed by the SAME canonical instrument_key the fill carries
+        # (UNISWAP_V3:DEX_POOL:ETH), so it joins the materialised position leg.
         _write_pricing(
             store,
             monkeypatch,
             client_id="firm",
             run_id="paper-20260620004135-bbbb",
-            marks={"ETH": "3100"},
+            marks={"UNISWAP_V3:DEX_POOL:ETH": "3100"},
         )
         monkeypatch.setattr(lv, "get_storage_client", lambda: _fake_storage(store))  # type: ignore[attr-defined]
 
         run_id = lv.resolve_canonical_run("firm")
         assert run_id == "paper-20260620004135-bbbb"
-        rows = lv.read_ledger_rows("firm")
+        rows, instrument_key_by_row_id = lv.read_ledger_rows("firm")
         marks = lv.read_marks("firm", run_id)
-        assert marks == {"ETH": Decimal("3100")}
-        out = lv.compute_pnl_entries(rows, marks=marks, as_of=_AS_OF, share_class_of={})
+        assert marks == {"UNISWAP_V3:DEX_POOL:ETH": Decimal("3100")}
+        out = lv.compute_pnl_entries(
+            rows, marks=marks, as_of=_AS_OF, share_class_of={}, instrument_key_by_row_id=instrument_key_by_row_id
+        )
         # 2 ETH * (3100 - 3000) = 200 unrealized, marks-driven (was 0 with marks={}).
         assert out["unrealized_pnl_total"] == "200"

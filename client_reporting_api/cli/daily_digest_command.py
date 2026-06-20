@@ -56,7 +56,7 @@ def cmd_daily_ledger_digest(args: argparse.Namespace) -> int:
     seed_nav = Decimal(str(getattr(args, "seed_nav", "0") or "0"))
     channel = str(getattr(args, "channel", "#uts-live-alerts") or "#uts-live-alerts")
 
-    rows = read_ledger_rows(client_id, as_of_date=digest_date)
+    rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=digest_date)
     if not rows:
         # Honest empty: no run ledger for this client/date yet. Emit nothing
         # (no fabricated zero digest); log so the cron run is auditable.
@@ -75,6 +75,7 @@ def cmd_daily_ledger_digest(args: argparse.Namespace) -> int:
         share_class_of={},
         seed_nav=seed_nav,
         channel=channel,
+        instrument_key_by_row_id=instrument_key_by_row_id,
     )
     if getattr(args, "dry_run", False):
         logger.info("[daily-ledger-digest] DRY-RUN — would post: %s", event.message)

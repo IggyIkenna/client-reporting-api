@@ -183,7 +183,7 @@ def _ledger_views(client_id: str, as_of_date: date | None) -> dict[str, object]:
     separate map is threaded here.
     """
     run_id = resolve_canonical_run(client_id, as_of_date=as_of_date)
-    rows = read_ledger_rows(client_id, as_of_date=as_of_date)
+    rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=as_of_date)
     marks: Mapping[str, Decimal] = read_marks(client_id, run_id) if run_id else {}
     share_class_of: Mapping[str, str] = {}
     views = compute_ledger_views(
@@ -191,6 +191,7 @@ def _ledger_views(client_id: str, as_of_date: date | None) -> dict[str, object]:
         marks=marks,
         as_of=datetime.now(UTC),
         share_class_of=share_class_of,
+        instrument_key_by_row_id=instrument_key_by_row_id,
     )
     views["run_id"] = run_id
     views["marks_status"] = "marked" if marks else "no_marks"
@@ -251,13 +252,14 @@ def get_client_pnl(
     if _cloud_cfg.is_mock_mode():
         return _mock_pnl(client_id, date_from, date_to)
     run_id = resolve_canonical_run(client_id, as_of_date=date_to)
-    ledger_rows = read_ledger_rows(client_id, as_of_date=date_to)
+    ledger_rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=date_to)
     marks = read_marks(client_id, run_id) if run_id else {}
     pnl = compute_pnl_entries(
         ledger_rows,
         marks=marks,
         as_of=datetime.now(UTC),
         share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
     )
     pnl["client_id"] = client_id
     pnl["share_class"] = "USDT"
@@ -384,7 +386,7 @@ def get_client_instructions(
     """
     enforce_entitlement(auth, client_id)
     run_id = resolve_canonical_run(client_id)
-    rows = read_ledger_rows(client_id)
+    rows, _instrument_keys = read_ledger_rows(client_id)
     instructions: list[dict[str, object]] = []
     for row in rows:
         if str(row.event_type) != "trade":
@@ -483,7 +485,7 @@ def get_client_transfers(
     """
     enforce_entitlement(auth, client_id)
     run_id = resolve_canonical_run(client_id)
-    rows = read_ledger_rows(client_id)
+    rows, _instrument_keys = read_ledger_rows(client_id)
     transfers: list[dict[str, object]] = []
     for row in rows:
         evt = str(row.event_type).lower()
