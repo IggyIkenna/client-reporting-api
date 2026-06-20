@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from unified_api_contracts import (
     EventOrigin,
     EventType,
@@ -264,3 +265,129 @@ class TestPopulatedLedger:
         assert set(by_sc) == {"USDT"}
         assert by_sc["USDT"]["net_qty"] == "5"
         assert by_sc["USDT"]["unrealized_pnl"] == "35"
+
+
+# ---------------------------------------------------------------------------
+# read_ledger_rows — JSONL round-trip from the canonical client ledger_root
+# ---------------------------------------------------------------------------
+
+
+class TestReadLedgerRowsJsonl:
+    """The monitoring chain: the engine writes JSONL via UTL ``write_run_ledger`` to the
+    canonical ``client_ledger_root``; ``read_ledger_rows`` reads the SAME prefix back as
+    ``LedgerRow``s (stripping the recon-only keys ``LedgerRow`` forbids)."""
+
+    def test_round_trip_from_client_ledger_root(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unified_api_contracts.internal import FillModel, TradeFillRecord, make_trade_key
+        from unified_trading_library.ledger import client_ledger_root, write_run_ledger  # noqa: qg-deep-import
+
+        import client_reporting_api.core.ledger_views as lv
+
+        monkeypatch.setenv("GCP_PROJECT_ID", "test-proj")
+
+        # An in-memory fake GCS the writer writes to + the reader reads from.
+        store: dict[str, str] = {}
+
+        class _Blob:
+            def __init__(self, key: str) -> None:
+                self._key = key
+
+            def upload_from_string(self, data: str, content_type: str = "") -> None:
+                store[self._key] = data
+
+        class _WBucket:
+            def blob(self, gcs_path: str) -> _Blob:
+                return _Blob(gcs_path)
+
+        class _WClient:
+            def bucket(self, name: str) -> _WBucket:
+                return _WBucket()
+
+        ik = "hyperliquid:PERPETUAL:BTC-PERP"
+        ts = datetime(2026, 5, 1, 10, 0, 0, tzinfo=UTC)
+        fill = TradeFillRecord(
+            trade_key=make_trade_key(ik, "i1", ts),
+            instrument_key=ik,
+            strategy_instruction_id="i1",
+            tick_timestamp=ts,
+            venue="hyperliquid",
+            side="LONG",
+            qty=Decimal("1.0"),
+            fill_price=Decimal("60000"),
+            fees_in_quote=Decimal("6"),
+            fill_model=FillModel.BENCHMARK,
+        )
+        root = client_ledger_root("client-A", "run-2026-05-01", cloud="gcp")
+        write_run_ledger(
+            [fill],
+            ledger_root=root,
+            run_id="run-2026-05-01",
+            account_id="acct-1",
+            client_id="client-A",
+            asset_group="cefi",
+            quote_currency="USDT",
+            storage_client=_WClient(),
+        )
+
+        # Reader uses get_storage_client() — patch it to read the same fake store.
+        class _RStorage:
+            def list_blobs(self, bucket: str, prefix: str = "") -> list[object]:
+                return [type("B", (), {"name": k})() for k in sorted(store) if k.startswith(prefix)]
+
+            def download_bytes(self, bucket: str, path: str) -> bytes:
+                return store[path].encode("utf-8")
+
+        monkeypatch.setattr(lv, "get_storage_client", lambda: _RStorage())  # type: ignore[attr-defined]
+
+        rows = lv.read_ledger_rows("client-A")
+        assert len(rows) == 1
+        assert rows[0].event_type == EventType.TRADE
+        assert rows[0].trade_id == fill.trade_key
+        assert rows[0].delta == Decimal("1.0")  # LONG → positive
+        assert rows[0].price == Decimal("60000")
+
+
+# ---------------------------------------------------------------------------
+# attribution_breakdown — per-venue / per-instrument / per-factor / per-layer (P2.5.1)
+# ---------------------------------------------------------------------------
+
+
+class TestAttributionBreakdown:
+    def test_groups_by_venue_instrument_factor_layer(self) -> None:
+        from client_reporting_api.core.ledger_views import attribution_breakdown
+
+        rows = [
+            {
+                "venue": "hyperliquid",
+                "instrument_id": "BTC-PERP",
+                "factor": "CARRY",
+                "layer": "STRATEGY",
+                "amount": "300",
+            },
+            {
+                "venue": "hyperliquid",
+                "instrument_id": "BTC-PERP",
+                "factor": "SLIPPAGE",
+                "layer": "EXECUTION",
+                "amount": "-50",
+            },
+            {"venue": "binance", "instrument_id": "ETH-PERP", "factor": "CARRY", "layer": "STRATEGY", "amount": "120"},
+        ]
+        out = attribution_breakdown(rows)
+        by_venue = {r["venue"]: r["amount"] for r in out["by_venue"]}
+        assert by_venue["hyperliquid"] == "250"
+        assert by_venue["binance"] == "120"
+        by_factor = {r["factor"]: r["amount"] for r in out["by_factor"]}
+        assert by_factor["CARRY"] == "420"
+        assert by_factor["SLIPPAGE"] == "-50"
+        by_layer = {r["layer"]: r["amount"] for r in out["by_layer"]}
+        assert by_layer["STRATEGY"] == "420"
+        assert by_layer["EXECUTION"] == "-50"
+        assert out["total_amount"] == "370"
+
+    def test_empty_is_honest_zero(self) -> None:
+        from client_reporting_api.core.ledger_views import attribution_breakdown
+
+        out = attribution_breakdown([])
+        assert out["by_venue"] == []
+        assert out["total_amount"] == "0"

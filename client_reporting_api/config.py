@@ -15,6 +15,11 @@ class ClientReportingApiConfig(UnifiedCloudConfig):
     reports_bucket: str = ""
     client_data_bucket: str = ""
 
+    # Base URL of alerting-service for the daily ledger digest (P6.1 / P7.1-C).
+    # Empty → the digest is built + logged but NOT POSTed (honest no-op, never
+    # a silent failure). Read via the typed config, never raw os.environ.
+    alerting_service_url: str = Field(default="", alias="ALERTING_SERVICE_URL")
+
     # Cloud Run / Cloud Run Jobs runtime indicators (populated by the
     # runtime, read here instead of via raw os.environ). Empty when not
     # running under Cloud Run.
