@@ -373,8 +373,17 @@ class TestAttributionBreakdown:
                 "layer": "EXECUTION",
                 "amount": "-50",
             },
-            {"venue": "binance", "instrument_id": "ETH-PERP", "factor": "CARRY", "layer": "STRATEGY", "amount": "120"},
+            {
+                "venue": "binance",
+                "instrument_id": "ETH-PERP",
+                "factor": "CARRY",
+                "layer": "STRATEGY",
+                "amount": "120",
+                "strategy_id": "arbitrage_price_dispersion",
+            },
         ]
+        rows[0]["strategy_id"] = "carry_staked_basis"
+        rows[1]["strategy_id"] = "carry_staked_basis"
         out = attribution_breakdown(rows)
         by_venue = {r["venue"]: r["amount"] for r in out["by_venue"]}
         assert by_venue["hyperliquid"] == "250"
@@ -386,12 +395,22 @@ class TestAttributionBreakdown:
         assert by_layer["STRATEGY"] == "420"
         assert by_layer["EXECUTION"] == "-50"
         assert out["total_amount"] == "370"
+        # per-strategy top-line + nested per-strategy factor waterfall (multi-dim).
+        per_strat = {r["strategy_id"]: r["amount"] for r in out["per_strategy_total"]}
+        assert per_strat["carry_staked_basis"] == "250"  # 300 - 50
+        assert per_strat["arbitrage_price_dispersion"] == "120"
+        by_strategy = {r["strategy_id"]: r for r in out["by_strategy"]}
+        carry_factors = {f["factor"]: f["amount"] for f in by_strategy["carry_staked_basis"]["by_factor"]}
+        assert carry_factors["CARRY"] == "300"
+        assert carry_factors["SLIPPAGE"] == "-50"
 
     def test_empty_is_honest_zero(self) -> None:
         from client_reporting_api.core.ledger_views import attribution_breakdown
 
         out = attribution_breakdown([])
         assert out["by_venue"] == []
+        assert out["by_strategy"] == []
+        assert out["per_strategy_total"] == []
         assert out["total_amount"] == "0"
 
 

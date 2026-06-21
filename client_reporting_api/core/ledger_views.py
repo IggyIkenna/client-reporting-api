@@ -68,6 +68,16 @@ _LEDGER_TYPE_INSTRUCTION = "ledger_type=instruction"
 #: own mark snapshots — never a foreign run's, never re-derived.
 _LEDGER_TYPE_PRICING = "ledger_type=pricing"
 
+#: The TransferLedger / TreasuryLedger partition. A run's money-movement legs
+#: (DEPOSIT / TRANSFER / STAKE / COLLATERAL_POSTED / WITHDRAW / BRIDGE / …) land
+#: under ``…/run_id=R/ledger_type=transfer/{run_id}.jsonl`` as ``LedgerRow``s with
+#: ``event_origin=INSTRUCTION`` + a money-movement ``event_type`` + a signed
+#: ``delta`` — written by the UTL ``write_run_transfer_ledger`` writer in the SAME
+#: JSONL shape as the instruction tape (so the same parse machinery reads it). The
+#: ``/transfers`` reader lists this prefix for the SAME canonical run the other
+#: views resolve, so money movements belong to the exact run on the dashboard.
+_LEDGER_TYPE_TRANSFER = "ledger_type=transfer"
+
 #: ``LedgerRow.event_type`` value that discriminates a PricingLedger mark row.
 _MARK_UPDATE_EVENT_TYPE = "mark_update"
 
@@ -403,6 +413,62 @@ def read_marks(
         logger.warning("read_marks: pricing-ledger read failed for client=%s run=%s: %s", client_id, run_id, exc)
         return {}
     return marks
+
+
+def read_transfer_rows(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> tuple[list[LedgerRow], dict[str, str]]:
+    """Read THE canonical run's TransferLedger money-movement rows from GCS.
+
+    Lists the run's ``ledger_type=transfer`` JSONL objects under the SAME
+    client-addressable ``client_ledger_root`` the instruction + pricing tapes live
+    under (so the transfers belong to the EXACT run the dashboard's other panels
+    resolve) and parses each into a UAC :class:`LedgerRow`. The transfer JSONL is
+    the SAME shape the UTL ``write_run_transfer_ledger`` / ``transfer_ledger_jsonl``
+    writer emits (a ``LedgerRow`` dump + a stamped per-leg ``instrument_key``), so
+    the same ``_parse_instruction_jsonl`` machinery reads it — no format drift.
+
+    Every row in this ledger is by construction a money-movement leg
+    (``event_origin=INSTRUCTION`` + a money-movement ``event_type`` — DEPOSIT /
+    TRANSFER / STAKE / COLLATERAL_POSTED / WITHDRAW / BRIDGE / SWAP / …) for the
+    SINGLE owning ``client_id`` (funds never cross clients), so the caller surfaces
+    ALL of them — it does NOT re-filter by a hardcoded event-type subset (that was
+    the bug: the InstructionLedger scan only matched TRANSFER/DEPOSIT/WITHDRAWAL/
+    BRIDGE and missed the STAKE / COLLATERAL_POSTED legs the producer actually
+    wrote).
+
+    Returns ``([], {})`` when the run has no TransferLedger object yet — the HONEST
+    empty path (the run genuinely modelled no money movements, or a transfer ledger
+    has not been written), distinguished from "no run" by the caller.
+    """
+    if not run_id:
+        return [], {}
+    rows: list[LedgerRow] = []
+    instrument_key_by_row_id: dict[str, str] = {}
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        bucket, root_prefix = _split_gs(ledger_root)
+        transfer_prefix = f"{root_prefix}{_LEDGER_TYPE_TRANSFER}/"
+        storage = get_storage_client()
+        for blob_meta in sorted(
+            storage.list_blobs(bucket, prefix=transfer_prefix),
+            key=lambda b: str(getattr(b, "name", "")),
+        ):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX):
+                continue
+            if _BATCH_MARKER in path:
+                continue  # never read the batch-rerun copy's transfers into the paper view
+            raw = storage.download_bytes(bucket, path).decode("utf-8")
+            rows.extend(_parse_instruction_jsonl(raw, instrument_key_by_row_id))
+    except Exception as exc:
+        logger.warning(
+            "read_transfer_rows: transfer-ledger read failed for client=%s run=%s: %s", client_id, run_id, exc
+        )
+        return [], {}
+    return rows, instrument_key_by_row_id
 
 
 def read_canonical_positions(
@@ -768,17 +834,55 @@ def _attr_group(rows: Sequence[Mapping[str, object]], key: str) -> list[dict[str
     return [{key: k, "amount": str(v)} for k, v in buckets.items()]
 
 
+def _attr_group_per_strategy(
+    rows: Sequence[Mapping[str, object]],
+    key: str,
+) -> list[dict[str, object]]:
+    """Per-strategy nested GROUP-BY: one entry per ``strategy_id`` carrying its own
+    ``key`` rollup + per-strategy total.
+
+    The multi-dimensional waterfall the dashboard needs: for each canonical
+    ``strategy_id`` (e.g. ``carry_staked_basis`` vs ``arbitrage_price_dispersion``),
+    the per-``key`` (factor / venue / layer) sums of ``amount`` so the operator sees
+    "this strategy's P&L split by factor" — NOT one collapsed number across all
+    strategies. Deterministic first-seen order for both the strategy level and the
+    inner ``key`` level.
+    """
+    by_strategy: OrderedDict[str, OrderedDict[str, Decimal]] = OrderedDict()
+    for row in rows:
+        strat = str(row.get("strategy_id", "")) or "unknown"
+        inner_key = str(row.get(key, "")) or "unknown"
+        inner = by_strategy.setdefault(strat, OrderedDict())
+        inner[inner_key] = inner.get(inner_key, Decimal(0)) + _attr_amount(row)
+    return [
+        {
+            "strategy_id": strat,
+            "total_amount": str(sum(inner.values(), Decimal(0))),
+            f"by_{key}": [{key: k, "amount": str(v)} for k, v in inner.items()],
+        }
+        for strat, inner in by_strategy.items()
+    ]
+
+
 def attribution_breakdown(rows: Sequence[Mapping[str, object]]) -> dict[str, object]:
-    """Per-venue / per-instrument / per-factor / per-layer attribution rollups (P2.5.1).
+    """Per-venue / per-instrument / per-factor / per-layer / per-strategy attribution rollups (P2.5.1).
 
     Folds the raw ``PnLAttributionRow`` records (from
-    ``attribution_reader.read_attribution_rows`` — each carries ``venue`` /
-    ``instrument_id`` / ``factor`` / ``layer`` / ``amount``) into four GROUP-BY
-    sums, plus the grand total. This is the per-venue + per-instrument attribution
+    ``attribution_reader.read_attribution_rows`` — each carries ``strategy_id`` /
+    ``venue`` / ``instrument_id`` / ``factor`` / ``layer`` / ``amount``) into the
+    GROUP-BY sums, plus the grand total. This is the multi-dimensional attribution
     VIEW off ``PnLAttributionRow`` — the operator's "where did the P&L come from"
-    breakdown by venue, instrument, factor (CARRY / SLIPPAGE / …) and layer
-    (STRATEGY / EXECUTION). Empty ``rows`` → all-empty rollups + ``"0"`` total
-    (honest, never mock).
+    breakdown by venue, instrument, factor (CARRY / BASIS / FUNDING / FEES / …),
+    layer (STRATEGY / EXECUTION) AND per ``strategy_id`` — NOT one collapsed number.
+
+    ``by_venue`` ≠ ``by_layer`` once the run has real dims: CARRY/BASIS/FEES book at
+    the staking venue (LIDO / JITO), FUNDING at the perp venue (DERIBIT / DRIFT), so
+    the venue split and the layer split partition the same amount differently.
+
+    ``by_strategy`` carries each strategy's OWN factor split (nested) so the
+    dashboard renders a per-strategy waterfall, plus a flat ``per_strategy_total``
+    for the top-line per-strategy number. Empty ``rows`` → all-empty rollups +
+    ``"0"`` total (honest, never mock).
     """
     total = sum((_attr_amount(r) for r in rows), Decimal(0))
     return {
@@ -786,5 +890,7 @@ def attribution_breakdown(rows: Sequence[Mapping[str, object]]) -> dict[str, obj
         "by_instrument": _attr_group(rows, "instrument_id"),
         "by_factor": _attr_group(rows, "factor"),
         "by_layer": _attr_group(rows, "layer"),
+        "per_strategy_total": _attr_group(rows, "strategy_id"),
+        "by_strategy": _attr_group_per_strategy(rows, "factor"),
         "total_amount": str(total),
     }

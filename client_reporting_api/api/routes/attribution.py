@@ -33,12 +33,14 @@ from client_reporting_api.core.ledger_views import (
     read_ledger_rows,
     read_marks,
     read_run_window,
+    read_transfer_rows,
     resolve_canonical_run,
 )
 from client_reporting_api.core.portfolio_metrics import (
     backtest_surface,
     net_views,
     per_strategy_breakdown,
+    strategy_id_for_venue,
 )
 from client_reporting_api.core.recon_view import latest_recon_verdict
 
@@ -362,9 +364,6 @@ def get_client_attribution_breakdown(
 # empty/PENDING when no run exists — never mock.
 # ---------------------------------------------------------------------------
 
-_TRANSFER_EVENT_TYPES = frozenset({"transfer", "deposit", "withdrawal", "bridge"})
-
-
 def _side_from_delta(delta: Decimal, direction: object) -> str:
     """UI side ('long'/'short'/'flat') from the row direction or the signed delta."""
     if isinstance(direction, str) and direction:
@@ -480,64 +479,123 @@ def get_client_trades(
 def get_client_transfers(
     client_id: str,
     auth: AuthDep,
+    strategy_id: str | None = Query(None, description="Filter to one strategy_id (substring/exact match)"),
 ) -> dict[str, object]:
-    """Wallet transfers / money movements (TRANSFER / DEPOSIT / BRIDGE ledger rows).
+    """Wallet transfers / money movements from the canonical run's TransferLedger.
 
     Single-client scope (funds never cross clients). Reads the canonical run's
-    ledger rows and projects the non-trade money-movement events (TRANSFER /
-    DEPOSIT / WITHDRAWAL / BRIDGE). When the run carries NO money-movement rows
-    (the carry_staked_basis paper run is all TRADE legs — the capital moves are
-    modelled as trades into the staking/perp legs, not separate TRANSFER rows) the
-    response is a TYPED honest-empty (``status="NO_TRANSFER_ROWS"`` + a ``note``),
-    distinguishing "the run genuinely has no transfers" from "this panel is broken"
-    — never a silent bare ``0`` that reads as a bug.
+    DEDICATED ``ledger_type=transfer`` JSONL (:func:`read_transfer_rows`) — the
+    capital-movement tape the UTL ``write_run_transfer_ledger`` writer emits — and
+    projects EVERY money-movement leg (DEPOSIT / TRANSFER / STAKE /
+    COLLATERAL_POSTED / WITHDRAW / BRIDGE / SWAP / …). Every row in that ledger is
+    by construction a money movement, so there is NO hardcoded event-type filter
+    (the prior implementation scanned the InstructionLedger for only
+    TRANSFER/DEPOSIT/WITHDRAWAL/BRIDGE → it MISSED the STAKE / COLLATERAL_POSTED
+    legs the producer wrote → it always returned ``NO_TRANSFER_ROWS``).
+
+    Each transfer carries its ``strategy_id`` (mapped from the leg's venue via the
+    run manifest's ``@``-qualified ``strategy_ids``), so the panel is groupable /
+    filterable by strategy. ``?strategy_id=`` filters to one strategy (matches the
+    bare base id or the ``@``-qualified id, exact or as a substring of the slug).
+
+    Honest typed-empty: ``NO_RUN`` when the client has no run; ``NO_TRANSFER_ROWS``
+    when the run genuinely wrote no transfer ledger — never a silent bare ``0``.
     """
     enforce_entitlement(auth, client_id)
     run_id = resolve_canonical_run(client_id)
-    rows, _instrument_keys = read_ledger_rows(client_id)
-    transfers: list[dict[str, object]] = []
-    for row in rows:
-        evt = str(row.event_type).lower()
-        if evt not in _TRANSFER_EVENT_TYPES:
-            continue
-        delta = row.delta
-        venue = row.venue
-        price = row.price if row.price is not None else Decimal("0")
-        transfers.append(
-            {
-                "transfer_id": row.event_id,
-                "event_type": evt.upper(),
-                "from_venue": "" if delta >= 0 else venue,
-                "to_venue": venue if delta >= 0 else "",
-                "asset_symbol": row.asset_symbol,
-                "share_class": row.asset_canonical_id,
-                "amount": str(delta),
-                "notional_usd": str(abs(delta) * price),
-                "timestamp": row.timestamp_utc.isoformat(),
-                "client_id": client_id,
-            }
-        )
+    rows: list[dict[str, object]] = []
+    strategy_ids: tuple[str, ...] = ()
+    if run_id is not None:
+        ledger_rows, _instrument_keys = read_transfer_rows(client_id, run_id)
+        _ws, _we, strategy_ids, _fm = read_run_window(client_id, run_id)
+        rows = _project_transfer_rows(client_id, ledger_rows, strategy_ids)
+
+    requested = strategy_id.strip() if strategy_id else None
+    transfers = (
+        [t for t in rows if _matches_strategy(str(t.get("strategy_id", "")), requested)] if requested else rows
+    )
+
+    # Per-strategy grouped rollup (counts + net amount per strategy_id).
+    by_strategy: dict[str, dict[str, object]] = {}
+    for transfer in transfers:
+        sid = str(transfer.get("strategy_id", "")) or "unknown"
+        agg = by_strategy.setdefault(sid, {"strategy_id": sid, "count": 0, "net_amount": Decimal("0")})
+        agg["count"] = cast("int", agg["count"]) + 1
+        with contextlib.suppress(Exception):
+            agg["net_amount"] = cast("Decimal", agg["net_amount"]) + Decimal(str(transfer.get("amount", "0")))
+    by_strategy_out = [
+        {"strategy_id": v["strategy_id"], "count": v["count"], "net_amount": str(v["net_amount"])}
+        for v in by_strategy.values()
+    ]
+
     if run_id is None:
-        status = "NO_RUN"
-        note = "No paper run exists for this client yet."
+        status, note = "NO_RUN", "No paper run exists for this client yet."
     elif not transfers:
         status = "NO_TRANSFER_ROWS"
         note = (
-            "This run's ledger carries no money-movement (TRANSFER/DEPOSIT/WITHDRAWAL/BRIDGE) rows — "
-            "the carry_staked_basis run models capital movement as TRADE legs into the staking/perp "
-            "positions, not as separate transfer events. See /positions and /trades for the real flow."
+            "This run's TransferLedger (ledger_type=transfer) carries no money-movement rows"
+            + (f" for strategy_id={requested}." if requested else " yet.")
         )
     else:
-        status = "OK"
-        note = ""
+        status, note = "OK", ""
     return {
         "client_id": client_id,
         "run_id": run_id,
         "transfers": transfers,
+        "by_strategy": by_strategy_out,
         "total": len(transfers),
         "status": status,
         "note": note,
     }
+
+
+def _matches_strategy(row_strategy: str, requested: str) -> bool:
+    """``True`` if ``row_strategy`` matches the ``requested`` filter (exact or substring, case-insensitive)."""
+    row_lc = row_strategy.lower()
+    req_lc = requested.lower()
+    return req_lc == row_lc or req_lc in row_lc
+
+
+def _project_transfer_rows(
+    client_id: str,
+    ledger_rows: list[object],
+    strategy_ids: tuple[str, ...],
+) -> list[dict[str, object]]:
+    """Project canonical TransferLedger ``LedgerRow``s to the dashboard transfer shape.
+
+    Maps each leg's ``venue`` → its ``@``-qualified ``strategy_id`` via the run
+    manifest's ``strategy_ids`` (the same mapping the per-strategy P&L view uses),
+    so the panel groups/filters by strategy. The action is the row's money-movement
+    ``event_type`` (DEPOSIT / TRANSFER / STAKE / COLLATERAL_POSTED / …) upper-cased;
+    ``direction`` is derived from the signed ``delta`` (+ inbound, - outbound).
+    """
+    out: list[dict[str, object]] = []
+    for row in ledger_rows:
+        delta: Decimal = row.delta  # pyright: ignore[reportAttributeAccessIssue]
+        venue = str(row.venue)  # pyright: ignore[reportAttributeAccessIssue]
+        price = row.price if row.price is not None else Decimal("0")  # pyright: ignore[reportAttributeAccessIssue]
+        sid = strategy_id_for_venue(venue, strategy_ids) if strategy_ids else "unknown"
+        out.append(
+            {
+                "transfer_id": row.event_id,  # pyright: ignore[reportAttributeAccessIssue]
+                "action": str(row.event_type).upper(),  # pyright: ignore[reportAttributeAccessIssue]
+                "event_type": str(row.event_type).upper(),  # pyright: ignore[reportAttributeAccessIssue]
+                "strategy_id": sid,
+                "venue": venue,
+                "from_venue": "" if delta >= 0 else venue,
+                "to_venue": venue if delta >= 0 else "",
+                "asset": row.asset_symbol,  # pyright: ignore[reportAttributeAccessIssue]
+                "asset_symbol": row.asset_symbol,  # pyright: ignore[reportAttributeAccessIssue]
+                "share_class": row.asset_canonical_id,  # pyright: ignore[reportAttributeAccessIssue]
+                "direction": "in" if delta >= 0 else "out",
+                "amount": str(delta),
+                "notional_usd": str(abs(delta) * price),
+                "trade_id": row.trade_id,  # pyright: ignore[reportAttributeAccessIssue]
+                "timestamp": row.timestamp_utc.isoformat(),  # pyright: ignore[reportAttributeAccessIssue]
+                "client_id": client_id,
+            }
+        )
+    return out
 
 
 @router.get("/reconciliation/latest")

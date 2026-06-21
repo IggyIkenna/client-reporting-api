@@ -593,10 +593,10 @@ class TestLivePaths:
     def test_transfers_typed_honest_empty_when_no_transfer_rows(self, _client_a_auth: None) -> None:
         from unittest.mock import patch
 
-        # Run exists with only TRADE rows → typed NO_TRANSFER_ROWS, not a bare 0.
-        rows = [_pnl_trade_row(venue="LIDO", asset="ETH", side="SUPPLY", qty="33", price="1")]
+        # Run exists but its TransferLedger is empty → typed NO_TRANSFER_ROWS, not a bare 0.
         with (
-            patch("client_reporting_api.api.routes.attribution.read_ledger_rows", return_value=(rows, {})),
+            patch("client_reporting_api.api.routes.attribution.read_transfer_rows", return_value=([], {})),
+            patch("client_reporting_api.api.routes.attribution.read_run_window", return_value=(None, None, (), "")),
             patch(
                 "client_reporting_api.api.routes.attribution.resolve_canonical_run",
                 return_value="paper-20260620004135-bbbb",
@@ -609,6 +609,109 @@ class TestLivePaths:
         assert payload["transfers"] == []
         assert payload["status"] == "NO_TRANSFER_ROWS"
         assert payload["note"]  # explicit human-readable reason, never silent
+
+    def test_transfers_real_rows_from_transfer_ledger(self, _client_a_auth: None) -> None:
+        from unittest.mock import patch
+
+        from unified_trading_library.ledger import transfer_ledger_row  # noqa: qg-deep-import
+
+        # Two strategies x money-movement legs incl. STAKE + COLLATERAL_POSTED
+        # (the actions the old InstructionLedger-subset scan dropped).
+        rows = [
+            transfer_ledger_row(
+                event_type=EventType.DEPOSIT,
+                account_id="acct",
+                client_id="client-A",
+                asset_group="defi",
+                venue="LIDO",
+                asset_symbol="ETH",
+                asset_canonical_id="ETH",
+                asset_class=LedgerAssetClass.SPOT_TOKEN,
+                quote_currency="USDC",
+                delta=Decimal("100"),
+                price=Decimal("3000"),
+                timestamp_utc=_PNL_TS,
+                event_id="dep-1",
+                row_id="dep-1",
+            ),
+            transfer_ledger_row(
+                event_type=EventType.STAKE,
+                account_id="acct",
+                client_id="client-A",
+                asset_group="defi",
+                venue="LIDO",
+                asset_symbol="ETH",
+                asset_canonical_id="ETH",
+                asset_class=LedgerAssetClass.SPOT_TOKEN,
+                quote_currency="USDC",
+                delta=Decimal("-100"),
+                price=Decimal("3000"),
+                timestamp_utc=_PNL_TS,
+                event_id="stk-1",
+                row_id="stk-1",
+            ),
+            transfer_ledger_row(
+                event_type=EventType.COLLATERAL_POSTED,
+                account_id="acct",
+                client_id="client-A",
+                asset_group="defi",
+                venue="DRIFT",
+                asset_symbol="USDC",
+                asset_canonical_id="USDC",
+                asset_class=LedgerAssetClass.SPOT_TOKEN,
+                quote_currency="USDC",
+                delta=Decimal("50"),
+                price=Decimal("1"),
+                timestamp_utc=_PNL_TS,
+                event_id="col-1",
+                row_id="col-1",
+            ),
+        ]
+        strategy_ids = (
+            "carry_staked_basis@lido-uniswapv3-deribit",
+            "arbitrage_price_dispersion@jito-jupiter-drift",
+        )
+        with (
+            patch("client_reporting_api.api.routes.attribution.read_transfer_rows", return_value=(rows, {})),
+            patch(
+                "client_reporting_api.api.routes.attribution.read_run_window",
+                return_value=(None, None, strategy_ids, ""),
+            ),
+            patch(
+                "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                return_value="paper-20260620004135-bbbb",
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/v1/clients/client-A/transfers")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "OK"
+        assert payload["total"] == 3
+        actions = {t["action"] for t in payload["transfers"]}
+        assert {"DEPOSIT", "STAKE", "COLLATERAL_POSTED"} <= actions
+        # venue→strategy mapping wired (both strategies appear).
+        strats = {t["strategy_id"] for t in payload["transfers"]}
+        assert "carry_staked_basis@lido-uniswapv3-deribit" in strats
+        assert "arbitrage_price_dispersion@jito-jupiter-drift" in strats
+        # grouped + filterable by strategy_id.
+        assert any(g["strategy_id"].startswith("carry_staked_basis") for g in payload["by_strategy"])
+
+        with (
+            patch("client_reporting_api.api.routes.attribution.read_transfer_rows", return_value=(rows, {})),
+            patch(
+                "client_reporting_api.api.routes.attribution.read_run_window",
+                return_value=(None, None, strategy_ids, ""),
+            ),
+            patch(
+                "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                return_value="paper-20260620004135-bbbb",
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            filtered = client.get("/api/v1/clients/client-A/transfers?strategy_id=carry_staked_basis").json()
+        assert filtered["total"] == 2  # only the LIDO legs
+        assert all(t["strategy_id"].startswith("carry_staked_basis") for t in filtered["transfers"])
 
     def test_attribution_live_path_calls_reader(self, _client_a_auth: None) -> None:
         from unittest.mock import patch
