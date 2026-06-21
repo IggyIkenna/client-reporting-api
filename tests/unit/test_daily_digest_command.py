@@ -73,7 +73,7 @@ def test_empty_ledger_is_honest_noop() -> None:
     with (
         patch(
             "client_reporting_api.cli.daily_digest_command.read_ledger_rows",
-            return_value=[],
+            return_value=([], {}),
         ),
         patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
     ):
@@ -86,7 +86,7 @@ def test_populated_ledger_builds_and_posts() -> None:
     with (
         patch(
             "client_reporting_api.cli.daily_digest_command.read_ledger_rows",
-            return_value=[_trade_row()],
+            return_value=([_trade_row()], {"t1": "hyperliquid:PERPETUAL:BTC-PERP"}),
         ),
         patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
     ):
@@ -102,7 +102,7 @@ def test_dry_run_does_not_post() -> None:
     with (
         patch(
             "client_reporting_api.cli.daily_digest_command.read_ledger_rows",
-            return_value=[_trade_row()],
+            return_value=([_trade_row()], {"t1": "hyperliquid:PERPETUAL:BTC-PERP"}),
         ),
         patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
     ):
