@@ -815,3 +815,116 @@ class TestReadMarks:
         )
         # 2 ETH * (3100 - 3000) = 200 unrealized, marks-driven (was 0 with marks={}).
         assert out["unrealized_pnl_total"] == "200"
+
+
+# ---------------------------------------------------------------------------
+# P11.9 — per-strategy GROUP BY + filter across the ledger views
+# ---------------------------------------------------------------------------
+
+_STRAT_LIDO = "CARRY_STAKED_BASIS@lido-uniswapv3-deribit-f100-usdc-1h-usdc-v2-prod"
+_STRAT_JITO = "CARRY_STAKED_BASIS@jito-jupiter-drift-f100-usdc-1h-usdc-v2-prod"
+
+
+def _strat_trade_row(
+    *,
+    row_id: str,
+    strategy_id: str,
+    venue: str,
+    asset_canonical_id: str,
+    asset_symbol: str,
+    side_delta: Decimal,
+    price: Decimal,
+) -> LedgerRow:
+    return LedgerRow(
+        event_id=f"evt-{row_id}",
+        row_id=row_id,
+        event_origin=EventOrigin.INSTRUCTION,
+        event_type=EventType.TRADE,
+        strategy_id=strategy_id,
+        timestamp_utc=datetime(2026, 5, 1, 10, 0, 0, tzinfo=UTC),
+        asset_group="defi",
+        venue=venue,
+        account_id="acct-1",
+        client_id="client-A",
+        asset_symbol=asset_symbol,
+        asset_canonical_id=asset_canonical_id,
+        asset_class=LedgerAssetClass.PERP,
+        delta=side_delta,
+        price=price,
+        quote_currency="USDC",
+        fees_in_quote=Decimal("0"),
+    )
+
+
+def _two_strategy_tape() -> tuple[list[LedgerRow], dict[str, str]]:
+    # Two fully-distinct legs → distinct instrument_keys → no marks/grouping collision.
+    rows = [
+        _strat_trade_row(
+            row_id="lido-1",
+            strategy_id=_STRAT_LIDO,
+            venue="UNISWAP_V3",
+            asset_canonical_id="ETH",
+            asset_symbol="ETH",
+            side_delta=Decimal("2"),
+            price=Decimal("3000"),
+        ),
+        _strat_trade_row(
+            row_id="jito-1",
+            strategy_id=_STRAT_JITO,
+            venue="DRIFT",
+            asset_canonical_id="SOL",
+            asset_symbol="SOL",
+            side_delta=Decimal("10"),
+            price=Decimal("150"),
+        ),
+    ]
+    keys = {"lido-1": "UNISWAP_V3:PERPETUAL:ETH", "jito-1": "DRIFT:PERPETUAL:SOL"}
+    return rows, keys
+
+
+class TestPerStrategyViews:
+    def test_views_carry_by_strategy_split(self) -> None:
+        rows, keys = _two_strategy_tape()
+        marks = {"UNISWAP_V3:PERPETUAL:ETH": Decimal("3100"), "DRIFT:PERPETUAL:SOL": Decimal("160")}
+        views = compute_ledger_views(rows, marks=marks, as_of=_AS_OF, share_class_of={}, instrument_key_by_row_id=keys)
+        by_strat = {s["strategy_id"]: s for s in views["balances"]["by_strategy"]}  # type: ignore[index,union-attr]
+        assert set(by_strat) == {_STRAT_LIDO, _STRAT_JITO}
+        # lido leg: 2 ETH * (3100-3000) = 200; jito leg: 10 SOL * (160-150) = 100.
+        assert by_strat[_STRAT_LIDO]["unrealized_pnl"] == "200"
+        assert by_strat[_STRAT_JITO]["unrealized_pnl"] == "100"
+
+    def test_per_strategy_unrealized_sums_to_grand_total(self) -> None:
+        rows, keys = _two_strategy_tape()
+        marks = {"UNISWAP_V3:PERPETUAL:ETH": Decimal("3100"), "DRIFT:PERPETUAL:SOL": Decimal("160")}
+        views = compute_ledger_views(rows, marks=marks, as_of=_AS_OF, share_class_of={}, instrument_key_by_row_id=keys)
+        per_strat = sum(
+            Decimal(s["unrealized_pnl"])
+            for s in views["balances"]["by_strategy"]  # type: ignore[index,union-attr,arg-type]
+        )
+        assert str(per_strat) == views["totals"]["unrealized_pnl"]  # type: ignore[index]
+
+    def test_strategy_id_filter_slices_one_strategy(self) -> None:
+        rows, keys = _two_strategy_tape()
+        marks = {"UNISWAP_V3:PERPETUAL:ETH": Decimal("3100"), "DRIFT:PERPETUAL:SOL": Decimal("160")}
+        views = compute_ledger_views(
+            rows,
+            marks=marks,
+            as_of=_AS_OF,
+            share_class_of={},
+            instrument_key_by_row_id=keys,
+            strategy_id=_STRAT_LIDO,
+        )
+        # Only the lido leg survives the filter → one position, its unrealized only.
+        assert len(views["positions"]) == 1  # type: ignore[arg-type]
+        assert views["totals"]["unrealized_pnl"] == "200"  # type: ignore[index]
+
+    def test_pnl_entries_by_strategy(self) -> None:
+        from client_reporting_api.core.ledger_views import compute_pnl_entries
+
+        rows, keys = _two_strategy_tape()
+        marks = {"UNISWAP_V3:PERPETUAL:ETH": Decimal("3100"), "DRIFT:PERPETUAL:SOL": Decimal("160")}
+        out = compute_pnl_entries(rows, marks=marks, as_of=_AS_OF, share_class_of={}, instrument_key_by_row_id=keys)
+        by_strat = {s["strategy_id"]: s for s in out["by_strategy"]}  # type: ignore[index,union-attr]
+        assert set(by_strat) == {_STRAT_LIDO, _STRAT_JITO}
+        assert by_strat[_STRAT_LIDO]["total_pnl"] == "200"
+        assert by_strat[_STRAT_JITO]["total_pnl"] == "100"

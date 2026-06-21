@@ -180,7 +180,7 @@ def _attribution_from_rows(
     return {"client_id": client_id, "rows": out}
 
 
-def _ledger_views(client_id: str, as_of_date: date | None) -> dict[str, object]:
+def _ledger_views(client_id: str, as_of_date: date | None, strategy_id: str | None = None) -> dict[str, object]:
     """Compute the ledger-derived positions / balances / PnL totals for a client.
 
     Resolves THE canonical paper run, reads its InstructionLedger ``LedgerRow``
@@ -203,9 +203,11 @@ def _ledger_views(client_id: str, as_of_date: date | None) -> dict[str, object]:
         as_of=datetime.now(UTC),
         share_class_of=share_class_of,
         instrument_key_by_row_id=instrument_key_by_row_id,
+        strategy_id=strategy_id,
     )
     views["run_id"] = run_id
     views["marks_status"] = "marked" if marks else "no_marks"
+    views["strategy_id_filter"] = strategy_id
     return views
 
 
@@ -235,6 +237,7 @@ def get_client_pnl(
     auth: AuthDep,
     date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),  # noqa: B008
     date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
+    strategy_id: str | None = Query(None, description="Filter to one strategy_id (exact/substring)"),
 ) -> dict[str, object]:
     """Realised + unrealised P&L for a client, DERIVED FROM THE LEDGER (fix 2026-06-20).
 
@@ -271,10 +274,12 @@ def get_client_pnl(
         as_of=datetime.now(UTC),
         share_class_of={},
         instrument_key_by_row_id=instrument_key_by_row_id,
+        strategy_id=strategy_id,
     )
     pnl["client_id"] = client_id
     pnl["share_class"] = "USDT"
     pnl["run_id"] = run_id
+    pnl["strategy_id_filter"] = strategy_id
     pnl["marks_status"] = "marked" if marks else "no_marks"
     if not marks:
         # HONEST absence: with no PricingLedger marks the position ledger marks
@@ -297,6 +302,7 @@ def get_client_positions(
     client_id: str,
     auth: AuthDep,
     as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
+    strategy_id: str | None = Query(None, description="Filter to one strategy_id (exact/substring)"),
 ) -> dict[str, object]:
     """Current open positions for a client — REAL, ledger-derived (P3.4 + P5.1).
 
@@ -308,7 +314,7 @@ def get_client_positions(
     empty/zero response (positions ``[]``, totals ``"0"``), never mock data.
     """
     enforce_entitlement(auth, client_id)
-    views = _ledger_views(client_id, as_of)
+    views = _ledger_views(client_id, as_of, strategy_id=strategy_id)
     views["client_id"] = client_id
     return views
 
@@ -617,7 +623,10 @@ def _project_transfer_rows(
         delta: Decimal = row.delta  # pyright: ignore[reportAttributeAccessIssue]
         venue = str(row.venue)  # pyright: ignore[reportAttributeAccessIssue]
         price = row.price if row.price is not None else Decimal("0")  # pyright: ignore[reportAttributeAccessIssue]
-        sid = strategy_id_for_venue(venue, strategy_ids) if strategy_ids else "unknown"
+        # P11.9: the row's OWN stamped @-qualified strategy_id is authoritative; the
+        # venue→strategy mapping is the legacy fallback for pre-P11.9 transfer rows.
+        row_sid = row.strategy_id  # pyright: ignore[reportAttributeAccessIssue]
+        sid = row_sid or (strategy_id_for_venue(venue, strategy_ids) if strategy_ids else "unknown")
         out.append(
             {
                 "transfer_id": row.event_id,  # pyright: ignore[reportAttributeAccessIssue]
