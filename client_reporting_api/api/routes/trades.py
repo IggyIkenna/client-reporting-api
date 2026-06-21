@@ -69,6 +69,7 @@ def _ledger_run_trades(client_id: str) -> tuple[str | None, list[dict[str, str |
         trades.append(
             {
                 "trade_id": f.trade_key,
+                "strategy_id": f.strategy_id,
                 "venue": f.venue,
                 "symbol": f.instrument_key,
                 "side": _trade_side(f.side),
@@ -94,6 +95,7 @@ def get_trade_history(
     client_id: str = Query(..., description="Client identifier"),
     symbol: str | None = Query(None, description="Filter by symbol"),
     side: str | None = Query(None, description="Filter by side (BUY or SELL)"),
+    strategy_id: str | None = Query(None, description="Filter to one strategy_id (exact/substring)"),
     limit: int = Query(50, ge=1, le=500, description="Number of trades"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> dict[str, object]:
@@ -145,6 +147,18 @@ def get_trade_history(
     if side:
         wanted = side.strip().lower()
         trades = [t for t in trades if str(t["side"]).lower() == wanted]
+    if strategy_id:
+        req = strategy_id.strip().lower()
+        trades = [t for t in trades if req in str(t.get("strategy_id") or "").lower()]
+
+    # Per-strategy rollup (P11.9) over the full filtered tape, BEFORE pagination so
+    # the split reflects all matching trades, not just the current page.
+    by_strategy: dict[str, dict[str, object]] = {}
+    for t in trades:
+        sid = str(t.get("strategy_id") or "") or "unattributed"
+        agg = by_strategy.setdefault(sid, {"strategy_id": sid, "count": 0, "volume_usd": 0.0})
+        agg["count"] = int(agg["count"]) + 1  # type: ignore[call-overload]
+        agg["volume_usd"] = round(float(agg["volume_usd"]) + _num(t.get("notional_usd")), 2)  # type: ignore[arg-type]
 
     total = len(trades)
     trades = trades[offset : offset + limit]
@@ -161,6 +175,8 @@ def get_trade_history(
         "limit": limit,
         "source": source,
         "run_id": run_id,
+        "strategy_id_filter": strategy_id,
+        "by_strategy": list(by_strategy.values()),
         "aggregates": {
             "total_trades": total,
             "total_volume_usd": round(total_volume, 2),

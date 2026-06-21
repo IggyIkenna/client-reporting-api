@@ -46,6 +46,12 @@ from unified_trading_library.ledger.materialize import (  # noqa: qg-deep-import
     materialize_position_ledger,  # not re-exported at UTL top level
 )
 
+from client_reporting_api.core.ledger_strategy import (
+    attribution_breakdown,
+    by_strategy_pnl,
+    filter_rows_by_strategy,
+)
+
 logger = logging.getLogger(__name__)
 
 #: The engine writes a run's InstructionLedger tape as newline-delimited JSON
@@ -674,6 +680,7 @@ def compute_pnl_entries(
     as_of: datetime,
     share_class_of: Mapping[str, str],
     instrument_key_by_row_id: Mapping[str, str] | None = None,
+    strategy_id: str | None = None,
 ) -> dict[str, object]:
     """Ledger-derived P&L breakdown — one entry per materialised position.
 
@@ -685,11 +692,18 @@ def compute_pnl_entries(
     for a fresh paper run → empty ``entries``); P&L now derives from the SAME
     position ledger the ``/positions`` view uses, so the two are coherent.
 
+    ``strategy_id`` (optional) filters the tape to one strategy BEFORE the fold
+    (exact-or-substring, case-insensitive) so the breakdown is one strategy's slice;
+    the ``by_strategy`` block always carries the per-strategy split of the
+    (un)filtered tape (P11.9 — every ledger row is strategy-keyed), summing to the
+    grand total with no double-count.
+
     All-opening runs (e.g. carry_staked_basis week-1: only BUY/SUPPLY legs, no
     closes) legitimately have ``realized_pnl=0`` per leg — that is CORRECT
     avg-cost accounting, not a bug; ``unrealized`` carries the mark-to-market once
     marks are supplied. Honest zero on an empty ledger.
     """
+    rows = filter_rows_by_strategy(rows, strategy_id)
     trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
     passive_rows = [r for r in rows if r.event_origin.value == "passive"]
     positions = materialize_position_ledger(
@@ -724,6 +738,13 @@ def compute_pnl_entries(
         "total_pnl": str(realized_total + unrealized_total),
         "passive_pnl_total": str(passive_pnl),
         "entries": entries,
+        "by_strategy": by_strategy_pnl(
+            rows,
+            marks=marks,
+            as_of=as_of,
+            share_class_of=share_class_of,
+            instrument_key_by_row_id=instrument_key_by_row_id,
+        ),
     }
 
 
@@ -756,6 +777,7 @@ def compute_ledger_views(
     as_of: datetime,
     share_class_of: Mapping[str, str],
     instrument_key_by_row_id: Mapping[str, str] | None = None,
+    strategy_id: str | None = None,
 ) -> dict[str, object]:
     """Fold a client's ledger tape into the operator-facing views.
 
@@ -772,13 +794,17 @@ def compute_ledger_views(
         instrument_key_by_row_id: ``row_id -> canonical instrument_key`` (from the
             stamped JSONL) so positions group + marks join on the per-leg canonical
             key, never the colliding ``asset_canonical_id``.
+        strategy_id: optional per-strategy filter (exact-or-substring,
+            case-insensitive) applied to the tape BEFORE the fold — so the positions
+            / balances / totals are one strategy's slice (P11.9). The ``balances``
+            block ALWAYS carries a ``by_strategy`` rollup of the (filtered) tape.
 
     Returns:
         A dict with ``positions`` (list of position dicts), ``balances`` (the
-        ``by_venue`` / ``by_instrument`` / ``by_share_class`` rollups), and
-        ``totals`` (``realized_pnl`` / ``unrealized_pnl`` / ``total_pnl`` strings).
-        For an empty ``rows`` the positions + rollups are empty and totals are
-        ``"0"`` — an honest zero response, never mock data.
+        ``by_venue`` / ``by_instrument`` / ``by_share_class`` / ``by_strategy``
+        rollups), and ``totals`` (``realized_pnl`` / ``unrealized_pnl`` /
+        ``total_pnl`` strings). For an empty ``rows`` the positions + rollups are
+        empty and totals are ``"0"`` — an honest zero response, never mock data.
 
     Only ``TRADE`` rows drive the ``PositionLedger`` (``Σ delta`` of the BASE
     asset). ``PASSIVE`` accrual rows (funding / staking / lending) carry a QUOTE
@@ -787,6 +813,7 @@ def compute_ledger_views(
     separately (the carry IS the P&L for funding/basis strategies).
     """
 
+    rows = filter_rows_by_strategy(rows, strategy_id)
     trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
     passive_rows = [r for r in rows if r.event_origin.value == "passive"]
 
@@ -808,6 +835,13 @@ def compute_ledger_views(
             "by_venue": _rollup(positions, "venue"),
             "by_instrument": _rollup(positions, "instrument_key"),
             "by_share_class": _rollup(positions, "share_class"),
+            "by_strategy": by_strategy_pnl(
+                rows,
+                marks=marks,
+                as_of=as_of,
+                share_class_of=share_class_of,
+                instrument_key_by_row_id=instrument_key_by_row_id,
+            ),
         },
         "totals": {
             "realized_pnl": str(realized_total),
@@ -817,80 +851,14 @@ def compute_ledger_views(
     }
 
 
-def _attr_amount(row: Mapping[str, object]) -> Decimal:
-    """Parse a ``PnLAttributionRow`` ``amount`` (string-or-Decimal) to Decimal; 0 on garbage."""
-    try:
-        return Decimal(str(row.get("amount", "0")))
-    except (ArithmeticError, ValueError):
-        return Decimal(0)
-
-
-def _attr_group(rows: Sequence[Mapping[str, object]], key: str) -> list[dict[str, str]]:
-    """GROUP-BY ``key`` sum of attribution ``amount`` (deterministic first-seen order)."""
-    buckets: OrderedDict[str, Decimal] = OrderedDict()
-    for row in rows:
-        bucket_key = str(row.get(key, "")) or "unknown"
-        buckets[bucket_key] = buckets.get(bucket_key, Decimal(0)) + _attr_amount(row)
-    return [{key: k, "amount": str(v)} for k, v in buckets.items()]
-
-
-def _attr_group_per_strategy(
-    rows: Sequence[Mapping[str, object]],
-    key: str,
-) -> list[dict[str, object]]:
-    """Per-strategy nested GROUP-BY: one entry per ``strategy_id`` carrying its own
-    ``key`` rollup + per-strategy total.
-
-    The multi-dimensional waterfall the dashboard needs: for each canonical
-    ``strategy_id`` (e.g. ``carry_staked_basis`` vs ``arbitrage_price_dispersion``),
-    the per-``key`` (factor / venue / layer) sums of ``amount`` so the operator sees
-    "this strategy's P&L split by factor" — NOT one collapsed number across all
-    strategies. Deterministic first-seen order for both the strategy level and the
-    inner ``key`` level.
-    """
-    by_strategy: OrderedDict[str, OrderedDict[str, Decimal]] = OrderedDict()
-    for row in rows:
-        strat = str(row.get("strategy_id", "")) or "unknown"
-        inner_key = str(row.get(key, "")) or "unknown"
-        inner = by_strategy.setdefault(strat, OrderedDict())
-        inner[inner_key] = inner.get(inner_key, Decimal(0)) + _attr_amount(row)
-    return [
-        {
-            "strategy_id": strat,
-            "total_amount": str(sum(inner.values(), Decimal(0))),
-            f"by_{key}": [{key: k, "amount": str(v)} for k, v in inner.items()],
-        }
-        for strat, inner in by_strategy.items()
-    ]
-
-
-def attribution_breakdown(rows: Sequence[Mapping[str, object]]) -> dict[str, object]:
-    """Per-venue / per-instrument / per-factor / per-layer / per-strategy attribution rollups (P2.5.1).
-
-    Folds the raw ``PnLAttributionRow`` records (from
-    ``attribution_reader.read_attribution_rows`` — each carries ``strategy_id`` /
-    ``venue`` / ``instrument_id`` / ``factor`` / ``layer`` / ``amount``) into the
-    GROUP-BY sums, plus the grand total. This is the multi-dimensional attribution
-    VIEW off ``PnLAttributionRow`` — the operator's "where did the P&L come from"
-    breakdown by venue, instrument, factor (CARRY / BASIS / FUNDING / FEES / …),
-    layer (STRATEGY / EXECUTION) AND per ``strategy_id`` — NOT one collapsed number.
-
-    ``by_venue`` ≠ ``by_layer`` once the run has real dims: CARRY/BASIS/FEES book at
-    the staking venue (LIDO / JITO), FUNDING at the perp venue (DERIBIT / DRIFT), so
-    the venue split and the layer split partition the same amount differently.
-
-    ``by_strategy`` carries each strategy's OWN factor split (nested) so the
-    dashboard renders a per-strategy waterfall, plus a flat ``per_strategy_total``
-    for the top-line per-strategy number. Empty ``rows`` → all-empty rollups +
-    ``"0"`` total (honest, never mock).
-    """
-    total = sum((_attr_amount(r) for r in rows), Decimal(0))
-    return {
-        "by_venue": _attr_group(rows, "venue"),
-        "by_instrument": _attr_group(rows, "instrument_id"),
-        "by_factor": _attr_group(rows, "factor"),
-        "by_layer": _attr_group(rows, "layer"),
-        "per_strategy_total": _attr_group(rows, "strategy_id"),
-        "by_strategy": _attr_group_per_strategy(rows, "factor"),
-        "total_amount": str(total),
-    }
+# Per-strategy ledger rollups + attribution-breakdown helpers live in the sibling
+# ``ledger_strategy`` module (the parent file hit the 900-line cap). Re-exported here
+# for back-compat so existing imports (`from ...ledger_views import attribution_breakdown`)
+# keep working.
+__all__ = [
+    "attribution_breakdown",
+    "by_strategy_pnl",
+    "compute_ledger_views",
+    "compute_pnl_entries",
+    "filter_rows_by_strategy",
+]
