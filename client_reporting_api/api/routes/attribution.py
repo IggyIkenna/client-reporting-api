@@ -36,6 +36,7 @@ from client_reporting_api.core.ledger_views import (
     read_transfer_rows,
     resolve_canonical_run,
 )
+from client_reporting_api.core.pnl_timeseries import pnl_timeseries_series
 from client_reporting_api.core.portfolio_metrics import (
     backtest_surface,
     net_views,
@@ -357,12 +358,57 @@ def get_client_attribution_breakdown(
     return breakdown
 
 
+@router.get("/pnl-timeseries")
+def get_client_pnl_timeseries(
+    client_id: str,
+    auth: AuthDep,
+    date_from: date | None = Query(None, description="Start date (inclusive) YYYY-MM-DD"),  # noqa: B008
+    date_to: date | None = Query(None, description="End date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """Per-DAY PnL series for the canonical run — one row per (date x strategy x coin).
+
+    The dashboard's PnL-over-time graph reads THIS to render a REAL daily series
+    (not snapshot bars). Resolves the SAME canonical paper run every other view keys
+    off (:func:`resolve_canonical_run`, so the series is run-scoped — never an
+    all-runs concat), then reads that run's per-DAY attribution parquet
+    (:func:`read_attribution_rows`, already per-day per-strategy with the factors
+    CARRY / BASIS / FUNDING / FEES — the daily carry P&L IS the natural per-day
+    series) and folds it via :func:`pnl_timeseries_series` into one entry per
+    ``(date, strategy_id, coin)`` with ``realized`` / ``unrealized`` / ``total`` /
+    ``carry``.
+
+    ``coin`` derives canonically from the row's ``instrument_id`` (the LST staking
+    leg nets onto its underlying: ``LIDO:STAKING:stETH`` -> ``ETH``,
+    ``JITO:STAKING:JitoSOL`` -> ``SOL``). ``total = realized + (unrealized or 0) +
+    carry``; ``unrealized`` is an HONEST null when no mark-to-market factor row
+    exists for the group (on the flat corpus the per-day price-move unrealized is
+    genuinely not computed — null, never a fabricated 0). Honest empty ``series:[]``
+    when the client has no attribution shards / no run yet — never mock.
+    """
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
+        mock_rows = cast("list[dict[str, object]]", _mock_attribution(client_id, date_from, date_to)["rows"])
+        return {
+            "client_id": client_id,
+            "run_id": None,
+            "series": pnl_timeseries_series(mock_rows),
+        }
+    run_id = resolve_canonical_run(client_id, as_of_date=date_to)
+    rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
+    return {
+        "client_id": client_id,
+        "run_id": run_id,
+        "series": pnl_timeseries_series(rows),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Paper-trading dashboard ledger panels (P2.5.2): instructions / transfers /
 # reconciliation. Read the SAME GCS InstructionLedger the engine writes (via
 # read_ledger_rows) so the operator dashboard renders a REAL paper run. Honest
 # empty/PENDING when no run exists — never mock.
 # ---------------------------------------------------------------------------
+
 
 def _side_from_delta(delta: Decimal, direction: object) -> str:
     """UI side ('long'/'short'/'flat') from the row direction or the signed delta."""
@@ -511,9 +557,7 @@ def get_client_transfers(
         rows = _project_transfer_rows(client_id, ledger_rows, strategy_ids)
 
     requested = strategy_id.strip() if strategy_id else None
-    transfers = (
-        [t for t in rows if _matches_strategy(str(t.get("strategy_id", "")), requested)] if requested else rows
-    )
+    transfers = [t for t in rows if _matches_strategy(str(t.get("strategy_id", "")), requested)] if requested else rows
 
     # Per-strategy grouped rollup (counts + net amount per strategy_id).
     by_strategy: dict[str, dict[str, object]] = {}
@@ -532,9 +576,8 @@ def get_client_transfers(
         status, note = "NO_RUN", "No paper run exists for this client yet."
     elif not transfers:
         status = "NO_TRANSFER_ROWS"
-        note = (
-            "This run's TransferLedger (ledger_type=transfer) carries no money-movement rows"
-            + (f" for strategy_id={requested}." if requested else " yet.")
+        note = "This run's TransferLedger (ledger_type=transfer) carries no money-movement rows" + (
+            f" for strategy_id={requested}." if requested else " yet."
         )
     else:
         status, note = "OK", ""
