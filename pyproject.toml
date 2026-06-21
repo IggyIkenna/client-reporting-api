@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "client-reporting-api"
-version = "0.15.6"
+version = "0.15.7"
 description = "Client reporting, fee engine, and invoice management service"
 requires-python = ">=3.13,<3.14"
 authors = [
