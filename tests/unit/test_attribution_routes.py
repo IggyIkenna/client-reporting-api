@@ -733,3 +733,72 @@ class TestLivePaths:
         finally:
             cfg.cloud_mock_mode = orig_mock  # type: ignore[misc]
             cfg.data_mode = "mock"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/clients/{client_id}/pnl-timeseries
+# ---------------------------------------------------------------------------
+
+
+class TestPnlTimeseriesRoute:
+    def test_mock_mode_returns_series_shape(self) -> None:
+        client = TestClient(app, raise_server_exceptions=True)
+        response = client.get("/api/v1/clients/client-A/pnl-timeseries")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["client_id"] == "client-A"
+        assert "run_id" in payload
+        assert isinstance(payload["series"], list)
+        for entry in payload["series"]:
+            assert set(entry.keys()) >= {"date", "strategy_id", "coin", "realized", "unrealized", "total", "carry"}
+
+    def test_live_path_per_day_strategy_coin(self) -> None:
+        from unittest.mock import patch
+
+        rows = [
+            {
+                "strategy_id": "CARRY_STAKED_BASIS@lido-uniswapv3-deribit",
+                "instrument_id": "LIDO:STAKING:stETH",
+                "timestamp": "2026-05-20T00:00:00+00:00",
+                "factor": "CARRY",
+                "layer": "STRATEGY",
+                "venue": "LIDO",
+                "amount": "9.5",
+            },
+            {
+                "strategy_id": "CARRY_STAKED_BASIS@jito-jupiter-drift",
+                "instrument_id": "JITO:STAKING:JitoSOL",
+                "timestamp": "2026-05-20T00:00:00+00:00",
+                "factor": "CARRY",
+                "layer": "STRATEGY",
+                "venue": "JITO",
+                "amount": "7.0",
+            },
+        ]
+        cfg = _attr_mod._cloud_cfg
+        # The route gates on cfg.is_mock_mode(); pydantic blocks plain setattr →
+        # flip the bound method off (same pattern as test_pnl_live_path_is_ledger_derived).
+        orig_is_mock = cfg.is_mock_mode
+        object.__setattr__(cfg, "is_mock_mode", lambda: False)
+        try:
+            with (
+                patch(
+                    "client_reporting_api.api.routes.attribution.read_attribution_rows",
+                    return_value=rows,
+                ),
+                patch(
+                    "client_reporting_api.api.routes.attribution.resolve_canonical_run",
+                    return_value="paper-20260620004135-bbbb",
+                ),
+            ):
+                client = TestClient(app, raise_server_exceptions=True)
+                response = client.get("/api/v1/clients/client-A/pnl-timeseries")
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["run_id"] == "paper-20260620004135-bbbb"
+            coins = {e["coin"] for e in payload["series"]}
+            assert coins == {"ETH", "SOL"}
+            strats = {e["strategy_id"] for e in payload["series"]}
+            assert len(strats) == 2
+        finally:
+            object.__setattr__(cfg, "is_mock_mode", orig_is_mock)
