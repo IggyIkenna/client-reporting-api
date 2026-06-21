@@ -29,7 +29,7 @@ import logging
 import re
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -40,6 +40,7 @@ from unified_trading_library.ledger import (  # noqa: qg-deep-import
     client_ledger_root,
     client_runs_prefix,
     load_instruction_ledger_fills,
+    read_run_manifest,
 )
 from unified_trading_library.ledger.materialize import (  # noqa: qg-deep-import
     materialize_position_ledger,  # not re-exported at UTL top level
@@ -402,6 +403,127 @@ def read_marks(
         logger.warning("read_marks: pricing-ledger read failed for client=%s run=%s: %s", client_id, run_id, exc)
         return {}
     return marks
+
+
+def read_canonical_positions(
+    client_id: str,
+    as_of_date: date | None = None,
+    cloud: str = "gcp",
+) -> tuple[str | None, list[PositionLedgerRow]]:
+    """Materialise THE canonical run's ``PositionLedgerRow`` list (marks joined).
+
+    The Phase-10 metrics seam: resolves the SAME canonical run as every other view,
+    reads its TRADE tape + PricingLedger marks, and folds them into the
+    ``PositionLedger`` via :func:`materialize_position_ledger` (per-leg canonical
+    instrument_key join, so each leg gets its OWN mark). Returns
+    ``(canonical_run_id, positions)`` — ``(None, [])`` when the client has no run yet
+    (honest empty: callers surface zeroed metrics, never mock).
+
+    Reuses the existing readers (no new I/O seam): :func:`resolve_canonical_run`,
+    :func:`read_ledger_rows`, :func:`read_marks` — so positions are coherent with
+    ``/positions`` (same run, same fold).
+    """
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of_date, cloud=cloud)
+    if run_id is None:
+        return None, []
+    rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=as_of_date, cloud=cloud)
+    marks = read_marks(client_id, run_id, cloud=cloud)
+    trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
+    positions = materialize_position_ledger(
+        trade_rows,
+        marks=marks,
+        as_of=datetime.now(UTC),
+        share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
+    )
+    return run_id, positions
+
+
+def read_batch_total_pnl(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> tuple[str | None, Decimal | None]:
+    """Read THE canonical run's ``__batch__`` rerun → ``(batch_run_id, total_pnl)``.
+
+    The backtest surface's historical PnL source: lists the canonical run's
+    ``…/run_id={R}/__batch__/{B}/ledger/ledger_type=instruction/`` objects, loads the
+    batch fills via the UTL SSOT reader, folds them into the ``PositionLedger`` at
+    avg-cost (Σ realised over closed legs — the batch rerun, like paper, has no
+    PricingLedger marks of its own here, so unrealized is mark-independent) and
+    returns the batch run id + Σ realised PnL.
+
+    Returns ``(None, None)`` (honest PENDING) when the canonical run has NO batch
+    rerun yet — the backtest surface renders PENDING, never a fabricated 0.
+    """
+    if not run_id:
+        return None, None
+    batch_run_id: str | None = None
+    rows: list[LedgerRow] = []
+    instrument_key_by_row_id: dict[str, str] = {}
+    try:
+        paper_root = client_ledger_root(client_id, run_id, cloud=cloud).rstrip("/")
+        bucket, paper_prefix = _split_gs(paper_root)
+        batch_marker_prefix = f"{paper_prefix}/{_BATCH_MARKER}/"
+        storage = get_storage_client()
+        for blob_meta in storage.list_blobs(bucket, prefix=batch_marker_prefix):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX) or _LEDGER_TYPE_INSTRUCTION not in path:
+                continue
+            if batch_run_id is None:
+                tail = path.split(f"/{_BATCH_MARKER}/", 1)[1]
+                batch_run_id = tail.split("/", 1)[0]
+            raw = storage.download_bytes(bucket, path).decode("utf-8")
+            rows.extend(_parse_instruction_jsonl(raw, instrument_key_by_row_id))
+    except Exception as exc:
+        logger.warning("read_batch_total_pnl: batch read failed for client=%s run=%s: %s", client_id, run_id, exc)
+        return None, None
+
+    if batch_run_id is None:
+        return None, None
+
+    trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
+    positions = materialize_position_ledger(
+        trade_rows,
+        marks={},
+        as_of=datetime.now(UTC),
+        share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
+    )
+    total = sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0))
+    return batch_run_id, total
+
+
+def read_run_window(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> tuple[datetime | None, datetime | None, tuple[str, ...], str]:
+    """Read ``(window_start, window_end, strategy_ids, fill_model)`` from the RunManifest.
+
+    The Phase-10 metrics need the run's window (for ROE annualisation), its
+    canonical ``@``-qualified ``strategy_ids`` (for the venue→strategy mapping) and
+    its ``fill_model`` (for the backtest execution-assumptions surface). Reads the
+    SAME ``RunManifest`` the batch rerun reads (``{ledger_root}/run_manifest.json``),
+    so the metrics derive from the run's own pinned manifest — never a re-guess.
+
+    Returns ``(None, None, (), "")`` (honest empty) when the manifest is absent /
+    unreadable — the caller surfaces a typed-empty window, never a fabricated one.
+    """
+    if not run_id:
+        return None, None, (), ""
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        manifest = read_run_manifest(ledger_root)
+    except Exception as exc:
+        logger.warning("read_run_window: manifest read failed for client=%s run=%s: %s", client_id, run_id, exc)
+        return None, None, (), ""
+    return (
+        manifest.window_start,
+        manifest.window_end,
+        tuple(manifest.strategy_ids),
+        str(manifest.fill_model),
+    )
 
 
 def _decimal_str(value: Decimal | None) -> str | None:

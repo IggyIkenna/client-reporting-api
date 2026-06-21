@@ -27,10 +27,18 @@ from client_reporting_api.core.ledger_views import (
     attribution_breakdown,
     compute_ledger_views,
     compute_pnl_entries,
+    read_batch_total_pnl,
+    read_canonical_positions,
     read_canonical_run_fills,
     read_ledger_rows,
     read_marks,
+    read_run_window,
     resolve_canonical_run,
+)
+from client_reporting_api.core.portfolio_metrics import (
+    backtest_surface,
+    net_views,
+    per_strategy_breakdown,
 )
 from client_reporting_api.core.recon_view import latest_recon_verdict
 
@@ -337,7 +345,8 @@ def get_client_attribution_breakdown(
     enforce_entitlement(auth, client_id)
     if _cloud_cfg.is_mock_mode():
         mock_rows = _mock_attribution(client_id, date_from, date_to)["rows"]
-        breakdown = attribution_breakdown(list(mock_rows) if isinstance(mock_rows, list) else [])
+        rows_typed = cast("list[dict[str, object]]", mock_rows) if isinstance(mock_rows, list) else []
+        breakdown = attribution_breakdown(rows_typed)
         breakdown["client_id"] = client_id
         return breakdown
     rows = read_attribution_rows(client_id, date_from=date_from, date_to=date_to)
@@ -550,3 +559,204 @@ def get_client_reconciliation_latest(
     """
     enforce_entitlement(auth, client_id)
     return latest_recon_verdict(client_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase-10 portfolio metrics: net views / per-strategy / bps / ROE / backtest.
+# All run-scoped (THE canonical run), derived from the SAME ledger surface the
+# positions/pnl views fold. Honest typed-empty where a source is absent.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_WINDOW_DAYS = Decimal("7")  # honest fallback when the manifest has no window
+
+
+def _window_days(run_id: str | None, client_id: str) -> tuple[Decimal, tuple[str, ...]]:
+    """``(window_days, strategy_ids)`` from the run manifest (honest fallback to 7d)."""
+    if run_id is None:
+        return _DEFAULT_WINDOW_DAYS, ()
+    window_start, window_end, strategy_ids, _fill_model = read_run_window(client_id, run_id)
+    if window_start is None or window_end is None:
+        return _DEFAULT_WINDOW_DAYS, strategy_ids
+    days = Decimal((window_end - window_start).total_seconds()) / Decimal("86400")
+    return (days if days > 0 else _DEFAULT_WINDOW_DAYS), strategy_ids
+
+
+@router.get("/net-views")
+def get_client_net_views(
+    client_id: str,
+    auth: AuthDep,
+    as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """net-in-dollars / net-in-coin / delta-per-coin for the canonical run (P10.3).
+
+    Folds THE canonical run's ``PositionLedger`` (marks joined) into: portfolio
+    net+gross USD value at marks, net qty per coin, and the signed USD delta
+    exposure per coin (≈0 per coin for the delta-neutral books). Honest zero/empty
+    when the client has no run yet.
+    """
+    enforce_entitlement(auth, client_id)
+    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
+    views = net_views(positions)
+    views["client_id"] = client_id
+    views["run_id"] = run_id
+    return views
+
+
+@router.get("/per-strategy")
+def get_client_per_strategy(
+    client_id: str,
+    auth: AuthDep,
+    as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """Per-strategy trades / positions / P&L / turnover / bps / ROE + overall (P10.4/8/9).
+
+    Groups by the canonical ``@``-qualified ``strategy_id`` (mapped from each row's
+    venue via the run manifest's ``strategy_ids``). Each strategy carries
+    ``bps_pnl_on_turnover`` (P10.8) and ``roe_annualised_pct`` (P10.9) alongside the
+    P&L + turnover; an ``overall`` roll-up covers all strategies. Honest typed-empty
+    (``None`` bps/ROE) when a denominator is 0.
+    """
+    enforce_entitlement(auth, client_id)
+    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
+    _resolved_run, fills = read_canonical_run_fills(client_id, as_of_date=as_of)
+    window_days, strategy_ids = _window_days(run_id, client_id)
+    breakdown = per_strategy_breakdown(positions, fills, strategy_ids, window_days=window_days)
+    breakdown["client_id"] = client_id
+    breakdown["run_id"] = run_id
+    return breakdown
+
+
+@router.get("/bps-pnl")
+def get_client_bps_pnl(
+    client_id: str,
+    auth: AuthDep,
+    as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """bps PnL on turnover (``total_pnl / Σ|notional| * 1e4``) per strategy + overall (P10.8).
+
+    A focused projection of :func:`per_strategy_breakdown` — the per-strategy +
+    overall ``bps_pnl_on_turnover`` with the turnover + total_pnl it derives from.
+    Honest ``None`` bps when a strategy has zero turnover.
+    """
+    enforce_entitlement(auth, client_id)
+    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
+    _resolved_run, fills = read_canonical_run_fills(client_id, as_of_date=as_of)
+    window_days, strategy_ids = _window_days(run_id, client_id)
+    breakdown = per_strategy_breakdown(positions, fills, strategy_ids, window_days=window_days)
+    strategies = breakdown["strategies"]
+    overall = breakdown["overall"]
+    per = [
+        {
+            "strategy_id": s["strategy_id"],
+            "total_pnl": s["total_pnl"],
+            "turnover_usd": s["turnover_usd"],
+            "bps_pnl_on_turnover": s["bps_pnl_on_turnover"],
+        }
+        for s in cast("list[dict[str, object]]", strategies)
+    ]
+    overall_d = cast("dict[str, object]", overall)
+    return {
+        "client_id": client_id,
+        "run_id": run_id,
+        "by_strategy": per,
+        "overall": {
+            "total_pnl": overall_d["total_pnl"],
+            "turnover_usd": overall_d["turnover_usd"],
+            "bps_pnl_on_turnover": overall_d["bps_pnl_on_turnover"],
+        },
+    }
+
+
+@router.get("/roe")
+def get_client_roe(
+    client_id: str,
+    auth: AuthDep,
+    as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """% ROE annualised over the run window per strategy + overall (P10.9).
+
+    A focused projection of :func:`per_strategy_breakdown` — the per-strategy +
+    overall ``roe_annualised_pct`` with the equity (``gross_usd``) + window it
+    derives from. Honest ``None`` ROE when equity is 0 / the window is undefined.
+    """
+    enforce_entitlement(auth, client_id)
+    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
+    _resolved_run, fills = read_canonical_run_fills(client_id, as_of_date=as_of)
+    window_days, strategy_ids = _window_days(run_id, client_id)
+    breakdown = per_strategy_breakdown(positions, fills, strategy_ids, window_days=window_days)
+    strategies = breakdown["strategies"]
+    overall = breakdown["overall"]
+    per = [
+        {
+            "strategy_id": s["strategy_id"],
+            "total_pnl": s["total_pnl"],
+            "gross_usd": s["gross_usd"],
+            "roe_annualised_pct": s["roe_annualised_pct"],
+        }
+        for s in cast("list[dict[str, object]]", strategies)
+    ]
+    overall_d = cast("dict[str, object]", overall)
+    return {
+        "client_id": client_id,
+        "run_id": run_id,
+        "window_days": breakdown["window_days"],
+        "by_strategy": per,
+        "overall": {
+            "total_pnl": overall_d["total_pnl"],
+            "gross_usd": overall_d["gross_usd"],
+            "roe_annualised_pct": overall_d["roe_annualised_pct"],
+        },
+    }
+
+
+@router.get("/backtest")
+def get_client_backtest(
+    client_id: str,
+    auth: AuthDep,
+    as_of: date | None = Query(None, description="Snapshot date (inclusive) YYYY-MM-DD"),  # noqa: B008
+) -> dict[str, object]:
+    """Backtest surface: historical PnL + execution cost + execution assumptions (P10.7).
+
+    Reads the canonical run's ``__batch__`` rerun (historical PnL), surfaces the
+    execution cost (= execution alpha = smart - benchmark; structurally 0 in the
+    benchmark-only paper/batch, stated honestly) and the execution assumptions (the
+    ``RunManifest.fill_model`` + the fill-model fidelity tier), plus a paper-vs-batch
+    comparison payload for the UI's unified view. Honest PENDING when the canonical
+    run has no batch rerun yet.
+    """
+    enforce_entitlement(auth, client_id)
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of)
+    if run_id is None:
+        return {
+            "client_id": client_id,
+            "run_id": None,
+            "status": "NO_RUN",
+            "note": "No paper run exists for this client yet.",
+        }
+    # Paper total PnL for the canonical run (realised + unrealised at marks).
+    ledger_rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=as_of)
+    marks = read_marks(client_id, run_id)
+    paper_pnl = compute_pnl_entries(
+        ledger_rows,
+        marks=marks,
+        as_of=datetime.now(UTC),
+        share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
+    )
+    paper_total = Decimal(str(paper_pnl["total_pnl"]))
+    window_start, window_end, _strategy_ids, fill_model = read_run_window(client_id, run_id)
+    batch_run_id, batch_total = read_batch_total_pnl(client_id, run_id)
+    recon = latest_recon_verdict(client_id)
+    matched = recon.get("matched_trades") if recon.get("paper_run_id") == run_id else None
+    surface = backtest_surface(
+        fill_model=fill_model or "BENCHMARK",
+        window_start=window_start or datetime.now(UTC),
+        window_end=window_end or datetime.now(UTC),
+        paper_total_pnl=paper_total,
+        batch_total_pnl=batch_total,
+        batch_run_id=batch_run_id,
+        matched_trades=matched if isinstance(matched, int) else None,
+    )
+    surface["client_id"] = client_id
+    surface["run_id"] = run_id
+    return surface
