@@ -29,7 +29,7 @@ import logging
 import re
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -40,6 +40,7 @@ from unified_trading_library.ledger import (  # noqa: qg-deep-import
     client_ledger_root,
     client_runs_prefix,
     load_instruction_ledger_fills,
+    read_run_manifest,
 )
 from unified_trading_library.ledger.materialize import (  # noqa: qg-deep-import
     materialize_position_ledger,  # not re-exported at UTL top level
@@ -66,6 +67,16 @@ _LEDGER_TYPE_INSTRUCTION = "ledger_type=instruction"
 #: positions/PnL views resolve, so the unrealized P&L is marked against the run's
 #: own mark snapshots — never a foreign run's, never re-derived.
 _LEDGER_TYPE_PRICING = "ledger_type=pricing"
+
+#: The TransferLedger / TreasuryLedger partition. A run's money-movement legs
+#: (DEPOSIT / TRANSFER / STAKE / COLLATERAL_POSTED / WITHDRAW / BRIDGE / …) land
+#: under ``…/run_id=R/ledger_type=transfer/{run_id}.jsonl`` as ``LedgerRow``s with
+#: ``event_origin=INSTRUCTION`` + a money-movement ``event_type`` + a signed
+#: ``delta`` — written by the UTL ``write_run_transfer_ledger`` writer in the SAME
+#: JSONL shape as the instruction tape (so the same parse machinery reads it). The
+#: ``/transfers`` reader lists this prefix for the SAME canonical run the other
+#: views resolve, so money movements belong to the exact run on the dashboard.
+_LEDGER_TYPE_TRANSFER = "ledger_type=transfer"
 
 #: ``LedgerRow.event_type`` value that discriminates a PricingLedger mark row.
 _MARK_UPDATE_EVENT_TYPE = "mark_update"
@@ -404,6 +415,183 @@ def read_marks(
     return marks
 
 
+def read_transfer_rows(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> tuple[list[LedgerRow], dict[str, str]]:
+    """Read THE canonical run's TransferLedger money-movement rows from GCS.
+
+    Lists the run's ``ledger_type=transfer`` JSONL objects under the SAME
+    client-addressable ``client_ledger_root`` the instruction + pricing tapes live
+    under (so the transfers belong to the EXACT run the dashboard's other panels
+    resolve) and parses each into a UAC :class:`LedgerRow`. The transfer JSONL is
+    the SAME shape the UTL ``write_run_transfer_ledger`` / ``transfer_ledger_jsonl``
+    writer emits (a ``LedgerRow`` dump + a stamped per-leg ``instrument_key``), so
+    the same ``_parse_instruction_jsonl`` machinery reads it — no format drift.
+
+    Every row in this ledger is by construction a money-movement leg
+    (``event_origin=INSTRUCTION`` + a money-movement ``event_type`` — DEPOSIT /
+    TRANSFER / STAKE / COLLATERAL_POSTED / WITHDRAW / BRIDGE / SWAP / …) for the
+    SINGLE owning ``client_id`` (funds never cross clients), so the caller surfaces
+    ALL of them — it does NOT re-filter by a hardcoded event-type subset (that was
+    the bug: the InstructionLedger scan only matched TRANSFER/DEPOSIT/WITHDRAWAL/
+    BRIDGE and missed the STAKE / COLLATERAL_POSTED legs the producer actually
+    wrote).
+
+    Returns ``([], {})`` when the run has no TransferLedger object yet — the HONEST
+    empty path (the run genuinely modelled no money movements, or a transfer ledger
+    has not been written), distinguished from "no run" by the caller.
+    """
+    if not run_id:
+        return [], {}
+    rows: list[LedgerRow] = []
+    instrument_key_by_row_id: dict[str, str] = {}
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        bucket, root_prefix = _split_gs(ledger_root)
+        transfer_prefix = f"{root_prefix}{_LEDGER_TYPE_TRANSFER}/"
+        storage = get_storage_client()
+        for blob_meta in sorted(
+            storage.list_blobs(bucket, prefix=transfer_prefix),
+            key=lambda b: str(getattr(b, "name", "")),
+        ):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX):
+                continue
+            if _BATCH_MARKER in path:
+                continue  # never read the batch-rerun copy's transfers into the paper view
+            raw = storage.download_bytes(bucket, path).decode("utf-8")
+            rows.extend(_parse_instruction_jsonl(raw, instrument_key_by_row_id))
+    except Exception as exc:
+        logger.warning(
+            "read_transfer_rows: transfer-ledger read failed for client=%s run=%s: %s", client_id, run_id, exc
+        )
+        return [], {}
+    return rows, instrument_key_by_row_id
+
+
+def read_canonical_positions(
+    client_id: str,
+    as_of_date: date | None = None,
+    cloud: str = "gcp",
+) -> tuple[str | None, list[PositionLedgerRow]]:
+    """Materialise THE canonical run's ``PositionLedgerRow`` list (marks joined).
+
+    The Phase-10 metrics seam: resolves the SAME canonical run as every other view,
+    reads its TRADE tape + PricingLedger marks, and folds them into the
+    ``PositionLedger`` via :func:`materialize_position_ledger` (per-leg canonical
+    instrument_key join, so each leg gets its OWN mark). Returns
+    ``(canonical_run_id, positions)`` — ``(None, [])`` when the client has no run yet
+    (honest empty: callers surface zeroed metrics, never mock).
+
+    Reuses the existing readers (no new I/O seam): :func:`resolve_canonical_run`,
+    :func:`read_ledger_rows`, :func:`read_marks` — so positions are coherent with
+    ``/positions`` (same run, same fold).
+    """
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of_date, cloud=cloud)
+    if run_id is None:
+        return None, []
+    rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=as_of_date, cloud=cloud)
+    marks = read_marks(client_id, run_id, cloud=cloud)
+    trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
+    positions = materialize_position_ledger(
+        trade_rows,
+        marks=marks,
+        as_of=datetime.now(UTC),
+        share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
+    )
+    return run_id, positions
+
+
+def read_batch_total_pnl(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> tuple[str | None, Decimal | None]:
+    """Read THE canonical run's ``__batch__`` rerun → ``(batch_run_id, total_pnl)``.
+
+    The backtest surface's historical PnL source: lists the canonical run's
+    ``…/run_id={R}/__batch__/{B}/ledger/ledger_type=instruction/`` objects, loads the
+    batch fills via the UTL SSOT reader, folds them into the ``PositionLedger`` at
+    avg-cost (Σ realised over closed legs — the batch rerun, like paper, has no
+    PricingLedger marks of its own here, so unrealized is mark-independent) and
+    returns the batch run id + Σ realised PnL.
+
+    Returns ``(None, None)`` (honest PENDING) when the canonical run has NO batch
+    rerun yet — the backtest surface renders PENDING, never a fabricated 0.
+    """
+    if not run_id:
+        return None, None
+    batch_run_id: str | None = None
+    rows: list[LedgerRow] = []
+    instrument_key_by_row_id: dict[str, str] = {}
+    try:
+        paper_root = client_ledger_root(client_id, run_id, cloud=cloud).rstrip("/")
+        bucket, paper_prefix = _split_gs(paper_root)
+        batch_marker_prefix = f"{paper_prefix}/{_BATCH_MARKER}/"
+        storage = get_storage_client()
+        for blob_meta in storage.list_blobs(bucket, prefix=batch_marker_prefix):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(_INSTRUCTION_LEDGER_SUFFIX) or _LEDGER_TYPE_INSTRUCTION not in path:
+                continue
+            if batch_run_id is None:
+                tail = path.split(f"/{_BATCH_MARKER}/", 1)[1]
+                batch_run_id = tail.split("/", 1)[0]
+            raw = storage.download_bytes(bucket, path).decode("utf-8")
+            rows.extend(_parse_instruction_jsonl(raw, instrument_key_by_row_id))
+    except Exception as exc:
+        logger.warning("read_batch_total_pnl: batch read failed for client=%s run=%s: %s", client_id, run_id, exc)
+        return None, None
+
+    if batch_run_id is None:
+        return None, None
+
+    trade_rows = [r for r in rows if r.event_type == EventType.TRADE]
+    positions = materialize_position_ledger(
+        trade_rows,
+        marks={},
+        as_of=datetime.now(UTC),
+        share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
+    )
+    total = sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0))
+    return batch_run_id, total
+
+
+def read_run_window(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> tuple[datetime | None, datetime | None, tuple[str, ...], str]:
+    """Read ``(window_start, window_end, strategy_ids, fill_model)`` from the RunManifest.
+
+    The Phase-10 metrics need the run's window (for ROE annualisation), its
+    canonical ``@``-qualified ``strategy_ids`` (for the venue→strategy mapping) and
+    its ``fill_model`` (for the backtest execution-assumptions surface). Reads the
+    SAME ``RunManifest`` the batch rerun reads (``{ledger_root}/run_manifest.json``),
+    so the metrics derive from the run's own pinned manifest — never a re-guess.
+
+    Returns ``(None, None, (), "")`` (honest empty) when the manifest is absent /
+    unreadable — the caller surfaces a typed-empty window, never a fabricated one.
+    """
+    if not run_id:
+        return None, None, (), ""
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud)
+        manifest = read_run_manifest(ledger_root)
+    except Exception as exc:
+        logger.warning("read_run_window: manifest read failed for client=%s run=%s: %s", client_id, run_id, exc)
+        return None, None, (), ""
+    return (
+        manifest.window_start,
+        manifest.window_end,
+        tuple(manifest.strategy_ids),
+        str(manifest.fill_model),
+    )
+
+
 def _decimal_str(value: Decimal | None) -> str | None:
     """Serialise a Decimal to a string (JSON-stable, no float rounding)."""
 
@@ -646,17 +834,55 @@ def _attr_group(rows: Sequence[Mapping[str, object]], key: str) -> list[dict[str
     return [{key: k, "amount": str(v)} for k, v in buckets.items()]
 
 
+def _attr_group_per_strategy(
+    rows: Sequence[Mapping[str, object]],
+    key: str,
+) -> list[dict[str, object]]:
+    """Per-strategy nested GROUP-BY: one entry per ``strategy_id`` carrying its own
+    ``key`` rollup + per-strategy total.
+
+    The multi-dimensional waterfall the dashboard needs: for each canonical
+    ``strategy_id`` (e.g. ``carry_staked_basis`` vs ``arbitrage_price_dispersion``),
+    the per-``key`` (factor / venue / layer) sums of ``amount`` so the operator sees
+    "this strategy's P&L split by factor" — NOT one collapsed number across all
+    strategies. Deterministic first-seen order for both the strategy level and the
+    inner ``key`` level.
+    """
+    by_strategy: OrderedDict[str, OrderedDict[str, Decimal]] = OrderedDict()
+    for row in rows:
+        strat = str(row.get("strategy_id", "")) or "unknown"
+        inner_key = str(row.get(key, "")) or "unknown"
+        inner = by_strategy.setdefault(strat, OrderedDict())
+        inner[inner_key] = inner.get(inner_key, Decimal(0)) + _attr_amount(row)
+    return [
+        {
+            "strategy_id": strat,
+            "total_amount": str(sum(inner.values(), Decimal(0))),
+            f"by_{key}": [{key: k, "amount": str(v)} for k, v in inner.items()],
+        }
+        for strat, inner in by_strategy.items()
+    ]
+
+
 def attribution_breakdown(rows: Sequence[Mapping[str, object]]) -> dict[str, object]:
-    """Per-venue / per-instrument / per-factor / per-layer attribution rollups (P2.5.1).
+    """Per-venue / per-instrument / per-factor / per-layer / per-strategy attribution rollups (P2.5.1).
 
     Folds the raw ``PnLAttributionRow`` records (from
-    ``attribution_reader.read_attribution_rows`` — each carries ``venue`` /
-    ``instrument_id`` / ``factor`` / ``layer`` / ``amount``) into four GROUP-BY
-    sums, plus the grand total. This is the per-venue + per-instrument attribution
+    ``attribution_reader.read_attribution_rows`` — each carries ``strategy_id`` /
+    ``venue`` / ``instrument_id`` / ``factor`` / ``layer`` / ``amount``) into the
+    GROUP-BY sums, plus the grand total. This is the multi-dimensional attribution
     VIEW off ``PnLAttributionRow`` — the operator's "where did the P&L come from"
-    breakdown by venue, instrument, factor (CARRY / SLIPPAGE / …) and layer
-    (STRATEGY / EXECUTION). Empty ``rows`` → all-empty rollups + ``"0"`` total
-    (honest, never mock).
+    breakdown by venue, instrument, factor (CARRY / BASIS / FUNDING / FEES / …),
+    layer (STRATEGY / EXECUTION) AND per ``strategy_id`` — NOT one collapsed number.
+
+    ``by_venue`` ≠ ``by_layer`` once the run has real dims: CARRY/BASIS/FEES book at
+    the staking venue (LIDO / JITO), FUNDING at the perp venue (DERIBIT / DRIFT), so
+    the venue split and the layer split partition the same amount differently.
+
+    ``by_strategy`` carries each strategy's OWN factor split (nested) so the
+    dashboard renders a per-strategy waterfall, plus a flat ``per_strategy_total``
+    for the top-line per-strategy number. Empty ``rows`` → all-empty rollups +
+    ``"0"`` total (honest, never mock).
     """
     total = sum((_attr_amount(r) for r in rows), Decimal(0))
     return {
@@ -664,5 +890,7 @@ def attribution_breakdown(rows: Sequence[Mapping[str, object]]) -> dict[str, obj
         "by_instrument": _attr_group(rows, "instrument_id"),
         "by_factor": _attr_group(rows, "factor"),
         "by_layer": _attr_group(rows, "layer"),
+        "per_strategy_total": _attr_group(rows, "strategy_id"),
+        "by_strategy": _attr_group_per_strategy(rows, "factor"),
         "total_amount": str(total),
     }
