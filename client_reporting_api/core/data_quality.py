@@ -165,11 +165,16 @@ def _coverage(
     skipped rows are a DISJOINT broader declared universe (specs that did not run).
     So ``total_specs = drivable + skipped`` and the per-archetype split counts both
     sides — never a re-derivation, just a fold of the two real lists.
+
+    ``by_archetype`` is emitted as a SORTED LIST of rows
+    (``{archetype, drivable, skipped, total}``) — the canonical list shape the
+    paper-trading UI's ``DataQualityCoverageRow[]`` contract reads with ``.map`` /
+    ``.reduce`` (a dict would crash the panel's ``.reduce`` — UI is array-shaped).
     """
-    by_archetype: OrderedDict[str, dict[str, int]] = OrderedDict()
+    counts: OrderedDict[str, dict[str, int]] = OrderedDict()
 
     def _bucket(arch: str) -> dict[str, int]:
-        return by_archetype.setdefault(arch, {"drivable": 0, "skipped": 0})
+        return counts.setdefault(arch, {"drivable": 0, "skipped": 0})
 
     for sid in strategy_ids:
         _bucket(_archetype_of(sid, sid))["drivable"] += 1
@@ -178,11 +183,20 @@ def _coverage(
 
     drivable = len(strategy_ids)
     skipped_n = len(skipped_rows)
+    by_archetype: list[dict[str, object]] = [
+        {
+            "archetype": arch,
+            "drivable": v["drivable"],
+            "skipped": v["skipped"],
+            "total": v["drivable"] + v["skipped"],
+        }
+        for arch, v in sorted(counts.items())
+    ]
     return {
         "total_specs": drivable + skipped_n,
         "drivable": drivable,
         "skipped": skipped_n,
-        "by_archetype": OrderedDict(sorted(by_archetype.items())),
+        "by_archetype": by_archetype,
     }
 
 
@@ -203,7 +217,7 @@ def compute_data_quality(
     if run_id is None:
         return {
             "run_id": None,
-            "coverage": {"total_specs": 0, "drivable": 0, "skipped": 0, "by_archetype": {}},
+            "coverage": {"total_specs": 0, "drivable": 0, "skipped": 0, "by_archetype": []},
             "skipped": [],
             "note": "no paper run yet for this client",
         }
