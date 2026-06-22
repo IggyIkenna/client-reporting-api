@@ -1,28 +1,33 @@
-"""GET /api/v1/clients/{client_id}/data-quality — paper-run honest-coverage + live alerts.
+"""GET /api/v1/clients/{client_id}/data-quality — paper-run honest-coverage + SSOT.
 
 Powers the paper-trading dashboard's "what data is missing / incomplete" panel.
-Merges TWO real sources for a client's canonical paper run:
+Merges, for a client's canonical paper run, the RUN lens with the deployment-api
+SSOT (the SAME source the deployment-ui monitoring pane shows — a break is fixed
+once, at the deployment-api, not per-consumer):
 
-1. the run's honest-absence ``skipped_specs`` + ``run_manifest`` coverage
-   (:func:`compute_data_quality`), and
-2. the live VM alert stream proxied from the alerting-service (the same source the
-   ``/alerts`` route uses).
+1. **run lens** — the run's honest-absence ``skipped_specs`` + ``run_manifest``
+   coverage (:func:`compute_data_quality`): "what THIS run could drive".
+2. **alerts** — the deployment-api unified alert ledger (P11.20).
+3. **corpus lens** — the deployment-api data-status manifest 4-state per
+   asset_group (P11.21): "what data EXISTS in the corpus" — the bars
+   deployment-ui renders. Surfacing both lets the operator spot divergence
+   (a cell captured-in-manifest but run-skipped = config-unmappable, vs no-data).
 
-Alerts are BEST-EFFORT: if the alerting-service is unreachable the endpoint still
-returns the run data-quality with ``alerts: []`` + ``alerts_source: "unavailable"``
-— a missing alert stream never fails the whole panel.
+Both deployment-api reads are BEST-EFFORT: an unreachable deployment-api degrades
+to ``alerts: []`` + ``manifest_coverage: {}`` with an ``*_source: "unavailable"``
+flag — a missing SSOT feed never fails the whole panel.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated, cast
+from typing import Annotated
 
-import httpx
 from fastapi import APIRouter, Depends
 from unified_trading_library import AuthContext, create_api_auth
 
+from client_reporting_api.core import deployment_api_client
 from client_reporting_api.core.data_quality import compute_data_quality
 from client_reporting_api.core.entitlement import enforce_entitlement
 
@@ -31,14 +36,6 @@ router = APIRouter(prefix="/api/v1/clients", tags=["data-quality"])
 
 _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
-
-#: deployment-api base URL — the SAME unified alert ledger the deployment-ui
-#: monitoring pane shows (CI/CD + vm_down + consolidator_down + worker_liveness +
-#: git_health), reachable + public on Cloud Run. The legacy k8s ``alerting-service``
-#: DNS did NOT resolve from Cloud Run (→ always "unavailable"). Prod default; the
-#: per-env override is the P11.20 follow-up (an ``alerting_service_url`` /
-#: ``deployment_api_url`` field on ``UnifiedCloudConfig`` — blocked on a UTL change).
-_DEPLOYMENT_API_URL = "https://uts-shared-deployment-api-cldtjniqvq-an.a.run.app"
 
 #: deployment-api severity tokens → the UI DataQualityAlert closed set.
 _SEVERITY_MAP = {
@@ -78,27 +75,37 @@ def _map_alert(entry: dict[str, object], idx: int) -> dict[str, object]:
 
 
 def _live_alerts() -> tuple[list[dict[str, object]], str]:
-    """Best-effort fetch of live VM/infra alerts; ``([], "unavailable")`` on failure.
+    """Live VM/infra alerts from the deployment-api SSOT, mapped to the UI shape."""
+    raw, source = deployment_api_client.get_unified_alerts()
+    return [_map_alert(e, i) for i, e in enumerate(raw)], source
 
-    Reads the deployment-api unified alert ledger (same source the deployment-ui
-    monitoring pane shows) so missing/incomplete-data + VM/infra events surface on
-    the paper-trading panel. Any transport/HTTP/shape error degrades to an honest
-    empty list + ``alerts_source="unavailable"`` — never 500s the whole panel.
+
+def _manifest_coverage() -> tuple[list[dict[str, object]], str]:
+    """Corpus manifest 4-state per asset_group from the deployment-api data-status SSOT.
+
+    Returns a LIST of rows (the UI contract — never a dict, which would crash a
+    ``.map``) sorted by asset_group, each carrying the 4-state counts +
+    ``coverage_pct`` exactly as the deployment-ui data-status bars show them.
     """
-    try:
-        resp = httpx.get(f"{_DEPLOYMENT_API_URL}/api/alerts", timeout=5.0)
-        resp.raise_for_status()
-        payload = cast(dict[str, object], resp.json())
-        raw = cast(list[dict[str, object]], payload.get("alerts", []))
-        return [_map_alert(e, i) for i, e in enumerate(raw)], "deployment-api"
-    except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("data-quality: deployment-api alerts unavailable: %s", exc)
-        return [], "unavailable"
+    by_ag, source = deployment_api_client.get_data_status_coverage()
+    rows: list[dict[str, object]] = [
+        {
+            "asset_group": ag,
+            "captured": v.get("captured", 0),
+            "empty_confirmed": v.get("empty_confirmed", 0),
+            "attempted_failed": v.get("attempted_failed", 0),
+            "expected_unattempted": v.get("expected_unattempted", 0),
+            "total": v.get("total", 0),
+            "coverage_pct": v.get("coverage_pct", 0),
+        }
+        for ag, v in sorted(by_ag.items())
+    ]
+    return rows, source
 
 
 @router.get("/{client_id}/data-quality")
 def get_data_quality(client_id: str, auth: AuthDep) -> dict[str, object]:
-    """Return the canonical paper run's honest coverage + skipped specs + live alerts.
+    """Return the run lens + deployment-api SSOT lens (alerts + corpus coverage).
 
     Single-client scope (``enforce_entitlement`` — funds/data never cross clients).
     """
@@ -106,6 +113,7 @@ def get_data_quality(client_id: str, auth: AuthDep) -> dict[str, object]:
 
     dq = compute_data_quality(client_id)
     alerts, alerts_source = _live_alerts()
+    manifest_coverage, manifest_source = _manifest_coverage()
 
     return {
         "run_id": dq["run_id"],
@@ -114,5 +122,9 @@ def get_data_quality(client_id: str, auth: AuthDep) -> dict[str, object]:
         "note": dq["note"],
         "alerts": alerts,
         "alerts_source": alerts_source,
+        # P11.21 — corpus manifest 4-state per asset_group, the deployment-api
+        # data-status SSOT the deployment-ui bars render (run lens vs corpus lens).
+        "manifest_coverage": manifest_coverage,
+        "manifest_source": manifest_source,
         "generated_utc": datetime.now(UTC).isoformat(),
     }
