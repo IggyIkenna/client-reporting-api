@@ -691,6 +691,34 @@ def _window_days(run_id: str | None, client_id: str) -> tuple[Decimal, tuple[str
     return (days if days > 0 else _DEFAULT_WINDOW_DAYS), strategy_ids
 
 
+def _per_strategy_breakdown_for_run(client_id: str, as_of: date | None) -> tuple[dict[str, object], str | None]:
+    """Resolve the canonical run + fold its FULL declared book into the per-strategy breakdown.
+
+    The shared source for the ``/per-strategy`` / ``/bps-pnl`` / ``/roe`` routes:
+    resolves THE canonical run, reads its InstructionLedger ``LedgerRow`` tape
+    (strategy-keyed, P11.9) + PricingLedger marks, takes the manifest's full
+    ``strategy_ids`` (the whole declared book — e.g. all 145) and folds them via
+    :func:`per_strategy_breakdown` so EVERY declared strategy appears (ledger-derived
+    where it has activity, honest zero where it has none) — not just the venue-mapped /
+    attribution-parquet subset. Returns ``(breakdown, run_id)``; ``run_id`` is ``None``
+    (and the breakdown is honestly empty/zero) when the client has no run yet.
+    """
+    run_id = resolve_canonical_run(client_id, as_of_date=as_of)
+    rows, instrument_key_by_row_id = read_ledger_rows(client_id, as_of_date=as_of)
+    marks = read_marks(client_id, run_id) if run_id else {}
+    window_days, strategy_ids = _window_days(run_id, client_id)
+    breakdown = per_strategy_breakdown(
+        rows,
+        strategy_ids,
+        marks=marks,
+        as_of=datetime.now(UTC),
+        share_class_of={},
+        instrument_key_by_row_id=instrument_key_by_row_id,
+        window_days=window_days,
+    )
+    return breakdown, run_id
+
+
 @router.get("/net-views")
 def get_client_net_views(
     client_id: str,
@@ -727,10 +755,7 @@ def get_client_per_strategy(
     (``None`` bps/ROE) when a denominator is 0.
     """
     enforce_entitlement(auth, client_id)
-    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
-    _resolved_run, fills = read_canonical_run_fills(client_id, as_of_date=as_of)
-    window_days, strategy_ids = _window_days(run_id, client_id)
-    breakdown = per_strategy_breakdown(positions, fills, strategy_ids, window_days=window_days)
+    breakdown, run_id = _per_strategy_breakdown_for_run(client_id, as_of)
     breakdown["client_id"] = client_id
     breakdown["run_id"] = run_id
     return breakdown
@@ -749,10 +774,7 @@ def get_client_bps_pnl(
     Honest ``None`` bps when a strategy has zero turnover.
     """
     enforce_entitlement(auth, client_id)
-    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
-    _resolved_run, fills = read_canonical_run_fills(client_id, as_of_date=as_of)
-    window_days, strategy_ids = _window_days(run_id, client_id)
-    breakdown = per_strategy_breakdown(positions, fills, strategy_ids, window_days=window_days)
+    breakdown, run_id = _per_strategy_breakdown_for_run(client_id, as_of)
     strategies = breakdown["strategies"]
     overall = breakdown["overall"]
     per = [
@@ -790,10 +812,7 @@ def get_client_roe(
     derives from. Honest ``None`` ROE when equity is 0 / the window is undefined.
     """
     enforce_entitlement(auth, client_id)
-    run_id, positions = read_canonical_positions(client_id, as_of_date=as_of)
-    _resolved_run, fills = read_canonical_run_fills(client_id, as_of_date=as_of)
-    window_days, strategy_ids = _window_days(run_id, client_id)
-    breakdown = per_strategy_breakdown(positions, fills, strategy_ids, window_days=window_days)
+    breakdown, run_id = _per_strategy_breakdown_for_run(client_id, as_of)
     strategies = breakdown["strategies"]
     overall = breakdown["overall"]
     per = [
