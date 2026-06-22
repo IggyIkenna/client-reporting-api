@@ -231,6 +231,15 @@ class _FakeResp:
 
 
 class TestDeploymentApiClient:
+    def test_base_url_reads_unified_cloud_config(self) -> None:
+        # P11.21-polish (A4): the base URL is the typed UnifiedCloudConfig
+        # `deployment_api_url` field (per-env; no raw env read / no hardcoded constant).
+        import client_reporting_api.core.deployment_api_client as dac
+        from client_reporting_api.config import get_config
+
+        assert dac._base_url() == get_config().deployment_api_url
+        assert dac._base_url().startswith("http")
+
     def test_alerts_ok_returns_list_and_source(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.core.deployment_api_client as dac
 
