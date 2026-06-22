@@ -27,6 +27,7 @@ from client_reporting_api.api.routes.allocators import router as allocators_rout
 from client_reporting_api.api.routes.attribution import router as attribution_router
 from client_reporting_api.api.routes.clients import router as clients_router
 from client_reporting_api.api.routes.compliance import router as compliance_router
+from client_reporting_api.api.routes.data_quality import router as data_quality_router
 from client_reporting_api.api.routes.documents import router as documents_router
 from client_reporting_api.api.routes.docusign import router as docusign_router
 from client_reporting_api.api.routes.emergency import router as emergency_router
@@ -178,6 +179,7 @@ _authenticated_router.include_router(invoices_router)
 _authenticated_router.include_router(compliance_router)
 _authenticated_router.include_router(docusign_router)
 _authenticated_router.include_router(clients_router)
+_authenticated_router.include_router(data_quality_router)
 _authenticated_router.include_router(performance_router)
 _authenticated_router.include_router(trades_router)
 _authenticated_router.include_router(exports_router)
