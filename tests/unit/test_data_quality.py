@@ -213,7 +213,7 @@ def _patch_dq_payload(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class _FakeResp:
-    """Minimal httpx.Response stand-in carrying a deployment-api alerts payload."""
+    """Minimal httpx.Response stand-in carrying a deployment-api JSON payload."""
 
     def __init__(self, payload: dict[str, object]) -> None:
         self._payload = payload
@@ -225,28 +225,84 @@ class _FakeResp:
         return self._payload
 
 
+# ---------------------------------------------------------------------------
+# core.deployment_api_client — the SSOT HTTP client (P11.20 alerts + P11.21 coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestDeploymentApiClient:
+    def test_alerts_ok_returns_list_and_source(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.deployment_api_client as dac
+
+        payload: dict[str, object] = {"alerts": [{"kind": "vm_down"}], "streams": []}
+        monkeypatch.setattr(dac.httpx, "get", lambda url, timeout=5.0: _FakeResp(payload))
+        alerts, source = dac.get_unified_alerts()
+        assert source == "deployment-api"
+        assert alerts == [{"kind": "vm_down"}]
+
+    def test_alerts_unreachable_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.deployment_api_client as dac
+
+        def _boom(url: str, timeout: float = 5.0) -> _FakeResp:
+            raise httpx.ConnectError("down")
+
+        monkeypatch.setattr(dac.httpx, "get", _boom)
+        alerts, source = dac.get_unified_alerts()
+        assert (alerts, source) == ([], "unavailable")
+
+    def test_coverage_ok_returns_by_asset_group(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.deployment_api_client as dac
+
+        payload: dict[str, object] = {
+            "by_asset_group": {
+                "cefi": {"captured": 716159, "total": 35829048, "coverage_pct": 11.68},
+            }
+        }
+        monkeypatch.setattr(dac.httpx, "get", lambda url, timeout=5.0: _FakeResp(payload))
+        by_ag, source = dac.get_data_status_coverage()
+        assert source == "deployment-api"
+        assert by_ag["cefi"]["coverage_pct"] == 11.68
+
+    def test_coverage_unreachable_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import client_reporting_api.core.deployment_api_client as dac
+
+        def _boom(url: str, timeout: float = 5.0) -> _FakeResp:
+            raise httpx.ConnectError("down")
+
+        monkeypatch.setattr(dac.httpx, "get", _boom)
+        by_ag, source = dac.get_data_status_coverage()
+        assert (by_ag, source) == ({}, "unavailable")
+
+
 class TestDataQualityRoute:
     def test_alerts_merged_when_deployment_api_up(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.api.routes.data_quality as route
 
         _patch_dq_payload(monkeypatch)
-        # deployment-api /api/alerts returns an OBJECT {alerts:[AlertEntryDict], streams:[]};
-        # the route extracts .alerts and MAPS each entry to the UI DataQualityAlert shape.
-        payload: dict[str, object] = {
-            "alerts": [
-                {
-                    "kind": "vm_down",
-                    "timestamp": "2026-06-22T00:00:00Z",
-                    "repo": "mtds",
-                    "workflow_name": "capture",
-                    "severity": "CRITICAL",
-                    "message": "VM down — capture halted",
-                    "alert_class": "vm_down",
-                }
-            ],
-            "streams": [],
-        }
-        monkeypatch.setattr(route.httpx, "get", lambda url, timeout=5.0: _FakeResp(payload))
+        # The route calls the deployment_api_client; patch the client functions.
+        monkeypatch.setattr(
+            route.deployment_api_client,
+            "get_unified_alerts",
+            lambda: (
+                [
+                    {
+                        "kind": "vm_down",
+                        "timestamp": "2026-06-22T00:00:00Z",
+                        "repo": "mtds",
+                        "workflow_name": "capture",
+                        "severity": "CRITICAL",
+                        "message": "VM down — capture halted",
+                        "alert_class": "vm_down",
+                    }
+                ],
+                "deployment-api",
+            ),
+        )
+        monkeypatch.setattr(
+            route.deployment_api_client,
+            "get_data_status_coverage",
+            lambda: ({"cefi": {"captured": 5, "total": 10, "coverage_pct": 50.0}}, "deployment-api"),
+        )
 
         out = route.get_data_quality("firm", auth=object())  # type: ignore[arg-type]
         assert out["run_id"] == "paper-r"
@@ -262,21 +318,35 @@ class TestDataQualityRoute:
         assert a["title"] == "capture"
         assert a["source"] == "vm_down"
         assert a["detail"] == "VM down — capture halted"
+        # P11.21 — manifest_coverage from the deployment-api SSOT (a LIST, never a dict)
+        mc = out["manifest_coverage"]
+        assert out["manifest_source"] == "deployment-api"
+        assert isinstance(mc, list) and len(mc) == 1
+        assert mc[0]["asset_group"] == "cefi"
+        assert mc[0]["coverage_pct"] == 50.0
+        assert set(mc[0].keys()) == {
+            "asset_group",
+            "captured",
+            "empty_confirmed",
+            "attempted_failed",
+            "expected_unattempted",
+            "total",
+            "coverage_pct",
+        }
         # generated_utc is a parseable UTC ISO timestamp
         datetime.fromisoformat(str(out["generated_utc"]))
 
-    def test_deployment_api_down_still_200_with_empty_alerts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_deployment_api_down_still_200(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.api.routes.data_quality as route
 
         _patch_dq_payload(monkeypatch)
-
-        def _boom(url: str, timeout: float = 5.0) -> _FakeResp:
-            raise httpx.ConnectError("deployment-api unreachable")
-
-        monkeypatch.setattr(route.httpx, "get", _boom)
+        monkeypatch.setattr(route.deployment_api_client, "get_unified_alerts", lambda: ([], "unavailable"))
+        monkeypatch.setattr(route.deployment_api_client, "get_data_status_coverage", lambda: ({}, "unavailable"))
 
         out = route.get_data_quality("firm", auth=object())  # type: ignore[arg-type]
-        # the run data-quality survives — only alerts degrade
+        # the run data-quality survives — only the deployment-api lenses degrade
         assert out["coverage"]["skipped"] == 4
         assert out["alerts"] == []
         assert out["alerts_source"] == "unavailable"
+        assert out["manifest_coverage"] == []
+        assert out["manifest_source"] == "unavailable"
