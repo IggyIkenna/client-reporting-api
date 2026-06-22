@@ -2,10 +2,13 @@
 
 Covers ``client_reporting_api.core.portfolio_metrics`` — the pure metric folds the
 ``/net-views`` / ``/per-strategy`` / ``/bps-pnl`` / ``/roe`` / ``/backtest`` routes
-render. Fixtures mirror the live ``firm-paper-determinism`` 2-strategy carry run:
-ETH legs (UNISWAP_V3 / LIDO / DERIBIT) → the lido strategy, SOL legs (JUPITER /
-JITO / DRIFT) → the jito strategy. Assertions are EXACT Decimal strings / typed
-honest-None — never fabricated 0.
+render. ``per_strategy_breakdown`` is fed the strategy-keyed InstructionLedger
+``LedgerRow`` tape (P11.9 — the row ``strategy_id`` is authoritative) plus the
+manifest ``strategy_ids`` enumeration universe, mirroring the live
+``firm-paper-determinism`` run: it returns EVERY declared strategy (real numbers where
+the tape has activity, honest zeros where it does not), sums reconcile to ``overall``
+with no double-count, and ``net_views`` keeps its venue-mapped fixtures. Assertions are
+EXACT Decimal strings / typed honest-None — never fabricated 0.
 
 SSOT: plans/active/citadel_paper_batch_live_reconciliation_2026_06_19.md Phase 10.
 """
@@ -15,8 +18,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from unified_api_contracts import LedgerAssetClass, PositionLedgerRow
-from unified_api_contracts.internal import TradeFillRecord
+from unified_api_contracts import EventOrigin, EventType, LedgerAssetClass, LedgerRow, PositionLedgerRow
 
 from client_reporting_api.core.portfolio_metrics import (
     backtest_surface,
@@ -61,20 +63,37 @@ def _pos(
     )
 
 
-def _fill(*, venue: str, instrument_key: str, side: str, qty: Decimal, price: Decimal) -> TradeFillRecord:
-    return TradeFillRecord(
-        trade_key=f"{instrument_key}|{side}|{qty}",
-        instrument_key=instrument_key,
-        strategy_instruction_id="inst_CARRY_STAKED_BASIS_00000001",
-        tick_timestamp=_AS_OF,
+def _trade(
+    *,
+    row_id: str,
+    strategy_id: str,
+    venue: str,
+    asset_canonical_id: str,
+    asset_class: LedgerAssetClass,
+    delta: Decimal,
+    price: Decimal,
+    ts: datetime = _AS_OF,
+) -> LedgerRow:
+    """A strategy-keyed TRADE ``LedgerRow`` (P11.9: ``strategy_id`` is authoritative)."""
+    return LedgerRow(
+        event_id=f"evt-{row_id}",
+        row_id=row_id,
+        event_origin=EventOrigin.INSTRUCTION,
+        event_type=EventType.TRADE,
+        strategy_id=strategy_id,
+        trade_id=f"{venue}:SPOT:{asset_canonical_id}|inst_{row_id}|{ts.isoformat()}",
+        timestamp_utc=ts,
+        asset_group="defi",
         venue=venue,
-        side=side,
-        qty=qty,
-        fill_price=price,
+        account_id="acct",
+        client_id="client-A",
+        asset_symbol=asset_canonical_id,
+        asset_canonical_id=asset_canonical_id,
+        asset_class=asset_class,
+        delta=delta,
+        price=price,
+        quote_currency="USDC",
         fees_in_quote=Decimal(0),
-        fill_model="BENCHMARK",
-        correlation_id="corr-1",
-        client_order_id="ord-1",
     )
 
 
@@ -174,82 +193,168 @@ def test_net_views_staking_leg_valued_at_per_asset_usd_price() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_per_strategy_breakdown_groups_by_venue_and_computes_bps_roe() -> None:
-    positions = [
-        _pos(
+def _two_strategy_tape() -> list[LedgerRow]:
+    """ETH strategy: BUY 100 @3000 (UNISWAP_V3). SOL strategy: BUY 10 @150 (JITO).
+
+    Strategy-keyed via the row ``strategy_id`` (P11.9) — NOT venue-mapped. Each is a
+    single open BUY leg, so avg-cost realised is 0; total = unrealized (0, no marks).
+    """
+    return [
+        _trade(
+            row_id="eth1",
+            strategy_id=_ETH_SID,
             venue="UNISWAP_V3",
-            instrument_key="UNISWAP_V3:DEX_POOL:ETH",
             asset_canonical_id="ETH",
             asset_class=LedgerAssetClass.SPOT_TOKEN,
-            net_qty=Decimal(100),
-            mark=Decimal(3000),
-            realized=Decimal(50),
-            unrealized=Decimal(0),
-        ),
-        _pos(
-            venue="JITO",
-            instrument_key="JITO:STAKING:SOL",
-            asset_canonical_id="SOL",
-            asset_class=LedgerAssetClass.LST,
-            net_qty=Decimal(10),
-            mark=Decimal(150),
-            realized=Decimal(0),
-            unrealized=Decimal(0),
-        ),
-    ]
-    fills = [
-        _fill(
-            venue="UNISWAP_V3",
-            instrument_key="UNISWAP_V3:DEX_POOL:ETH",
-            side="BUY",
-            qty=Decimal(100),
+            delta=Decimal(100),
             price=Decimal(3000),
         ),
-        _fill(venue="JITO", instrument_key="JITO:STAKING:SOL", side="BUY", qty=Decimal(10), price=Decimal(150)),
+        _trade(
+            row_id="sol1",
+            strategy_id=_SOL_SID,
+            venue="JITO",
+            asset_canonical_id="SOL",
+            asset_class=LedgerAssetClass.LST,
+            delta=Decimal(10),
+            price=Decimal(150),
+        ),
     ]
-    breakdown = per_strategy_breakdown(positions, fills, _STRATEGY_IDS, window_days=Decimal(6))
+
+
+def _breakdown(rows: list[LedgerRow], strategy_ids: tuple[str, ...], window_days: Decimal) -> dict[str, object]:
+    return per_strategy_breakdown(
+        rows,
+        strategy_ids,
+        marks={},
+        as_of=_AS_OF,
+        share_class_of={},
+        instrument_key_by_row_id={r.row_id: r.trade_id.split("|")[0] for r in rows if r.trade_id},
+        window_days=window_days,
+    )
+
+
+def test_per_strategy_breakdown_keys_by_row_strategy_id_and_computes_turnover() -> None:
+    breakdown = _breakdown(_two_strategy_tape(), _STRATEGY_IDS, Decimal(6))
     by_sid = {s["strategy_id"]: s for s in breakdown["strategies"]}
 
     eth = by_sid[_ETH_SID]
     assert eth["trade_count"] == 1
-    assert eth["turnover_usd"] == "300000"  # 100 * 3000
-    assert eth["total_pnl"] == "50"
-    # bps = 50 / 300000 * 1e4 = 1.666...
-    assert eth["bps_pnl_on_turnover"] == str(Decimal(50) / Decimal(300000) * Decimal(10000))
-    # ROE = (50/300000) * (365/6) * 100
-    assert eth["roe_annualised_pct"] == str(Decimal(50) / Decimal(300000) * (Decimal(365) / Decimal(6)) * Decimal(100))
+    assert eth["turnover_usd"] == "300000"  # |100| * 3000
+    # single open BUY leg → realised 0 (avg-cost), no marks → unrealized 0 → total 0.
+    assert eth["total_pnl"] == "0"
+    # zero pnl over non-zero turnover → 0 bps (not None — turnover exists).
+    assert eth["bps_pnl_on_turnover"] == str(Decimal(0) / Decimal(300000) * Decimal(10000))
 
     sol = by_sid[_SOL_SID]
-    assert sol["total_pnl"] == "0"
-    # zero pnl over non-zero turnover → 0 bps (not None — turnover exists). Decimal
-    # preserves the exponent of 0/1500*1e4 → the string is the canonical "0E+4".
-    assert sol["bps_pnl_on_turnover"] == str(Decimal(0) / Decimal(1500) * Decimal(10000))
+    assert sol["trade_count"] == 1
+    assert sol["turnover_usd"] == "1500"  # |10| * 150
 
     overall = breakdown["overall"]
-    assert overall["total_pnl"] == "50"
+    assert overall["trade_count"] == 2
     assert overall["turnover_usd"] == "301500"  # 300000 + 1500
 
 
-def test_per_strategy_breakdown_zero_turnover_is_honest_none_bps() -> None:
-    # A position with no fills → turnover 0 → bps None (honest, no division).
-    positions = [
-        _pos(
-            venue="UNISWAP_V3",
-            instrument_key="UNISWAP_V3:DEX_POOL:ETH",
+def test_per_strategy_breakdown_enumerates_full_manifest_book_with_honest_zeros() -> None:
+    """N manifest strategy_ids, ledger activity for only K (<N) → N rows returned.
+
+    The N-K declared-but-idle strategies show HONEST zeros (0 trades / 0 P&L), are
+    NEVER dropped; the K active ones show real ledger-derived numbers. Sums reconcile
+    and there is no double-count (each ledger row belongs to exactly one strategy).
+    """
+    idle_a = "CARRY_BASIS_PERP@hyperliquid-eth-1h-usdc-v3-prod"
+    idle_b = "ARBITRAGE_PRICE_DISPERSION@uniswapv3-linkweth-spot-usdc-v2-prod"
+    # N = 4 manifest ids (+ the bare archetype, which is NOT a strategy and is excluded);
+    # K = 2 have tape activity (_ETH_SID, _SOL_SID).
+    manifest = ("CARRY_STAKED_BASIS", _ETH_SID, _SOL_SID, idle_a, idle_b)
+    breakdown = _breakdown(_two_strategy_tape(), manifest, Decimal(6))
+    strategies = breakdown["strategies"]
+    ids = [s["strategy_id"] for s in strategies]
+
+    # All 4 @-qualified manifest strategies appear (the bare archetype excluded) → N rows.
+    assert set(ids) == {_ETH_SID, _SOL_SID, idle_a, idle_b}
+    assert "CARRY_STAKED_BASIS" not in ids  # bare archetype is NOT a strategy
+    assert len(ids) == len(set(ids))  # no duplicate strategy rows
+
+    by_sid = {s["strategy_id"]: s for s in strategies}
+    # The N-K idle strategies are present with HONEST zeros (not dropped).
+    for idle in (idle_a, idle_b):
+        assert by_sid[idle]["trade_count"] == 0
+        assert by_sid[idle]["position_count"] == 0
+        assert by_sid[idle]["realized_pnl"] == "0"
+        assert by_sid[idle]["total_pnl"] == "0"
+        assert by_sid[idle]["bps_pnl_on_turnover"] is None  # 0 turnover → honest None
+    # The K active strategies carry their real ledger-derived numbers.
+    assert by_sid[_ETH_SID]["trade_count"] == 1
+    assert by_sid[_SOL_SID]["trade_count"] == 1
+
+    # Sums reconcile to overall with NO double-count (one row → one strategy partition).
+    overall = breakdown["overall"]
+    assert sum(int(s["trade_count"]) for s in strategies) == overall["trade_count"] == 2
+    assert sum(Decimal(str(s["turnover_usd"])) for s in strategies) == Decimal(str(overall["turnover_usd"]))
+    assert sum(Decimal(str(s["realized_pnl"])) for s in strategies) == Decimal(str(overall["realized_pnl"]))
+    assert sum(Decimal(str(s["unrealized_pnl"])) for s in strategies) == Decimal(str(overall["unrealized_pnl"]))
+
+
+def test_per_strategy_breakdown_includes_tape_only_strategy_not_in_manifest() -> None:
+    """A strategy on the tape but absent from the manifest is still enumerated (UNION)."""
+    tape_only = "CARRY_STAKED_BASIS@rocketpool-curve-okx-f100-usdc-1h-usdc-v2-prod"
+    rows = [
+        *_two_strategy_tape(),
+        _trade(
+            row_id="rp1",
+            strategy_id=tape_only,
+            venue="ROCKETPOOL",
             asset_canonical_id="ETH",
-            asset_class=LedgerAssetClass.SPOT_TOKEN,
-            net_qty=Decimal(100),
-            mark=Decimal(3000),
-            realized=Decimal(50),
+            asset_class=LedgerAssetClass.LST,
+            delta=Decimal(5),
+            price=Decimal(3000),
         ),
     ]
-    breakdown = per_strategy_breakdown(positions, [], _STRATEGY_IDS, window_days=Decimal(6))
-    eth = breakdown["strategies"][0]
+    # Manifest does NOT declare tape_only — UNION must still surface it.
+    breakdown = _breakdown(rows, (_ETH_SID, _SOL_SID), Decimal(6))
+    ids = {s["strategy_id"] for s in breakdown["strategies"]}
+    assert tape_only in ids
+    by_sid = {s["strategy_id"]: s for s in breakdown["strategies"]}
+    assert by_sid[tape_only]["trade_count"] == 1
+    assert by_sid[tape_only]["turnover_usd"] == "15000"  # |5| * 3000
+
+
+def test_per_strategy_breakdown_zero_turnover_is_honest_none_bps() -> None:
+    # A passive-only strategy (no TRADE rows) → turnover 0 → bps None (honest, no division).
+    passive = LedgerRow(
+        event_id="evt-f1",
+        row_id="f1",
+        event_origin=EventOrigin.PASSIVE,
+        event_type=EventType.FUNDING_ACCRUAL,
+        strategy_id=_ETH_SID,
+        timestamp_utc=_AS_OF,
+        asset_group="defi",
+        venue="DERIBIT",
+        account_id="acct",
+        client_id="client-A",
+        asset_symbol="ETH-PERP",
+        asset_canonical_id="ETH-PERP",
+        asset_class=LedgerAssetClass.PERP,
+        delta=Decimal(50),
+        quote_currency="USDC",
+    )
+    breakdown = per_strategy_breakdown(
+        [passive],
+        _STRATEGY_IDS,
+        marks={},
+        as_of=_AS_OF,
+        share_class_of={},
+        window_days=Decimal(6),
+    )
+    by_sid = {s["strategy_id"]: s for s in breakdown["strategies"]}
+    eth = by_sid[_ETH_SID]
+    assert eth["trade_count"] == 0
+    assert eth["realized_pnl"] == "50"  # passive accrual flows to realised
     assert eth["bps_pnl_on_turnover"] is None  # turnover 0 → undefined bps
 
 
 def test_per_strategy_breakdown_empty_is_honest_zero() -> None:
-    breakdown = per_strategy_breakdown([], [], _STRATEGY_IDS, window_days=Decimal(6))
+    breakdown = per_strategy_breakdown([], (), marks={}, as_of=_AS_OF, share_class_of={}, window_days=Decimal(6))
     assert breakdown["strategies"] == []
     assert breakdown["overall"]["total_pnl"] == "0"
     assert breakdown["overall"]["bps_pnl_on_turnover"] is None
