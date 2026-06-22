@@ -23,13 +23,18 @@ Surfaces (all run-scoped, honest typed-empty where a source is absent):
   tier + the ``RunManifest.fill_model``). Honest PENDING when the canonical run has
   no batch rerun yet.
 
-**strategy_id derivation (canonical, NOT a hand map):** every fill/position carries
-its ``venue``; the ``RunManifest.strategy_ids`` carries the ``@``-qualified ids whose
-slug embeds the venue set (``…@lido-uniswapv3-deribit…`` ⊃ {LIDO, UNISWAP_V3,
-DERIBIT}; ``…@jito-jupiter-drift…`` ⊃ {JITO, JUPITER, DRIFT}). :func:`strategy_id_for_venue`
-matches a venue to the single manifest strategy whose slug contains that venue's
-normalised token. Falls back to the bare ``CARRY_STAKED_BASIS`` (or ``"unknown"``)
-when no ``@``-qualified id covers the venue — never fabricated.
+**strategy_id derivation (canonical, NOT a hand map):** every ``LedgerRow`` of the
+run's InstructionLedger tape carries its OWN ``@``-qualified ``strategy_id`` (P11.9 —
+the authoritative key), so :func:`per_strategy_breakdown` partitions the tape by
+``row.strategy_id`` and folds EACH partition into its own ``PositionLedger`` — the
+per-strategy numbers are real ledger-derived figures, not a venue-collapsed guess.
+The enumeration UNIVERSE is the ``RunManifest.strategy_ids`` (the full canonical book
+— every strategy the run declared, e.g. all 145) UNION the strategy_ids actually
+present on the tape: a strategy with ledger activity shows its real numbers, one with
+none shows HONEST zeros, and none is ever dropped (the prior implementation enumerated
+only the attribution-parquet / venue-mapped subset → the book looked tiny). The legacy
+:func:`strategy_id_for_venue` (venue → ``@``-qualified id) is retained ONLY for the
+``/transfers`` panel's pre-P11.9 fallback, never for per-strategy enumeration.
 
 SSOT: codex/09-strategy/operational/pnl-attribution.md (bps/ROE + multi-dim attr).
 Plan: plans/active/citadel_paper_batch_live_reconciliation_2026_06_19.md Phase 10.
@@ -38,12 +43,20 @@ Plan: plans/active/citadel_paper_batch_live_reconciliation_2026_06_19.md Phase 1
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from unified_api_contracts import PositionLedgerRow
-from unified_api_contracts.internal import TradeFillRecord
+from unified_api_contracts import EventType, LedgerRow, PositionLedgerRow
+from unified_trading_library.ledger.materialize import (  # noqa: qg-deep-import
+    materialize_position_ledger,  # not re-exported at UTL top level
+)
+
+#: Strategy bucket label for a ``LedgerRow`` carrying no ``strategy_id`` (a
+#: non-strategy / pre-P11.9 row). Kept distinct from a real strategy id so the
+#: per-strategy enumeration never silently folds it into a strategy.
+_UNATTRIBUTED_STRATEGY = "unattributed"
 
 #: Days per year used for ROE annualisation (calendar, simple linear scaling of the
 #: run-window return — NOT compounded; the run window is days-to-weeks).
@@ -198,9 +211,15 @@ def net_views(positions: Sequence[PositionLedgerRow]) -> dict[str, object]:
     }
 
 
-def _signed_notional(fill: TradeFillRecord) -> Decimal:
-    """|qty| x fill_price — the absolute traded notional of one fill (turnover unit)."""
-    return abs(Decimal(str(fill.qty))) * Decimal(str(fill.fill_price))
+def _trade_notional(row: LedgerRow) -> Decimal:
+    """|delta| x price — the absolute traded notional of one TRADE ``LedgerRow`` (turnover unit).
+
+    ``delta`` is the signed BASE quantity; ``price`` the per-unit quote price. A row
+    with no ``price`` (should not happen on a TRADE row) contributes 0 — never a guess.
+    """
+    if row.price is None:
+        return Decimal(0)
+    return abs(row.delta) * row.price
 
 
 def _bps_on_turnover(total_pnl: Decimal, turnover: Decimal) -> str | None:
@@ -223,72 +242,169 @@ def _annualised_roe(total_pnl: Decimal, equity: Decimal, window_days: Decimal) -
     return str(period_return * (_DAYS_PER_YEAR / window_days) * Decimal("100"))
 
 
+def _row_strategy_id(row: LedgerRow) -> str:
+    """The row's canonical ``strategy_id`` (or ``_UNATTRIBUTED_STRATEGY`` when ``None``)."""
+    return row.strategy_id or _UNATTRIBUTED_STRATEGY
+
+
+def _enumerate_strategy_universe(
+    manifest_strategy_ids: Sequence[str],
+    rows: Sequence[LedgerRow],
+) -> list[str]:
+    """The FULL per-strategy enumeration: manifest ``strategy_ids`` union with tape strategy_ids.
+
+    The universe is the canonical run's declared book (``RunManifest.strategy_ids`` —
+    every strategy the run launched, e.g. all 145) UNION the distinct ``strategy_id``s
+    actually stamped on the InstructionLedger tape — so a strategy declared-but-idle
+    AND a strategy that traded but somehow wasn't in the manifest both appear, and none
+    is dropped. Manifest order first (deterministic, the operator's declared order),
+    then any tape-only strategy_ids in first-seen order. The bare archetype (a
+    ``strategy_id`` without ``@``) is NOT a strategy and is excluded from the manifest
+    contribution (manifest ids are all ``@``-qualified); a genuinely-unattributed tape
+    row surfaces only via the ``unattributed`` bucket when present on the tape.
+    """
+    seen: OrderedDict[str, None] = OrderedDict()
+    for sid in manifest_strategy_ids:
+        if "@" in sid:  # the bare archetype is not a strategy
+            seen.setdefault(sid, None)
+    for row in rows:
+        seen.setdefault(_row_strategy_id(row), None)
+    return list(seen.keys())
+
+
+@dataclass(frozen=True)
+class _StrategyMetrics:
+    """One strategy's (or the overall roll-up's) raw Decimal/int metrics before serialisation.
+
+    Kept as typed Decimals/ints so the ``overall`` roll-up can SUM the per-strategy
+    folds exactly (no string round-trip) and recompute bps/ROE from the aggregate.
+    """
+
+    trade_count: int
+    position_count: int
+    turnover: Decimal
+    gross: Decimal
+    realized: Decimal
+    unrealized: Decimal
+
+
+def _serialize_metrics(m: _StrategyMetrics, window_days: Decimal) -> dict[str, object]:
+    """Project a :class:`_StrategyMetrics` to the API string/typed-None metric dict."""
+    total = m.realized + m.unrealized
+    return {
+        "trade_count": m.trade_count,
+        "position_count": m.position_count,
+        "turnover_usd": str(m.turnover),
+        "gross_usd": str(m.gross),
+        "realized_pnl": str(m.realized),
+        "unrealized_pnl": str(m.unrealized),
+        "total_pnl": str(total),
+        "bps_pnl_on_turnover": _bps_on_turnover(total, m.turnover),
+        "roe_annualised_pct": _annualised_roe(total, m.gross, window_days),
+    }
+
+
+def _sum_metrics(metrics: Iterable[_StrategyMetrics]) -> _StrategyMetrics:
+    """Sum per-strategy metrics into the overall roll-up (double-count-free aggregate)."""
+    trade_count = position_count = 0
+    turnover = gross = realized = unrealized = Decimal(0)
+    for m in metrics:
+        trade_count += m.trade_count
+        position_count += m.position_count
+        turnover += m.turnover
+        gross += m.gross
+        realized += m.realized
+        unrealized += m.unrealized
+    return _StrategyMetrics(
+        trade_count=trade_count,
+        position_count=position_count,
+        turnover=turnover,
+        gross=gross,
+        realized=realized,
+        unrealized=unrealized,
+    )
+
+
 def per_strategy_breakdown(
-    positions: Sequence[PositionLedgerRow],
-    fills: Sequence[TradeFillRecord],
+    rows: Sequence[LedgerRow],
     strategy_ids: Sequence[str],
     *,
+    marks: Mapping[str, Decimal],
+    as_of: datetime,
+    share_class_of: Mapping[str, str],
+    instrument_key_by_row_id: Mapping[str, str] | None = None,
     window_days: Decimal,
 ) -> dict[str, object]:
-    """Per-strategy detail + overall roll-up: trades / positions / P&L / bps / ROE.
+    """Per-strategy detail + overall roll-up over the FULL declared book.
 
-    Groups by the canonical ``strategy_id`` (mapped from each row's venue via
-    :func:`strategy_id_for_venue`). Each strategy entry carries: ``trade_count``,
-    ``position_count``, ``turnover_usd`` (Σ|notional| of its fills),
-    ``realized_pnl`` / ``unrealized_pnl`` / ``total_pnl`` (Σ over its position
-    legs), ``gross_usd`` (its deployed notional = equity proxy), ``bps_pnl_on_turnover``
-    and ``roe_annualised_pct``. The ``overall`` block is the same metrics over ALL
-    rows.
+    Enumerates EVERY strategy in :func:`_enumerate_strategy_universe`
+    (``RunManifest.strategy_ids`` union with tape strategy_ids — the whole book, e.g. all 145),
+    then partitions the run's InstructionLedger ``LedgerRow`` tape by the AUTHORITATIVE
+    per-row ``strategy_id`` (P11.9) and folds each partition INDEPENDENTLY into its own
+    ``PositionLedger`` (avg-cost, marks joined). Each strategy entry carries:
+    ``trade_count`` (its TRADE rows), ``position_count`` (its materialised legs),
+    ``turnover_usd`` (Σ|delta·price| over its TRADE rows), ``realized_pnl`` /
+    ``unrealized_pnl`` / ``total_pnl`` (Σ over its position legs + its PASSIVE accruals),
+    ``gross_usd`` (its deployed notional = equity proxy), ``bps_pnl_on_turnover`` and
+    ``roe_annualised_pct``.
 
-    ``window_days`` (the run-window length from the ``RunManifest``) drives the ROE
-    annualisation. ``bps`` / ``roe`` are ``None`` (honest) when their denominator is 0.
-    Empty inputs → empty ``strategies`` + zeroed ``overall``.
+    A strategy with ledger activity shows its real ledger-derived numbers; a strategy
+    declared in the manifest but with NO tape rows shows HONEST zeros (zero trades /
+    positions / P&L) — never dropped, never fabricated. The ``overall`` block is the
+    SUM of the per-strategy folds (each ledger row belongs to exactly ONE strategy
+    partition, so summing is double-count-free) — NOT a re-fold of the whole tape: a
+    whole-tape re-fold would collide the SAME ``instrument_key`` traded by different
+    strategies into one netted position (wrong avg-cost / realised). The bare archetype
+    is never a strategy, so it is never a partition. ``overall`` bps/ROE are recomputed
+    from the aggregated total / turnover / gross.
+
+    ``window_days`` (from the ``RunManifest``) drives the ROE annualisation. ``bps`` /
+    ``roe`` are ``None`` (honest) when their denominator is 0. Empty tape + empty
+    manifest → empty ``strategies`` + zeroed ``overall``.
     """
-    usd_price = _usd_price_by_asset(positions)
+    rows_by_strategy: OrderedDict[str, list[LedgerRow]] = OrderedDict()
+    for row in rows:
+        rows_by_strategy.setdefault(_row_strategy_id(row), []).append(row)
 
-    # Group positions + fills by strategy_id (venue-mapped, canonical).
-    pos_by_strategy: OrderedDict[str, list[PositionLedgerRow]] = OrderedDict()
-    fills_by_strategy: OrderedDict[str, list[TradeFillRecord]] = OrderedDict()
-    for p in positions:
-        sid = strategy_id_for_venue(p.venue, strategy_ids)
-        pos_by_strategy.setdefault(sid, []).append(p)
-    for f in fills:
-        sid = strategy_id_for_venue(f.venue, strategy_ids)
-        fills_by_strategy.setdefault(sid, []).append(f)
-
-    all_strategies = list(OrderedDict.fromkeys([*pos_by_strategy.keys(), *fills_by_strategy.keys()]))
-
-    def _metrics(
-        strat_positions: Sequence[PositionLedgerRow], strat_fills: Sequence[TradeFillRecord]
-    ) -> dict[str, object]:
-        realized = sum((p.realized_pnl or Decimal(0) for p in strat_positions), Decimal(0))
-        unrealized = sum((p.unrealized_pnl or Decimal(0) for p in strat_positions), Decimal(0))
-        total = realized + unrealized
-        turnover = sum((_signed_notional(f) for f in strat_fills), Decimal(0))
+    def _metrics(strat_rows: Sequence[LedgerRow]) -> _StrategyMetrics:
+        strat_trades = [r for r in strat_rows if r.event_type == EventType.TRADE]
+        strat_passive = [r for r in strat_rows if r.event_origin.value == "passive"]
+        positions = materialize_position_ledger(
+            strat_trades,
+            marks=marks,
+            as_of=as_of,
+            share_class_of=share_class_of,
+            instrument_key_by_row_id=instrument_key_by_row_id,
+        )
+        usd_price = _usd_price_by_asset(positions)
+        passive_pnl = sum((r.delta for r in strat_passive), Decimal(0))
+        realized = sum((p.realized_pnl or Decimal(0) for p in positions), Decimal(0)) + passive_pnl
+        unrealized = sum((p.unrealized_pnl or Decimal(0) for p in positions), Decimal(0))
+        turnover = sum((_trade_notional(r) for r in strat_trades), Decimal(0))
         gross = sum(
-            (abs(v) for v in (_position_usd_value(p, usd_price) for p in strat_positions) if v is not None),
+            (abs(v) for v in (_position_usd_value(p, usd_price) for p in positions) if v is not None),
             Decimal(0),
         )
-        return {
-            "trade_count": len(strat_fills),
-            "position_count": len(strat_positions),
-            "turnover_usd": str(turnover),
-            "gross_usd": str(gross),
-            "realized_pnl": str(realized),
-            "unrealized_pnl": str(unrealized),
-            "total_pnl": str(total),
-            "bps_pnl_on_turnover": _bps_on_turnover(total, turnover),
-            "roe_annualised_pct": _annualised_roe(total, gross, window_days),
-        }
+        return _StrategyMetrics(
+            trade_count=len(strat_trades),
+            position_count=len(positions),
+            turnover=turnover,
+            gross=gross,
+            realized=realized,
+            unrealized=unrealized,
+        )
 
-    strategies = [
-        {"strategy_id": sid, **_metrics(pos_by_strategy.get(sid, []), fills_by_strategy.get(sid, []))}
-        for sid in all_strategies
+    per_strategy_metrics = [
+        (sid, _metrics(rows_by_strategy.get(sid, []))) for sid in _enumerate_strategy_universe(strategy_ids, rows)
     ]
-    overall = _metrics(positions, fills)
+    strategies = [{"strategy_id": sid, **_serialize_metrics(m, window_days)} for sid, m in per_strategy_metrics]
+
+    # overall = SUM of the per-strategy folds (double-count-free: one row → one
+    # strategy), NOT a whole-tape re-fold (which collides cross-strategy instrument_keys).
+    overall_metrics = _sum_metrics(m for _sid, m in per_strategy_metrics)
     return {
         "strategies": strategies,
-        "overall": overall,
+        "overall": _serialize_metrics(overall_metrics, window_days),
         "window_days": str(window_days),
     }
 
