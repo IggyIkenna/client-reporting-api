@@ -79,12 +79,37 @@ class TestComputeDataQuality:
         assert cov["total_specs"] == 7  # drivable + skipped, disjoint sets
 
         by_arch = cov["by_archetype"]
+        # by_archetype is the canonical LIST shape the UI's DataQualityCoverageRow[]
+        # contract reads with .map/.reduce (a dict would crash the panel).
+        assert isinstance(by_arch, list)
+        rows = {r["archetype"]: r for r in by_arch}
         # drivable archetypes from strategy_ids
-        assert by_arch["CARRY_STAKED_BASIS"] == {"drivable": 2, "skipped": 0}
+        assert rows["CARRY_STAKED_BASIS"] == {
+            "archetype": "CARRY_STAKED_BASIS",
+            "drivable": 2,
+            "skipped": 0,
+            "total": 2,
+        }
         # ARB has 1 drivable + 1 skipped
-        assert by_arch["ARBITRAGE_PRICE_DISPERSION"] == {"drivable": 1, "skipped": 1}
+        assert rows["ARBITRAGE_PRICE_DISPERSION"] == {
+            "archetype": "ARBITRAGE_PRICE_DISPERSION",
+            "drivable": 1,
+            "skipped": 1,
+            "total": 2,
+        }
         # CARRY_BASIS_PERP is skipped-only (not in the drivable book)
-        assert by_arch["CARRY_BASIS_PERP"] == {"drivable": 0, "skipped": 3}
+        assert rows["CARRY_BASIS_PERP"] == {
+            "archetype": "CARRY_BASIS_PERP",
+            "drivable": 0,
+            "skipped": 3,
+            "total": 3,
+        }
+        # sorted by archetype name (the order the UI maps in)
+        assert [r["archetype"] for r in by_arch] == [
+            "ARBITRAGE_PRICE_DISPERSION",
+            "CARRY_BASIS_PERP",
+            "CARRY_STAKED_BASIS",
+        ]
 
         skipped = out["skipped"]
         assert len(skipped) == 4
@@ -167,7 +192,16 @@ def _patch_dq_payload(monkeypatch: pytest.MonkeyPatch) -> None:
         "compute_data_quality",
         lambda *a, **k: {
             "run_id": "paper-r",
-            "coverage": {"total_specs": 7, "drivable": 3, "skipped": 4, "by_archetype": {}},
+            "coverage": {
+                "total_specs": 7,
+                "drivable": 3,
+                "skipped": 4,
+                "by_archetype": [
+                    {"archetype": "ARBITRAGE_PRICE_DISPERSION", "drivable": 1, "skipped": 1, "total": 2},
+                    {"archetype": "CARRY_BASIS_PERP", "drivable": 0, "skipped": 3, "total": 3},
+                    {"archetype": "CARRY_STAKED_BASIS", "drivable": 2, "skipped": 0, "total": 2},
+                ],
+            },
             "skipped": [
                 {"spec": s["slot_label"], "archetype": s["archetype"], "venue": "", "coin": "", "reason": s["reason"]}
                 for s in _SKIPPED
@@ -178,31 +212,68 @@ def _patch_dq_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(route, "enforce_entitlement", lambda auth, cid: None)
 
 
+class _FakeResp:
+    """Minimal httpx.Response stand-in carrying a deployment-api alerts payload."""
+
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        return self._payload
+
+
 class TestDataQualityRoute:
-    def test_alerts_merged_when_alerting_service_up(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_alerts_merged_when_deployment_api_up(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.api.routes.data_quality as route
 
         _patch_dq_payload(monkeypatch)
-        monkeypatch.setattr(route, "get_alerts", lambda url: [{"id": "a1", "severity": "warning"}])
+        # deployment-api /api/alerts returns an OBJECT {alerts:[AlertEntryDict], streams:[]};
+        # the route extracts .alerts and MAPS each entry to the UI DataQualityAlert shape.
+        payload: dict[str, object] = {
+            "alerts": [
+                {
+                    "kind": "vm_down",
+                    "timestamp": "2026-06-22T00:00:00Z",
+                    "repo": "mtds",
+                    "workflow_name": "capture",
+                    "severity": "CRITICAL",
+                    "message": "VM down — capture halted",
+                    "alert_class": "vm_down",
+                }
+            ],
+            "streams": [],
+        }
+        monkeypatch.setattr(route.httpx, "get", lambda url, timeout=5.0: _FakeResp(payload))
 
         out = route.get_data_quality("firm", auth=object())  # type: ignore[arg-type]
         assert out["run_id"] == "paper-r"
         assert out["coverage"]["skipped"] == 4
         assert len(out["skipped"]) == 4
-        assert out["alerts"] == [{"id": "a1", "severity": "warning"}]
-        assert out["alerts_source"] == "alerting-service"
+        assert out["alerts_source"] == "deployment-api"
+        alerts = out["alerts"]
+        assert isinstance(alerts, list) and len(alerts) == 1
+        a = alerts[0]
+        # mapped to the UI DataQualityAlert closed shape (never the raw ledger shape)
+        assert set(a.keys()) == {"id", "severity", "title", "detail", "source", "timestamp"}
+        assert a["severity"] == "critical"  # CRITICAL → critical (closed set)
+        assert a["title"] == "capture"
+        assert a["source"] == "vm_down"
+        assert a["detail"] == "VM down — capture halted"
         # generated_utc is a parseable UTC ISO timestamp
         datetime.fromisoformat(str(out["generated_utc"]))
 
-    def test_alerting_service_down_still_200_with_empty_alerts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_deployment_api_down_still_200_with_empty_alerts(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.api.routes.data_quality as route
 
         _patch_dq_payload(monkeypatch)
 
-        def _boom(url: str) -> list[dict[str, object]]:
-            raise httpx.ConnectError("alerting-service unreachable")
+        def _boom(url: str, timeout: float = 5.0) -> _FakeResp:
+            raise httpx.ConnectError("deployment-api unreachable")
 
-        monkeypatch.setattr(route, "get_alerts", _boom)
+        monkeypatch.setattr(route.httpx, "get", _boom)
 
         out = route.get_data_quality("firm", auth=object())  # type: ignore[arg-type]
         # the run data-quality survives — only alerts degrade
