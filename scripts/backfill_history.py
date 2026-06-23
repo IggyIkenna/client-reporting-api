@@ -1,3 +1,6 @@
+# Epic: global_ledger_pnl_attribution_master
+# Lifecycle: campaign:client_reporting_pnl_attribution_mvp
+# Delete-when: after promoted to CLI subcommand
 """Backfill historical trades, deposits, withdrawals, and income ledger.
 
 Pulls full history from OKX and Binance via CCXT, stores as JSON in

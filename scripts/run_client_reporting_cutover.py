@@ -1,3 +1,6 @@
+# Epic: global_ledger_pnl_attribution_master
+# Lifecycle: campaign:client_reporting_pnl_attribution_mvp
+# Delete-when: after client_reporting_pnl_attribution_mvp_2026_05_10 archives
 """Client-reporting PnL attribution cutover VM runner.
 
 Orchestrates Phase 8.A of client_reporting_pnl_attribution_mvp_2026_05_10.md:

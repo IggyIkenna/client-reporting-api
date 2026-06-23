@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Epic: global_ledger_pnl_attribution_master
+# Lifecycle: permanent
+# Delete-when: NA
 #
 # setup-workspace.sh — client-reporting-api
 #
