@@ -1,3 +1,6 @@
+# Epic: global_ledger_pnl_attribution_master
+# Lifecycle: permanent
+# Delete-when: NA
 """Demo client seed script — Phase 7 (wallet_treasury_client_flow_2026_05_10.md).
 
 Walks demo client ``demo_client_001`` through the full DRAFT → LIVE onboarding
