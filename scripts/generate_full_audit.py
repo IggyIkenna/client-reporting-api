@@ -1,3 +1,6 @@
+# Epic: global_ledger_pnl_attribution_master
+# Lifecycle: campaign:client_reporting_pnl_attribution_mvp
+# Delete-when: after client_reporting_pnl_attribution_mvp_2026_05_10 archives
 """Generate comprehensive audit HTML for ALL accounts.
 
 Uses the exact same production code paths:

@@ -1,3 +1,6 @@
+# Epic: global_ledger_pnl_attribution_master
+# Lifecycle: campaign:client_reporting_pnl_attribution_mvp
+# Delete-when: after promoted to CLI subcommand
 """Hourly incremental update for client reporting data.
 
 Appends new equity points and recent trades to existing backfill data.
