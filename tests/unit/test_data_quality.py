@@ -68,6 +68,8 @@ class TestComputeDataQuality:
         monkeypatch.setattr(dq, "read_run_manifest", lambda *a, **k: _FakeManifest(_STRATEGY_IDS))
         monkeypatch.setattr(dq, "client_ledger_root", lambda *a, **k: "gs://b/ledger/client_id=c/run_id=r/")
         monkeypatch.setattr(dq, "read_skipped_specs", lambda *a, **k: list(_SKIPPED))
+        # No spec-coverage sidecar in this fixture → no thin flags (binary view).
+        monkeypatch.setattr(dq, "read_spec_coverage", lambda *a, **k: [])
 
         out = dq.compute_data_quality("firm")
 
@@ -75,8 +77,10 @@ class TestComputeDataQuality:
 
         cov = out["coverage"]
         assert cov["drivable"] == 3
+        assert cov["drivable_thin"] == 0  # P11.22 — no thin sidecar → 0
         assert cov["skipped"] == 4
-        assert cov["total_specs"] == 7  # drivable + skipped, disjoint sets
+        assert cov["total_specs"] == 7  # drivable + skipped, disjoint sets (thin ⊆ drivable)
+        assert out["thin_specs"] == []
 
         by_arch = cov["by_archetype"]
         # by_archetype is the canonical LIST shape the UI's DataQualityCoverageRow[]
@@ -87,6 +91,7 @@ class TestComputeDataQuality:
         assert rows["CARRY_STAKED_BASIS"] == {
             "archetype": "CARRY_STAKED_BASIS",
             "drivable": 2,
+            "drivable_thin": 0,
             "skipped": 0,
             "total": 2,
         }
@@ -94,6 +99,7 @@ class TestComputeDataQuality:
         assert rows["ARBITRAGE_PRICE_DISPERSION"] == {
             "archetype": "ARBITRAGE_PRICE_DISPERSION",
             "drivable": 1,
+            "drivable_thin": 0,
             "skipped": 1,
             "total": 2,
         }
@@ -101,6 +107,7 @@ class TestComputeDataQuality:
         assert rows["CARRY_BASIS_PERP"] == {
             "archetype": "CARRY_BASIS_PERP",
             "drivable": 0,
+            "drivable_thin": 0,
             "skipped": 3,
             "total": 3,
         }
@@ -131,7 +138,9 @@ class TestComputeDataQuality:
         out = dq.compute_data_quality("nobody")
         assert out["run_id"] is None
         assert out["skipped"] == []
+        assert out["thin_specs"] == []
         assert out["coverage"]["total_specs"] == 0
+        assert out["coverage"]["drivable_thin"] == 0
         assert "no paper run" in out["note"]
 
     def test_absent_skipped_sidecar_is_empty_not_crash(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -139,12 +148,84 @@ class TestComputeDataQuality:
         monkeypatch.setattr(dq, "read_run_manifest", lambda *a, **k: _FakeManifest(_STRATEGY_IDS))
         monkeypatch.setattr(dq, "client_ledger_root", lambda *a, **k: "gs://b/x/")
         monkeypatch.setattr(dq, "read_skipped_specs", lambda *a, **k: [])
+        monkeypatch.setattr(dq, "read_spec_coverage", lambda *a, **k: [])
 
         out = dq.compute_data_quality("firm")
         assert out["skipped"] == []
+        assert out["thin_specs"] == []
         assert out["coverage"]["drivable"] == 3
         assert out["coverage"]["skipped"] == 0
         assert "ran every declared spec" in out["note"]
+
+    def test_thin_specs_subdivide_drivable_with_coverage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # P11.22 — a spec-coverage sidecar with two thin entries: the thin count is a
+        # SUBSET of drivable (not added to total), surfaced per-archetype + as a sorted
+        # thin_specs list (worst coverage first), each carrying its coverage % vs threshold.
+        spec_cov = [
+            {
+                "archetype": "CARRY_STAKED_BASIS",
+                "slot_label": "CARRY_STAKED_BASIS@lido-curve-bybit-f100-usdt-1h-usdt-v2-prod",
+                "present_bars": 4,
+                "expected_bars": 7,
+                "coverage_pct": 57.14,
+                "threshold_pct": 80.0,
+                "state": "drivable_thin",
+            },
+            {
+                "archetype": "ARBITRAGE_PRICE_DISPERSION",
+                "slot_label": "ARBITRAGE_PRICE_DISPERSION@uniswapv3-curve-eth-1h-usdc-v1-prod",
+                "present_bars": 6,
+                "expected_bars": 7,
+                "coverage_pct": 85.71,
+                "threshold_pct": 90.0,
+                "state": "drivable_thin",
+            },
+            # a FULL spec — never surfaced in thin_specs
+            {
+                "archetype": "CARRY_STAKED_BASIS",
+                "slot_label": "CARRY_STAKED_BASIS@lido-uniswapv3-deribit-f100-usdc-1h-usdc-v2-prod",
+                "present_bars": 7,
+                "expected_bars": 7,
+                "coverage_pct": 100.0,
+                "threshold_pct": 80.0,
+                "state": "drivable",
+            },
+        ]
+        monkeypatch.setattr(dq, "resolve_canonical_run", lambda *a, **k: "paper-r")
+        monkeypatch.setattr(dq, "read_run_manifest", lambda *a, **k: _FakeManifest(_STRATEGY_IDS))
+        monkeypatch.setattr(dq, "client_ledger_root", lambda *a, **k: "gs://b/ledger/client_id=c/run_id=r/")
+        monkeypatch.setattr(dq, "read_skipped_specs", lambda *a, **k: [])
+        monkeypatch.setattr(dq, "read_spec_coverage", lambda *a, **k: spec_cov)
+
+        out = dq.compute_data_quality("firm")
+        cov = out["coverage"]
+        # 2 thin, a SUBSET of drivable (3) — total_specs stays drivable+skipped, NOT bumped.
+        assert cov["drivable"] == 3
+        assert cov["drivable_thin"] == 2
+        assert cov["total_specs"] == 3
+        rows = {r["archetype"]: r for r in cov["by_archetype"]}
+        assert rows["CARRY_STAKED_BASIS"]["drivable_thin"] == 1
+        assert rows["ARBITRAGE_PRICE_DISPERSION"]["drivable_thin"] == 1
+        # thin_specs sorted by coverage ASC (the thinnest, most-suspect first); full-coverage excluded
+        thin = out["thin_specs"]
+        assert len(thin) == 2
+        assert thin[0]["coverage_pct"] == 57.14
+        assert thin[0]["venue"] == "lido"
+        assert thin[0]["threshold_pct"] == 80.0
+        assert set(thin[0].keys()) == {
+            "spec",
+            "archetype",
+            "venue",
+            "coin",
+            "coverage_pct",
+            "threshold_pct",
+            "present_bars",
+            "expected_bars",
+        }
+        # A run WITH thin specs carries an empty note (the signal is the thin_specs list +
+        # drivable_thin counts, not a note string) — the note is reserved for the
+        # everything-full / manifest-unavailable cases.
+        assert out["note"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +260,47 @@ class TestReadSkippedSpecs:
         assert out[0]["slot_label"].startswith("CARRY_BASIS_PERP@")
 
 
+class TestReadSpecCoverage:
+    def test_missing_sidecar_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _Storage:
+            def download_bytes(self, bucket: str, path: str) -> bytes:
+                raise FileNotFoundError(path)
+
+        monkeypatch.setattr(dq, "client_ledger_root", lambda *a, **k: "gs://b/ledger/client_id=c/run_id=r/")
+        monkeypatch.setattr(dq, "get_storage_client", lambda: _Storage())
+        assert dq.read_spec_coverage("firm", "r") == []
+
+    def test_parses_real_shape_preserving_numeric_types(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+
+        specs = [
+            {
+                "archetype": "CARRY_STAKED_BASIS",
+                "slot_label": "CARRY_STAKED_BASIS@lido-x",
+                "present_bars": 3,
+                "expected_bars": 7,
+                "coverage_pct": 42.86,
+                "threshold_pct": 80.0,
+                "state": "drivable_thin",
+            }
+        ]
+        payload = json.dumps({"run_id": "r", "specs": specs}).encode("utf-8")
+
+        class _Storage:
+            def download_bytes(self, bucket: str, path: str) -> bytes:
+                assert path.endswith("spec_coverage/r.json")
+                return payload
+
+        monkeypatch.setattr(dq, "client_ledger_root", lambda *a, **k: "gs://b/ledger/client_id=c/run_id=r/")
+        monkeypatch.setattr(dq, "get_storage_client", lambda: _Storage())
+        out = dq.read_spec_coverage("firm", "r")
+        assert len(out) == 1
+        assert out[0]["state"] == "drivable_thin"
+        # numeric fields preserve type (NOT str-coerced like skipped reasons)
+        assert out[0]["present_bars"] == 3
+        assert out[0]["coverage_pct"] == 42.86
+
+
 # ---------------------------------------------------------------------------
 # /api/v1/clients/{client_id}/data-quality route — alerts merge + degradation
 # ---------------------------------------------------------------------------
@@ -195,16 +317,35 @@ def _patch_dq_payload(monkeypatch: pytest.MonkeyPatch) -> None:
             "coverage": {
                 "total_specs": 7,
                 "drivable": 3,
+                "drivable_thin": 1,
                 "skipped": 4,
                 "by_archetype": [
-                    {"archetype": "ARBITRAGE_PRICE_DISPERSION", "drivable": 1, "skipped": 1, "total": 2},
-                    {"archetype": "CARRY_BASIS_PERP", "drivable": 0, "skipped": 3, "total": 3},
-                    {"archetype": "CARRY_STAKED_BASIS", "drivable": 2, "skipped": 0, "total": 2},
+                    {
+                        "archetype": "ARBITRAGE_PRICE_DISPERSION",
+                        "drivable": 1,
+                        "drivable_thin": 1,
+                        "skipped": 1,
+                        "total": 2,
+                    },
+                    {"archetype": "CARRY_BASIS_PERP", "drivable": 0, "drivable_thin": 0, "skipped": 3, "total": 3},
+                    {"archetype": "CARRY_STAKED_BASIS", "drivable": 2, "drivable_thin": 0, "skipped": 0, "total": 2},
                 ],
             },
             "skipped": [
                 {"spec": s["slot_label"], "archetype": s["archetype"], "venue": "", "coin": "", "reason": s["reason"]}
                 for s in _SKIPPED
+            ],
+            "thin_specs": [
+                {
+                    "spec": "ARBITRAGE_PRICE_DISPERSION@uniswapv3-curve-eth-1h-usdc-v1-prod",
+                    "archetype": "ARBITRAGE_PRICE_DISPERSION",
+                    "venue": "uniswapv3",
+                    "coin": "curve",
+                    "coverage_pct": 57.14,
+                    "threshold_pct": 85.0,
+                    "present_bars": 4,
+                    "expected_bars": 7,
+                }
             ],
             "note": "",
         },
@@ -317,6 +458,10 @@ class TestDataQualityRoute:
         assert out["run_id"] == "paper-r"
         assert out["coverage"]["skipped"] == 4
         assert len(out["skipped"]) == 4
+        # P11.22 — the route surfaces thin_specs (the drivable-but-thin list) verbatim.
+        assert len(out["thin_specs"]) == 1
+        assert out["thin_specs"][0]["archetype"] == "ARBITRAGE_PRICE_DISPERSION"
+        assert out["coverage"]["drivable_thin"] == 1
         assert out["alerts_source"] == "deployment-api"
         alerts = out["alerts"]
         assert isinstance(alerts, list) and len(alerts) == 1

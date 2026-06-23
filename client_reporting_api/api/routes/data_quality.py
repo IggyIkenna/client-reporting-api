@@ -119,6 +119,10 @@ def get_data_quality(client_id: str, auth: AuthDep) -> dict[str, object]:
         "run_id": dq["run_id"],
         "coverage": dq["coverage"],
         "skipped": dq["skipped"],
+        # P11.22 — the drivable-but-thin specs (ran on a sparse window, below the
+        # min-window-coverage threshold), with each one's coverage % vs its threshold,
+        # so the panel FLAGS a thin run instead of silently trusting it like a full one.
+        "thin_specs": dq["thin_specs"],
         "note": dq["note"],
         "alerts": alerts,
         "alerts_source": alerts_source,
