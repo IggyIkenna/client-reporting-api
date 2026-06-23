@@ -28,13 +28,21 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-#: deployment-api base URL — the single home for the deployment-api address used
-#: by BOTH the alerts feed (P11.20) and the data-status SSOT cross-reference
-#: (P11.21). Prod default; the per-env override is the named follow-up (an
-#: ``deployment_api_url`` field on ``UnifiedCloudConfig`` — a UTL plumbing change).
-DEPLOYMENT_API_URL = "https://uts-shared-deployment-api-cldtjniqvq-an.a.run.app"
-
 _TIMEOUT_S = 5.0
+
+
+def _base_url() -> str:
+    """deployment-api base URL from ``UnifiedCloudConfig`` (per-env typed field; no raw env read).
+
+    P11.21-polish (A4): the address is the ``deployment_api_url`` field on
+    ``UnifiedCloudConfig`` (UTL) — the SAME source the deployment-ui monitoring pane
+    reads — so a per-env override is a typed config value the consumers share, never a
+    hardcoded constant. Used by BOTH the alerts feed (P11.20) and the data-status SSOT
+    cross-reference (P11.21).
+    """
+    from client_reporting_api.config import get_config
+
+    return get_config().deployment_api_url
 
 
 def get_unified_alerts() -> tuple[list[dict[str, object]], str]:
@@ -45,7 +53,7 @@ def get_unified_alerts() -> tuple[list[dict[str, object]], str]:
     when the deployment-api could not be reached.
     """
     try:
-        resp = httpx.get(f"{DEPLOYMENT_API_URL}/api/alerts", timeout=_TIMEOUT_S)
+        resp = httpx.get(f"{_base_url()}/api/alerts", timeout=_TIMEOUT_S)
         resp.raise_for_status()
         payload = cast(dict[str, object], resp.json())
         alerts = cast(list[dict[str, object]], payload.get("alerts", []))
@@ -65,7 +73,7 @@ def get_data_status_coverage() -> tuple[dict[str, dict[str, object]], str]:
     panel's corpus-coverage lens is in sync with the operator's data-status page.
     """
     try:
-        resp = httpx.get(f"{DEPLOYMENT_API_URL}/api/data-status/honest-coverage", timeout=_TIMEOUT_S)
+        resp = httpx.get(f"{_base_url()}/api/data-status/honest-coverage", timeout=_TIMEOUT_S)
         resp.raise_for_status()
         payload = cast(dict[str, object], resp.json())
         by_ag = cast(dict[str, dict[str, object]], payload.get("by_asset_group", {}))
