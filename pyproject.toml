@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "client-reporting-api"
-version = "0.32.0"
+dynamic = ["version"]
 description = "Client reporting, fee engine, and invoice management service"
 requires-python = ">=3.13,<3.14"
 authors = [
@@ -138,3 +138,6 @@ fail_under = 70
 
 [tool.bandit]
 skips = []
+
+[tool.hatch.version]
+source = "vcs"
