@@ -96,6 +96,28 @@ steps:
           --enable-vulnerability-scanning 2>/dev/null || true
     waitFor: ["-"]
 
+  # ── Extract version for SCM bypass in docker build ──────────────────────
+  - name: "gcr.io/cloud-builders/git"
+    id: "extract-version"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        git fetch --tags --force --quiet 2>/dev/null || true
+        VERSION=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//')
+        if [ -z "$$VERSION" ]; then
+          VERSION=$(git tag --list 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -1 | sed 's/^v//')
+        fi
+        if [ -z "$$VERSION" ]; then
+          VERSION=$(grep '^version' pyproject.toml 2>/dev/null | head -1 | sed 's/version = "//;s/"//')
+        fi
+        if [ -z "$$VERSION" ]; then
+          VERSION="$SHORT_SHA"
+        fi
+        echo "$$VERSION" > /workspace/VERSION
+        echo "Building version $$VERSION"
+    waitFor: ["-"]
+
   # ── Pull base image (digest-aware) — required for an authenticated FROM ────
   # When the Dockerfile pins `ARG BASE_IMAGE_DIGEST=sha256:<64-hex>` and its base
   # FROM is the UTL image (deployment-api does), pre-pull THAT digest with the
@@ -121,27 +143,21 @@ steps:
 
   - name: "gcr.io/cloud-builders/docker"
     id: "build"
-    env: ["DOCKER_BUILDKIT=1"]
+    entrypoint: "bash"
     args:
-      - "build"
-      - "-f"
-      - "Dockerfile"
-      # PROJECT_ID is required by the digest-pinned base FROM in api Dockerfiles
-      # (.../unified-trading-library@${BASE_IMAGE_DIGEST}); Cloud Build does NOT
-      # auto-pass substitutions as docker build-args, so it must be explicit or
-      # the base FROM expands to an invalid reference.
-      - "--build-arg"
-      - "PROJECT_ID=$PROJECT_ID"
-      - "--build-arg"
-      - "BUILDKIT_INLINE_CACHE=1"
-      - "--cache-from"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
-      - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
-      - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
-      - "."
-    waitFor: ["pull-base-image", "ensure-repo", "fetch-ui"]
+      - "-c"
+      - |
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        DOCKER_BUILDKIT=1 docker build -f Dockerfile \
+          --build-arg PROJECT_ID=$PROJECT_ID \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --build-arg SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CLIENT_REPORTING_API=$$VERSION \
+          --cache-from asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
+          .
+    waitFor: ["pull-base-image", "ensure-repo", "fetch-ui", "extract-version"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "quality-gates"

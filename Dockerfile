@@ -36,6 +36,8 @@ COPY configs/credentials-registry.yaml ./configs/
 
 # Strip local uv sources (../unified-trading-library doesn't exist in container)
 # UTL is pre-installed in the base image, so uv will see it as satisfied
+ARG SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CLIENT_REPORTING_API
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CLIENT_REPORTING_API=${SETUPTOOLS_SCM_PRETEND_VERSION_FOR_CLIENT_REPORTING_API:-}
 RUN sed -i '/\[tool\.uv\.sources/,/^$/d' pyproject.toml \
     && uv pip install --system .
 
