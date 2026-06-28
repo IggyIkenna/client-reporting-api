@@ -13,7 +13,7 @@ ARG PROJECT_ID
 # Digest-pinned UTL base image (QG STEP 5.79 -- reproducible builds + UTL/UAC provenance).
 # Refreshed by the dependency-update fan-out (update-dependency-version.yml) on base-image
 # republish; cloudbuild may override at build time: --build-arg BASE_IMAGE_DIGEST=sha256:...
-ARG BASE_IMAGE_DIGEST=sha256:75926d35b5960cfc88eb3dd95e9498461857a5d6b0e8070880a35c951bafd4a8
+ARG BASE_IMAGE_DIGEST=sha256:84a1baaa01ef17c62d7cd976b713f0679a48054d2d32c85b18627cc6914d9423
 FROM --platform=linux/amd64 asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-library/unified-trading-library@${BASE_IMAGE_DIGEST} AS base
 
 # ============================================
@@ -33,6 +33,13 @@ COPY client_reporting_api/ ./client_reporting_api/
 COPY scripts/ ./scripts/
 RUN mkdir -p ./data ./configs
 COPY configs/credentials-registry.yaml ./configs/
+
+# hatch-vcs reads the version from git tags, which are unavailable in the Cloud
+# Build context (shallow checkout). cloudbuild's extract-version step resolves the
+# real tag and passes it here so `uv pip install .` doesn't fail with
+# `setuptools-scm was unable to detect version`.
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 
 # Strip local uv sources (../unified-trading-library doesn't exist in container)
 # UTL is pre-installed in the base image, so uv will see it as satisfied
