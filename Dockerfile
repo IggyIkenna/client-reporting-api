@@ -34,6 +34,13 @@ COPY scripts/ ./scripts/
 RUN mkdir -p ./data ./configs
 COPY configs/credentials-registry.yaml ./configs/
 
+# hatch-vcs reads the version from git tags, which are unavailable in the Cloud
+# Build context (shallow checkout). cloudbuild's extract-version step resolves the
+# real tag and passes it here so `uv pip install .` doesn't fail with
+# `setuptools-scm was unable to detect version`.
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
+
 # Strip local uv sources (../unified-trading-library doesn't exist in container)
 # UTL is pre-installed in the base image, so uv will see it as satisfied
 RUN sed -i '/\[tool\.uv\.sources/,/^$/d' pyproject.toml \

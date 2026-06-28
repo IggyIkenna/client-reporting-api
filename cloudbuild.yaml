@@ -57,6 +57,36 @@ steps:
         echo "deployment-ui HEAD: $$(cd ui && git rev-parse --short HEAD)"
     waitFor: ["-"]
 
+  # ── Extract version (authenticated --unshallow) so hatch-vcs resolves ─────
+  # Cloud Build's checkout is shallow + UNAUTH → the v-tag is unreachable →
+  # hatch-vcs `setuptools-scm was unable to detect version` inside the docker
+  # build (the Dockerfile runs `uv pip install --system .`). GH_PAT (Secret
+  # Manager) authenticates an --unshallow --tags fetch so `git describe` sees
+  # the v-tag; the resolved VERSION is injected as SETUPTOOLS_SCM_PRETEND_VERSION
+  # into `docker build` so setuptools-scm never needs git at install time.
+  - name: "gcr.io/cloud-builders/git"
+    id: "extract-version"
+    entrypoint: "bash"
+    secretEnv: ["GH_PAT"]
+    args:
+      - "-c"
+      - |
+        git fetch "https://$$GH_PAT@github.com/IggyIkenna/client-reporting-api.git" --unshallow --tags --force 2>/dev/null \
+          || git fetch "https://$$GH_PAT@github.com/IggyIkenna/client-reporting-api.git" --tags --force 2>/dev/null \
+          || true
+        VERSION=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//')
+        if [ -z "$$VERSION" ]; then
+          VERSION=$(git tag --list 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -1 | sed 's/^v//')
+        fi
+        if [ -z "$$VERSION" ]; then
+          # PEP440-VALID *and* docker-tag-safe fallback (VERSION is NOT used as a
+          # docker tag here, but keep it tag-safe; NEVER a bare SHA or +local).
+          VERSION="0.0.0.dev0"
+        fi
+        echo "$$VERSION" > /workspace/VERSION
+        echo "Building version $$VERSION"
+    waitFor: ["-"]
+
   # ── Auth pre-check: fail fast if SA lacks AR access ─
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
     id: "auth-precheck"
@@ -121,27 +151,27 @@ steps:
 
   - name: "gcr.io/cloud-builders/docker"
     id: "build"
+    entrypoint: "bash"
     env: ["DOCKER_BUILDKIT=1"]
     args:
-      - "build"
-      - "-f"
-      - "Dockerfile"
-      # PROJECT_ID is required by the digest-pinned base FROM in api Dockerfiles
-      # (.../unified-trading-library@${BASE_IMAGE_DIGEST}); Cloud Build does NOT
-      # auto-pass substitutions as docker build-args, so it must be explicit or
-      # the base FROM expands to an invalid reference.
-      - "--build-arg"
-      - "PROJECT_ID=$PROJECT_ID"
-      - "--build-arg"
-      - "BUILDKIT_INLINE_CACHE=1"
-      - "--cache-from"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
-      - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
-      - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
-      - "."
-    waitFor: ["pull-base-image", "ensure-repo", "fetch-ui"]
+      - "-c"
+      - |
+        set -e
+        # SETUPTOOLS_SCM_PRETEND_VERSION feeds hatch-vcs at `uv pip install .` time
+        # inside the Dockerfile (git is unavailable / shallow there). PROJECT_ID is
+        # required by the digest-pinned base FROM; Cloud Build does NOT auto-pass
+        # substitutions as docker build-args, so both must be explicit.
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
+        echo "build: SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION"
+        docker build -f Dockerfile \
+          --build-arg PROJECT_ID=$PROJECT_ID \
+          --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --cache-from asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
+          .
+    waitFor: ["pull-base-image", "ensure-repo", "fetch-ui", "extract-version"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "quality-gates"
@@ -199,6 +229,11 @@ steps:
 images:
   - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
   - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/GH_PAT/versions/latest
+      env: GH_PAT
 
 options:
   logging: CLOUD_LOGGING_ONLY
