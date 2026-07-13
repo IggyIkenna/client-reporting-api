@@ -45,11 +45,11 @@ dependencies = [
     # Security floors for transitive dependencies (CVE remediation).
     # aiohttp      <3.14.0 → CVE-2026-22815, CVE-2026-34513..34525, CVE-2026-34993 (CookieJar.load RCE)
     # cryptography <46.0.7 → CVE-2026-34073, CVE-2026-39892
-    # pillow       <12.2.0 → CVE-2026-40192
+    # pillow       <12.3.0 → PYSEC-2026-2253/2254/2255/2256/2257
     # pygments     <2.20.0 → CVE-2026-4539
     "aiohttp>=3.14.1,<4.0.0",
     "cryptography>=46.0.7,<47.0.0",
-    "pillow>=12.2.0,<13.0.0",
+    "pillow>=12.3.0,<13.0.0",
     "pygments>=2.20.0,<3.0.0",
 ]
 
