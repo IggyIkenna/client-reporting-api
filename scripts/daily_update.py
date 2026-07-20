@@ -59,7 +59,7 @@ def load_registry() -> dict[str, dict[str, str | float | bool | dict[str, float]
     return data.get("clients", {})
 
 
-def get_secret(name: str) -> str:
+def get_secret(name: str) -> str | None:
     from unified_trading_library import get_secret as _get_secret
 
     return _get_secret(name)
@@ -92,10 +92,15 @@ def fetch_credentials(client_id: str, venue: str) -> dict[str, str] | None:
     except RuntimeError:
         logger.warning("No credentials for %s", base)
         return None
+    # UTL's get_secret returns None (not RuntimeError) on a missing secret; without
+    # this guard a missing key builds a None-filled creds dict and CCXT gets apiKey=None.
+    if api_key is None or api_secret is None:
+        logger.warning("Missing api-key/api-secret for %s", base)
+        return None
     passphrase = ""
     if venue == "okx":
         with contextlib.suppress(RuntimeError):
-            passphrase = get_secret(f"{base}-passphrase")
+            passphrase = get_secret(f"{base}-passphrase") or ""
     return {"api_key": api_key, "api_secret": api_secret, "passphrase": passphrase}
 
 
