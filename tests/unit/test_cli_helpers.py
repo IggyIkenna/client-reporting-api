@@ -99,6 +99,18 @@ class TestFetchCredentials:
         with patch("client_reporting_api.cli.shared._get_secret", side_effect=RuntimeError("no")):
             assert cli._fetch_credentials("PR", "okx") is None
 
+    def test_returns_none_when_secret_returns_none(self) -> None:
+        # UTL's get_secret returns None (not RuntimeError) on a missing secret.
+        # A missing key must yield a clean absence, never a None-filled creds dict.
+        with patch("client_reporting_api.cli.shared._get_secret", return_value=None):
+            assert cli._fetch_credentials("PR", "binance") is None
+
+    def test_returns_none_when_only_secret_missing(self) -> None:
+        # api-key present but api-secret missing (None) must still be absence.
+        seq = iter(["the-key", None])
+        with patch("client_reporting_api.cli.shared._get_secret", side_effect=lambda _name: next(seq)):
+            assert cli._fetch_credentials("PR", "binance") is None
+
     def test_returns_dict_with_passphrase_for_okx(self) -> None:
         seq = iter(["the-key", "the-secret", "the-passphrase"])
         with patch("client_reporting_api.cli.shared._get_secret", side_effect=lambda _name: next(seq)):

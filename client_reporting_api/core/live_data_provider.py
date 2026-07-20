@@ -42,10 +42,18 @@ def _fetch_credentials(
     except RuntimeError:
         return None
 
+    # `unified_trading_library.get_secret` returns None (not RuntimeError) on a
+    # missing secret; without this guard a missing key becomes a None-filled creds
+    # dict counted as "loaded" and CCXT is built with apiKey=None. Treat a missing
+    # key/secret as a clean absence instead.
+    if api_key is None or api_secret is None:
+        logger.warning("Missing api-key/api-secret for %s", secret_base)
+        return None
+
     passphrase = ""
     if venue == "okx":
         try:
-            passphrase = get_secret(f"{secret_base}-passphrase")
+            passphrase = get_secret(f"{secret_base}-passphrase") or ""
         except RuntimeError:
             logger.warning("No passphrase found for %s", secret_base)
 

@@ -75,8 +75,11 @@ def _load_full_registry() -> dict[str, dict[str, str | float | bool | dict[str, 
         return yaml.safe_load(f)
 
 
-def _get_secret(name: str) -> str:
-    """Fetch a secret from the configured Secret Manager via UTL (not google.cloud)."""
+def _get_secret(name: str) -> str | None:
+    """Fetch a secret from the configured Secret Manager via UTL (not google.cloud).
+
+    Returns None when the secret is missing (UTL's `get_secret` contract).
+    """
     return _utl_get_secret(name)
 
 
@@ -120,10 +123,15 @@ def _fetch_credentials(client_id: str, venue: str) -> dict[str, str] | None:
     except RuntimeError:
         logger.warning("No credentials for %s", base)
         return None
+    # UTL's get_secret returns None (not RuntimeError) on a missing secret; without
+    # this guard a missing key builds a None-filled creds dict and CCXT gets apiKey=None.
+    if api_key is None or api_secret is None:
+        logger.warning("Missing api-key/api-secret for %s", base)
+        return None
     passphrase = ""
     if venue == "okx":
         with contextlib.suppress(RuntimeError):
-            passphrase = _get_secret(f"{base}-passphrase")
+            passphrase = _get_secret(f"{base}-passphrase") or ""
     return {"api_key": api_key, "api_secret": api_secret, "passphrase": passphrase}
 
 
