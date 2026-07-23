@@ -39,11 +39,11 @@ class TestExchangeDataCollector:
             result = collector._get_exchange("UNKNOWN")
         assert result is None
 
-    def test_get_exchange_no_secret_name(self) -> None:
+    def test_get_exchange_no_secret_names(self) -> None:
         collector = ExchangeDataCollector(secrets={})
         with patch(
             "client_reporting_api.core.exchange_data_collector.get_client_config",
-            return_value={"secret_name": "", "venue": "binance"},
+            return_value={"secret_names": {}, "venue": "binance"},
         ):
             result = collector._get_exchange("MANUAL_CLIENT")
         assert result is None
@@ -53,7 +53,7 @@ class TestExchangeDataCollector:
         with patch(
             "client_reporting_api.core.exchange_data_collector.get_client_config",
             return_value={
-                "secret_name": "exec-test-binance",
+                "secret_names": {"api_key": "exec-test-binance-api-key", "api_secret": "exec-test-binance-api-secret"},
                 "venue": "binance",
             },
         ):
@@ -62,7 +62,7 @@ class TestExchangeDataCollector:
 
     def test_get_exchange_creates_and_caches(self) -> None:
         secrets = {
-            "exec-test-binance": {
+            "TEST": {
                 "api_key": "k",
                 "api_secret": "s",
                 "passphrase": "",
@@ -72,7 +72,7 @@ class TestExchangeDataCollector:
         with patch(
             "client_reporting_api.core.exchange_data_collector.get_client_config",
             return_value={
-                "secret_name": "exec-test-binance",
+                "secret_names": {"api_key": "exec-test-binance-api-key", "api_secret": "exec-test-binance-api-secret"},
                 "venue": "binance",
             },
         ):

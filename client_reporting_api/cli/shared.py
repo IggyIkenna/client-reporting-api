@@ -158,7 +158,7 @@ def _get_active_clients(
     """Filter the registry to active, managed clients (optionally a single client)."""
     clients = []
     for cid, cfg in registry.items():
-        if not cfg.get("is_active", False) or cfg.get("tranche") != "managed" or not cfg.get("secret_name"):
+        if not cfg.get("is_active", False) or cfg.get("tranche") != "managed" or not cfg.get("secret_names"):
             continue
         if client_filter and cid != client_filter:
             continue

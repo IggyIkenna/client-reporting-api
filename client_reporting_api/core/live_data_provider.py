@@ -73,17 +73,17 @@ def _fetch_all_secrets() -> dict[str, dict[str, str]]:
     for cid, cfg in clients.items():
         if not cfg.get("is_active", False):
             continue
-        secret_name = cfg.get("secret_name", "")
+        secret_names = cfg.get("secret_names")
         venue = cfg.get("venue", "")
-        if not secret_name or not venue:
+        if not secret_names or not venue:
             continue
-        if secret_name in secrets:
+        if cid in secrets:
             continue
 
         secret_base = _derive_secret_base(cid, venue)
         creds = _fetch_credentials(secret_base, venue)
         if creds is not None:
-            secrets[secret_name] = creds
+            secrets[cid] = creds
             logger.info("Loaded credentials for %s (%s)", cid, secret_base)
         else:
             logger.warning("Failed to load credentials for %s", cid)

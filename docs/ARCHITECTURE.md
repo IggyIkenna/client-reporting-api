@@ -91,12 +91,12 @@ Reads a YAML credentials registry
 (`execution-services/configs/credentials-registry.yaml`) to determine each
 client's data source:
 
-| Tranche                         | Data Source  |
-| ------------------------------- | ------------ |
-| `managed` with `secret_name`    | `api_live`   |
-| `managed` without `secret_name` | `api_static` |
-| `fund_of_fund`                  | `manual`     |
-| (unknown)                       | `manual`     |
+| Tranche                          | Data Source  |
+| -------------------------------- | ------------ |
+| `managed` with `secret_names`    | `api_live`   |
+| `managed` without `secret_names` | `api_static` |
+| `fund_of_fund`                   | `manual`     |
+| (unknown)                        | `manual`     |
 
 ### AI Summaries (optional)
 

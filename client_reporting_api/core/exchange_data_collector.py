@@ -76,7 +76,7 @@ class ExchangeDataCollector:
         """Initialize with pre-fetched secrets.
 
         Args:
-            secrets: Pre-fetched credentials keyed by secret name.
+            secrets: Pre-fetched credentials keyed by client_id.
         """
         self._secrets = secrets
         self._exchanges: dict[str, ccxt.Exchange] = {}
@@ -91,14 +91,14 @@ class ExchangeDataCollector:
             logger.warning("Client %s not in registry", client_id)
             return None
 
-        secret_name = config.get("secret_name", "")
-        if not secret_name:
-            logger.info("Client %s has no secret_name (manual tranche)", client_id)
+        secret_names = config.get("secret_names")
+        if not secret_names:
+            logger.info("Client %s has no secret_names (manual tranche)", client_id)
             return None
 
-        creds = self._secrets.get(secret_name)
+        creds = self._secrets.get(client_id)
         if creds is None:
-            logger.warning("No credentials found for secret %s", secret_name)
+            logger.warning("No credentials found for client %s", client_id)
             return None
 
         venue = config.get("venue", "")

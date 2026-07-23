@@ -83,6 +83,12 @@ def _register_new_client(
     if client_id in clients:
         logger.warning("  Client %s already exists in registry — skipping", client_id)
     else:
+        secret_names = {
+            "api_key": f"{secret_base}-api-key",
+            "api_secret": f"{secret_base}-api-secret",
+        }
+        if venue == "okx":
+            secret_names["passphrase"] = f"{secret_base}-passphrase"
         clients[client_id] = {
             "full_name": full_name,
             "organisation_id": org_id,
@@ -90,7 +96,7 @@ def _register_new_client(
             "tranche": "managed",
             "currency": currency,
             "venue": venue,
-            "secret_name": f"{secret_base}-{currency.lower()}",
+            "secret_names": secret_names,
             "odum_fee_pct": 0.30,
             "trader_fee_pct": 0.10,
             "is_active": True,
