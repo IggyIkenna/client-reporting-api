@@ -457,7 +457,7 @@ def main() -> None:
     clients: list[tuple[str, dict[str, str | float | bool | dict[str, float]]]] = []
 
     for cid, cfg in registry.items():
-        if not cfg.get("is_active", False) or cfg.get("tranche") != "managed" or not cfg.get("secret_name"):
+        if not cfg.get("is_active", False) or cfg.get("tranche") != "managed" or not cfg.get("secret_names"):
             continue
         if args.client and cid != args.client:
             continue

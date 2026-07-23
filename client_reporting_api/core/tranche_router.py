@@ -51,8 +51,8 @@ def get_data_source(client_id: str) -> str:
         return "manual"
 
     if tranche == "managed":
-        secret_name = config.get("secret_name")
-        if secret_name:
+        secret_names = config.get("secret_names")
+        if secret_names:
             return "api_live"
         return "api_static"
 

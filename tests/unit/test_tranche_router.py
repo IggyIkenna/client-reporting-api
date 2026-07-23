@@ -20,7 +20,9 @@ clients:
     full_name: Managed Client
     tranche: managed
     currency: USD
-    secret_name: managed-client-secret
+    secret_names:
+      api_key: managed-client-secret-api-key
+      api_secret: managed-client-secret-api-secret
     odum_fee_pct: 0.05
     trader_fee_pct: 0.20
     is_active: true
@@ -93,14 +95,14 @@ def test_get_client_config_returns_none_for_unknown(patched_registry: Path) -> N
 
 
 def test_get_data_source_managed_with_secret_is_api_live(patched_registry: Path) -> None:
-    """Managed client with a secret_name returns 'api_live'."""
+    """Managed client with secret_names returns 'api_live'."""
     with patch("client_reporting_api.core.tranche_router._REGISTRY_PATH", patched_registry):
         source = get_data_source("managed-client")
     assert source == "api_live"
 
 
 def test_get_data_source_managed_without_secret_is_api_static(patched_registry: Path) -> None:
-    """Managed client without a secret_name returns 'api_static'."""
+    """Managed client without secret_names returns 'api_static'."""
     with patch("client_reporting_api.core.tranche_router._REGISTRY_PATH", patched_registry):
         source = get_data_source("managed-no-secret")
     assert source == "api_static"

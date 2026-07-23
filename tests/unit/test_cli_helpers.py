@@ -41,18 +41,18 @@ class TestDecimalEncoder:
 class TestGetActiveClients:
     def test_filters_inactive_and_unmanaged(self) -> None:
         registry: dict[str, dict[str, object]] = {
-            "A": {"is_active": True, "tranche": "managed", "secret_name": "exec-a-okx"},
-            "B": {"is_active": False, "tranche": "managed", "secret_name": "exec-b-okx"},
-            "C": {"is_active": True, "tranche": "fund_of_fund", "secret_name": "exec-c-okx"},
-            "D": {"is_active": True, "tranche": "managed", "secret_name": ""},
+            "A": {"is_active": True, "tranche": "managed", "secret_names": {"api_key": "exec-a-okx-api-key"}},
+            "B": {"is_active": False, "tranche": "managed", "secret_names": {"api_key": "exec-b-okx-api-key"}},
+            "C": {"is_active": True, "tranche": "fund_of_fund", "secret_names": {"api_key": "exec-c-okx-api-key"}},
+            "D": {"is_active": True, "tranche": "managed", "secret_names": {}},
         }
         active = cli._get_active_clients(registry)
         assert [cid for cid, _ in active] == ["A"]
 
     def test_filter_by_specific_client(self) -> None:
         registry: dict[str, dict[str, object]] = {
-            "A": {"is_active": True, "tranche": "managed", "secret_name": "exec-a-okx"},
-            "B": {"is_active": True, "tranche": "managed", "secret_name": "exec-b-okx"},
+            "A": {"is_active": True, "tranche": "managed", "secret_names": {"api_key": "exec-a-okx-api-key"}},
+            "B": {"is_active": True, "tranche": "managed", "secret_names": {"api_key": "exec-b-okx-api-key"}},
         }
         active = cli._get_active_clients(registry, client_filter="B")
         assert [cid for cid, _ in active] == ["B"]

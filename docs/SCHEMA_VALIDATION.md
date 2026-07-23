@@ -48,22 +48,22 @@ Returns a 4-tuple of `Decimal`:
 
 ### `ClientConfig` (TypedDict, from `tranche_router.py`)
 
-| Field                | Type             | Required | Description                               |
-| -------------------- | ---------------- | -------- | ----------------------------------------- |
-| `full_name`          | str              | No       | Client display name                       |
-| `tranche`            | str              | No       | Client tier (`managed`, `fund_of_fund`)   |
-| `currency`           | str              | No       | Account currency                          |
-| `venue`              | str              | No       | Trading venue                             |
-| `secret_name`        | str              | No       | Secret Manager key for API credentials    |
-| `odum_fee_pct`       | float            | No       | Odum fee rate                             |
-| `trader_fee_pct`     | float            | No       | Trader fee rate                           |
-| `introducer_id`      | str              | No       | Introducer client ID                      |
-| `introducer_fee_pct` | float            | No       | Introducer fee rate                       |
-| `is_underwater`      | bool             | No       | Whether account is currently underwater   |
-| `is_active`          | bool             | No       | Whether account is active                 |
-| `data_source`        | str              | No       | Override for data source routing          |
-| `is_pooled`          | bool             | No       | Whether this is a pooled account          |
-| `pool_investors`     | dict[str, float] | No       | Pool investor shares `{client_id: share}` |
+| Field                | Type             | Required | Description                                                   |
+| -------------------- | ---------------- | -------- | ------------------------------------------------------------- |
+| `full_name`          | str              | No       | Client display name                                           |
+| `tranche`            | str              | No       | Client tier (`managed`, `fund_of_fund`)                       |
+| `currency`           | str              | No       | Account currency                                              |
+| `venue`              | str              | No       | Trading venue                                                 |
+| `secret_names`       | dict[str, str]   | No       | Secret Manager keys per field (api_key/api_secret/passphrase) |
+| `odum_fee_pct`       | float            | No       | Odum fee rate                                                 |
+| `trader_fee_pct`     | float            | No       | Trader fee rate                                               |
+| `introducer_id`      | str              | No       | Introducer client ID                                          |
+| `introducer_fee_pct` | float            | No       | Introducer fee rate                                           |
+| `is_underwater`      | bool             | No       | Whether account is currently underwater                       |
+| `is_active`          | bool             | No       | Whether account is active                                     |
+| `data_source`        | str              | No       | Override for data source routing                              |
+| `is_pooled`          | bool             | No       | Whether this is a pooled account                              |
+| `pool_investors`     | dict[str, float] | No       | Pool investor shares `{client_id: share}`                     |
 
 ### Report Template Inputs
 

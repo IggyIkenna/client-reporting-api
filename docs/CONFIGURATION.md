@@ -30,7 +30,7 @@ This path is resolved relative to the workspace root. The file contains
 per-client config:
 
 - `tranche` — client tier type
-- `secret_name` — Secret Manager key for API credentials
+- `secret_names` — Secret Manager keys per field (`api_key`, `api_secret`, `passphrase`)
 - `odum_fee_pct`, `trader_fee_pct` — fee rates
 - `introducer_id`, `introducer_fee_pct` — referral fee config
 

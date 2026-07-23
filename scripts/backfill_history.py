@@ -1375,7 +1375,7 @@ def main() -> None:
             continue
         if cfg.get("tranche") != "managed":
             continue
-        if not cfg.get("secret_name"):
+        if not cfg.get("secret_names"):
             continue
         if args.client and cid != args.client:
             continue

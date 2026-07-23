@@ -153,14 +153,15 @@ exec-{client_id}-{venue}-passphrase    # OKX only
 ```
 
 **Examples:**
-| Secret Name | Client | Venue | Type |
-| ---------------------------------- | ------ | ------- | ---------- |
-| `exec-pr-okx-api-key` | PR | OKX | API key |
-| `exec-pr-okx-api-secret` | PR | OKX | API secret |
-| `exec-pr-okx-passphrase` | PR | OKX | Passphrase |
-| `exec-et-binance-api-key` | ET | Binance | API key |
-| `exec-et-binance-api-secret` | ET | Binance | API secret |
-| `exec-odum-prop-binance-api-key` | ODUM_PROP | Binance | API key |
+
+| Secret Name                      | Client    | Venue   | Type       |
+| -------------------------------- | --------- | ------- | ---------- |
+| `exec-pr-okx-api-key`            | PR        | OKX     | API key    |
+| `exec-pr-okx-api-secret`         | PR        | OKX     | API secret |
+| `exec-pr-okx-passphrase`         | PR        | OKX     | Passphrase |
+| `exec-et-binance-api-key`        | ET        | Binance | API key    |
+| `exec-et-binance-api-secret`     | ET        | Binance | API secret |
+| `exec-odum-prop-binance-api-key` | ODUM_PROP | Binance | API key    |
 
 **Access at runtime:**
 
@@ -484,7 +485,10 @@ clients:
     tranche: managed | fund_of_fund
     currency: USDT | BTC
     venue: okx | binance # only for managed
-    secret_name: exec-{id}-{venue}-{currency} # Secret Manager key prefix
+    secret_names: # Secret Manager keys per field
+      api_key: exec-{id}-{venue}-api-key
+      api_secret: exec-{id}-{venue}-api-secret
+      passphrase: exec-{id}-{venue}-passphrase # OKX only
     odum_fee_pct: 0.30 # 30% of profits
     trader_fee_pct: 0.10 # 10% of profits
     introducer_id: "name" # optional
