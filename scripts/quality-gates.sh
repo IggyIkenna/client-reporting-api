@@ -84,7 +84,7 @@ HARDCODED_PROTO_EXCLUDE_GLOBS=("--glob=!**/cli/gcs_sync.py" "--glob=!**/cli/__in
 # Type check + pytest + codex often exceed 300s on large trees locally.
 PIP_AUDIT_EXTRA_ARGS="--ignore-vuln PYSEC-2024-277 --ignore-vuln PYSEC-2025-183"
 MAX_DURATION=600
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(cd "$(git rev-parse --show-toplevel)/.." && pwd)}"
+WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 # CODEX_MAX_VIOLATIONS pinned 2026-06-11 per plans/active/codex_violations_ratchet_to_five_2026_06_10.md (census-honest: 0 current violations; ratchet-down only).
 CODEX_MAX_VIOLATIONS=0
 BASE_QG_SCRIPT="${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
