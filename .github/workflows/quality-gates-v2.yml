@@ -60,11 +60,17 @@ jobs:
     uses: IggyIkenna/unified-trading-pm/.github/workflows/python-quality-gates-v2.yml@live-defi-rollout
     with:
       dep_repos: "unified-trading-library unified-api-contracts"
-      # Empty (the vast majority of repos) -> the reusable workflow's own default -> ubuntu-latest.
-      # Non-empty only for repos in scripts/workflow-templates/self-hosted-qg-repos.txt — see
-      # unified-trading-pm/.github/workflows/python-quality-gates-v2.yml's own input doc for why this
-      # can't be a blanket default (github_actions_operator_gated_followups_2026_07_17.md).
-      self_hosted_runner_labels: '["self-hosted","glue"]'
+      # Empty -> the reusable workflow's own default -> ubuntu-latest. Reverted 2026-07-28
+      # (ldr_qg_failure escalation agt-5b9083): this repo's self-hosted flip (ab32fba4) landed
+      # on the shared `i-0c9b283b31d6b5ca7` glue pool ahead of the 23-repo fanout's own
+      # operator-paced capacity plan — same root cause + fix as execution-service (agt-2cbf1d)
+      # and batch-live-reconciliation-service (agt-70dbed), see
+      # plans/active/issues/fleet_wide_qg_self_hosted_runner_capacity_crisis_2026_07_27.md.
+      # Failing run 30306795757's `QG slice (checks)` "Run quality gates" step was CANCELLED
+      # after 55min on the sole online runner; two workflow_dispatch retries queued behind it
+      # for hours (one still in_progress, one still pending) — consistent with CPU/disk
+      # contention, not a code regression (a clean local `quality-gates.sh` run at this HEAD
+      # passed). Re-add only once the fanout's capacity plan actually covers this repo.
     secrets: inherit
     # Note: reusable workflow inputs are intentionally minimal — service_name + source_dir
     # are derived inside the reusable workflow from github.repository (caller's repo name)
