@@ -434,7 +434,7 @@ requires-dist = [
     { name = "basedpyright", specifier = "==1.38.2" },
     { name = "ccxt", specifier = ">=4.5.24,<5.0.0" },
     { name = "cryptography", specifier = ">=47.0.0,<50.0.0" },
-    { name = "fastapi", specifier = ">=0.115.0,<0.137.0" },
+    { name = "fastapi", specifier = ">=0.137.0,<1.0.0" },
     { name = "google-auth", specifier = ">=2.40.0,<3.0.0" },
     { name = "google-cloud-firestore", specifier = ">=2.19.0,<3.0.0" },
     { name = "google-cloud-logging", specifier = ">=3.11.0,<4.0.0" },
@@ -914,7 +914,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.134.0"
+version = "0.140.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -923,9 +923,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/15/647ea81cb73b55b48fb095158a9cd64e42e9e4f1d34dbb5cc4a4939779d6/fastapi-0.134.0.tar.gz", hash = "sha256:3122b1ea0dbeaab48b5976e80b99ca7eda02be154bf03e126a33220e73255a9a", size = 385667, upload-time = "2026-02-27T21:18:12.931Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/33/e0dfa29ccce4eb8c9a073f9e557b0d6bacbb3aa32e7ad595f678de4d036a/fastapi-0.140.7.tar.gz", hash = "sha256:09a640af2d29006345e1f28e4f031fa60f89b1a75d29f26070f3afa677d66cce", size = 422051, upload-time = "2026-07-27T17:34:45.908Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/e6/fd49c28a54b7d6f5c64045155e40f6cff9ed4920055043fb5ac7969f7f2f/fastapi-0.134.0-py3-none-any.whl", hash = "sha256:f4e7214f24b2262258492e05c48cf21125e4ffc427e30dd32fb4f74049a3d56a", size = 110404, upload-time = "2026-02-27T21:18:10.809Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/0e/00cddd6b8668884e9c7588ab0eeb73becbd1efa3eaead34397f2e9a8de49/fastapi-0.140.7-py3-none-any.whl", hash = "sha256:960bb9696d8fd19dff488aa4f67f276364542cfcce9f7e68a82fe49dce126626", size = 131085, upload-time = "2026-07-27T17:34:47.036Z" },
 ]
 
 [[package]]
@@ -3066,14 +3066,14 @@ wheels = [
 
 [[package]]
 name = "starlette"
-version = "1.1.0"
+version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/95/66/4d20cdf39a8d6a51e663b7038e3b828ff211d3891a43a713fe7e4643f3a8/starlette-1.1.0.tar.gz", hash = "sha256:e83c7fe0ddecd8719c5b840080325aec0260acec86e9832899e377b91d65e90f", size = 2660060, upload-time = "2026-05-23T16:55:41.376Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/e3/7c1dc7381d9f8ab7d854328ebfa884e62cb3f3d8549ddfd37c7814f42afa/starlette-1.3.1.tar.gz", hash = "sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0", size = 2703240, upload-time = "2026-06-12T09:23:11.602Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/79/920b8e0a8b20f793e8d64855095cb8febabf6175b8550b6f7a547d813891/starlette-1.1.0-py3-none-any.whl", hash = "sha256:7f0dfd38e428aad5cb6f9f667f0ca1d2d8ca3f3385dccac8305f79ec98458382", size = 72899, upload-time = "2026-05-23T16:55:39.201Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/bb/2799cc2ede3ed41131f8975621e7213dfc7ef4acbbaadfa440f32500c370/starlette-1.3.1-py3-none-any.whl", hash = "sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6", size = 73632, upload-time = "2026-06-12T09:23:10.017Z" },
 ]
 
 [[package]]
@@ -3288,6 +3288,7 @@ dependencies = [
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-build" },
     { name = "google-cloud-compute" },
+    { name = "google-cloud-firestore" },
     { name = "google-cloud-logging" },
     { name = "google-cloud-pubsub" },
     { name = "google-cloud-run" },
@@ -3345,7 +3346,7 @@ requires-dist = [
     { name = "databento", specifier = ">=0.32.0,<1.0.0" },
     { name = "duckdb", specifier = ">=1.5.0,<2.0.0" },
     { name = "fakeredis", specifier = ">=2.20.0,<3.0.0" },
-    { name = "fastapi", specifier = ">=0.115.0,<0.137.0" },
+    { name = "fastapi", specifier = ">=0.137.0,<1.0.0" },
     { name = "freezegun", specifier = ">=1.2.2,<2.0.0" },
     { name = "fsspec", specifier = ">=2025.2.0,<2026.0.0" },
     { name = "gcsfs", specifier = ">=2025.5.0,<2026.0.0" },
@@ -3353,6 +3354,7 @@ requires-dist = [
     { name = "google-cloud-bigquery", specifier = ">=3.40.0,<4.0.0" },
     { name = "google-cloud-build", specifier = ">=3.0.0,<4.0.0" },
     { name = "google-cloud-compute", specifier = ">=1.45.0,<2.0.0" },
+    { name = "google-cloud-firestore", specifier = ">=2.0.0,<3.0.0" },
     { name = "google-cloud-logging", specifier = ">=3.12.0,<4.0.0" },
     { name = "google-cloud-pubsub", specifier = ">=2.28.0,<3.0.0" },
     { name = "google-cloud-run", specifier = ">=0.15.0,<1.0.0" },
@@ -3392,7 +3394,7 @@ requires-dist = [
     { name = "ruff", specifier = "==0.15.0" },
     { name = "scikit-learn", specifier = ">=1.5.0,<2.0.0" },
     { name = "scipy", specifier = ">=1.15.0,<2.0.0" },
-    { name = "starlette", specifier = ">=1.1.0,<1.3.0" },
+    { name = "starlette", specifier = ">=1.3.1,<2.0.0" },
     { name = "unified-api-contracts", editable = "../unified-api-contracts" },
     { name = "urllib3", specifier = ">=2.7.0,<3.0.0" },
     { name = "vulture", specifier = ">=2.0,<3.0.0" },

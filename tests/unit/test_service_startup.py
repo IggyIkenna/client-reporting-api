@@ -39,9 +39,11 @@ class TestClientReportingApiStartup:
 
     def test_sse_stream_route_registered(self) -> None:
         """GET /api/v1/stream/reports SSE endpoint must be registered."""
+        from unified_trading_library import get_route_paths
+
         from client_reporting_api.api.main import app
 
-        routes = [r.path for r in app.routes]  # type: ignore[attr-defined]
+        routes = get_route_paths(app)
         assert "/api/v1/stream/reports" in routes
 
 
@@ -75,7 +77,9 @@ class TestClientReportingApiHealthProbes:
 
     def test_sse_stream_endpoint_is_reachable(self, client) -> None:
         """GET /api/v1/stream/reports must be a registered route (route resolves without 404)."""
+        from unified_trading_library import get_route_paths
+
         from client_reporting_api.api.main import app
 
-        routes = {r.path for r in app.routes}  # type: ignore[attr-defined]
+        routes = set(get_route_paths(app))
         assert "/api/v1/stream/reports" in routes, "SSE route /api/v1/stream/reports must be registered"
