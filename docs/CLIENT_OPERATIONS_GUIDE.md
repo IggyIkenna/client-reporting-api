@@ -1,99 +1,43 @@
-# Client Reporting Operations Guide
+---
+doc_type: runbook
+title: Client Reporting Operations Guide — client-reporting-api
+execution:
+  {
+    owner: ikenna,
+    cadence: hourly (:05 update job) + daily (00:15 UTC snapshot),
+    verifier: ikenna + harsh (cross-operator),
+    last_executed: 2026-07-28 (roster/fees operator-confirmed),
+  }
+---
 
-Complete reference for the client lifecycle: onboarding, API keys, backfill, hourly/daily updates, fee structure, and organisational hierarchy.
+# Client Reporting Operations Guide — client-reporting-api
+
+> **Commercial facts (roster / org hierarchy / per-client fees / tranches / HWM invoicing model) are NOT in this file.**
+> Their canonical SSOT is
+> [`/codex/14-customer-journeys/commercial-model/client-roster-and-fee-model.md`](../../unified-trading-pm/codex/14-customer-journeys/commercial-model/client-roster-and-fee-model.md).
+> Grep codex for committed numbers — do not re-add the roster/fee tables here (S5.11: repo docs defer to the codex SSOT,
+> and if this file disagrees with codex, codex wins). The **live machine config** for per-client fee %s / tranche /
+> pooled weights / Secret-Manager keys is `execution-service/configs/credentials-registry.yaml`.
+>
+> This file is the repo-local **operations runbook**: the exchange-key setup, onboarding CLI, backfill, hourly/daily
+> update jobs, GCS persistence layout, Cloud Run scheduling, and troubleshooting — the parts that are specific to
+> operating `client-reporting-api`.
 
 ---
 
 ## Table of Contents
 
-1. [Organisation & Client Hierarchy](#organisation--client-hierarchy)
-2. [Strategies](#strategies)
-3. [Exchange API Keys (Binance & OKX)](#exchange-api-keys-binance--okx)
-4. [Client Onboarding](#client-onboarding)
-5. [Backfill Process](#backfill-process)
-6. [Hourly Update](#hourly-update)
-7. [Daily Full Snapshot](#daily-full-snapshot)
-8. [Fee Structure & Invoicing](#fee-structure--invoicing)
-9. [Data Persistence (GCS)](#data-persistence-gcs)
-10. [Cloud Run Jobs & Scheduling](#cloud-run-jobs--scheduling)
-11. [Credential Registry Reference](#credential-registry-reference)
-12. [Troubleshooting](#troubleshooting)
+1. [Exchange API Keys (Binance & OKX)](#exchange-api-keys-binance--okx)
+2. [Client Onboarding](#client-onboarding)
+3. [Backfill Process](#backfill-process)
+4. [Hourly Update](#hourly-update)
+5. [Daily Full Snapshot](#daily-full-snapshot)
+6. [Data Persistence (GCS)](#data-persistence-gcs)
+7. [Cloud Run Jobs & Scheduling](#cloud-run-jobs--scheduling)
+8. [Credential Registry Reference](#credential-registry-reference)
+9. [Troubleshooting](#troubleshooting)
 
----
-
-## Organisation & Client Hierarchy
-
-Every client belongs to an **organisation**. Organisations are either `internal` (Odum's own accounts) or `client` (external managed accounts).
-
-```
-Organisation (org)
-  └── Client (account)
-        └── Strategy (what we trade on their behalf)
-```
-
-### Current Organisations
-
-| Org ID       | Name          | Type     | Contact   |
-| ------------ | ------------- | -------- | --------- |
-| `odum`       | Odum Capital  | internal | —         |
-| `prism`      | Prism Capital | client   | Max       |
-| `namnar`     | Namnar        | client   | —         |
-| `eqvilent`   | Eqvilent      | client   | Bluecoast |
-| `steadyhash` | Steady Hash   | client   | —         |
-| `gpd`        | GPD Capital   | client   | —         |
-| `shaun_lim`  | Shaun Lim     | client   | —         |
-| `anu`        | Anu           | client   | —         |
-| `ik`         | IK Group      | client   | —         |
-| `yoav`       | Yoav          | client   | —         |
-| `guy_asraf`  | Guy Asraf     | client   | —         |
-
-### Current Clients
-
-| Client ID   | Organisation | Venue   | Currency | Strategy              | Tranche      | Fee (Odum) | Fee (Trader) |
-| ----------- | ------------ | ------- | -------- | --------------------- | ------------ | ---------- | ------------ |
-| `PR`        | Prism        | OKX     | USDT     | Mean Reversion Top 20 | managed      | 40%        | 10%          |
-| `NN`        | Namnar       | OKX     | USDT     | Mean Reversion Top 20 | managed      | 30%        | 10%          |
-| `ET`        | Eqvilent     | Binance | USDT     | Mean Reversion Top 20 | managed      | 30%        | 10%          |
-| `STD`       | Steady Hash  | OKX     | USDT     | Mean Reversion Top 20 | managed      | 35%        | 10%          |
-| `GP`        | GPD Capital  | OKX     | USDT     | Mean Reversion Top 20 | managed      | 30%        | 10%          |
-| `SL`        | Shaun Lim    | OKX     | USDT     | Mean Reversion Top 20 | managed      | 30%        | 10%          |
-| `SL2`       | Shaun Lim    | OKX     | BTC      | Mean Reversion Top 20 | managed      | 30%        | 10%          |
-| `ANU`       | Anu          | OKX     | BTC      | Mean Reversion Top 20 | managed      | 30%        | 10%          |
-| `IK`        | IK Group     | OKX     | USDT     | Mean Reversion Top 20 | managed      | 35%        | 10%          |
-| `YOAV`      | Yoav         | —       | BTC      | DeFi BTC Yield        | fund_of_fund | 20%        | 0%           |
-| `GUY_ASRAF` | Guy Asraf    | —       | BTC      | DeFi BTC Yield        | fund_of_fund | 20%        | 0%           |
-| `ODUM_PROP` | Odum Capital | Binance | USDT     | Mean Reversion Top 20 | managed      | 0%         | 0%           |
-
-### Client Tranches
-
-| Tranche        | Data Source  | Description                                       |
-| -------------- | ------------ | ------------------------------------------------- |
-| `managed`      | Exchange API | We hold client's API keys, trade on their behalf  |
-| `fund_of_fund` | Manual entry | No exchange API — NAV entered manually per period |
-
-### Pooled Accounts
-
-Client `IK` is a **pooled account** — multiple investors share one exchange sub-account:
-
-```yaml
-pool_investors:
-  jihane: 0.25344 # 25.3%
-  amaka: 0.216 # 21.6%
-  ik: 0.53056 # 53.1%
-```
-
-Fees and P&L are split pro-rata by these weights.
-
----
-
-## Strategies
-
-| Strategy ID            | Name                  | Description                                                            |
-| ---------------------- | --------------------- | ---------------------------------------------------------------------- |
-| `mean_reversion_top20` | Mean Reversion Top 20 | Perpetual futures mean reversion on top 20 crypto assets by market cap |
-| `defi_btc_yield`       | DeFi BTC Yield        | BTC-denominated yield via DeFi protocols and fund-of-fund allocation   |
-
-All 10 managed clients currently run `mean_reversion_top20`. The 2 fund-of-fund clients run `defi_btc_yield`.
+> **Roster / strategies / fee structure / invoicing** → see the codex SSOT linked above.
 
 ---
 
@@ -218,6 +162,9 @@ client-reporting-manage onboard \
 client-reporting-manage onboard --client-id TEST --venue okx --api-key ... --dry-run
 ```
 
+> Setting custom fee rates, introducers, `is_underwater`, and HWM seeds after onboarding is a commercial-config step —
+> see the codex roster/fee SSOT for the model and `credentials-registry.yaml` for the live fields.
+
 ---
 
 ## Backfill Process
@@ -303,6 +250,8 @@ daily_return = (closing_equity - transfer) / (opening_equity) - 1
 TWR = product(1 + daily_return_i) - 1
 ```
 
+> The TWR/Notional/PnL-Recovery HWM model itself is documented in the codex roster/fee SSOT.
+
 ---
 
 ## Daily Full Snapshot
@@ -317,46 +266,6 @@ Runs once at `00:15 UTC` daily (after market close for most regions). Does every
 Schedule: "15 0 * * *" UTC
 Cloud Run Job: {env}-client-reporting-daily-snapshot
 ```
-
----
-
-## Fee Structure & Invoicing
-
-### Fee Tiers
-
-Each client has up to 4 fee components:
-
-| Fee            | Applies When          | Typical Range | Who Gets Paid              |
-| -------------- | --------------------- | ------------- | -------------------------- |
-| Trader fee     | PnL > trader HWM      | 10%           | Desk trader                |
-| Odum fee       | PnL > Odum HWM        | 20-40%        | Odum Capital               |
-| Introducer fee | If introducer exists  | 5-15%         | Referrer (of Odum's share) |
-| Server cost    | Account is underwater | $50/month     | Infrastructure             |
-
-### High-Water Mark (HWM)
-
-Fees are only charged on **new profits above the previous high**. If the account loses money, no performance fees until it recovers past the previous peak.
-
-- **Trader HWM**: Separate from Odum HWM (trader can be paid on new profits even if Odum's HWM isn't breached, if they have different entry points)
-- **Odum HWM**: Reset at fee crystallisation (typically monthly)
-- **Dual HWM**: Each party tracks their own peak independently
-
-### Underwater Accounts
-
-When `is_underwater: true` in the registry:
-
-- No performance fees charged
-- Server cost ($50/month) charged instead
-- Tracked until equity exceeds the HWM again
-
-### Introducer Fees
-
-Some clients were referred. The introducer gets a percentage of **Odum's fee** (not the total P&L):
-
-| Client | Introducer | Introducer Fee | Effective Split                         |
-| ------ | ---------- | -------------- | --------------------------------------- |
-| PR     | Max        | 15% of Odum    | Odum 34%, Introducer 6%, Trader 10%     |
-| ET     | Bluecoast  | 5% of Odum     | Odum 28.5%, Introducer 1.5%, Trader 10% |
 
 ---
 
@@ -375,7 +284,7 @@ gs://client-reporting-data-{project_id}/
 ### File Layout
 
 ```
-gs://client-reporting-data-central-element-323112/
+gs://client-reporting-data-{project_id}/
   backfill/
     PR/
       balance.json        # 2KB
@@ -505,6 +414,9 @@ clients:
 
 server_costs_per_underwater_account_usd: 50
 ```
+
+> The **committed values** of these fields (the actual roster + fee %s + pooled weights) are in the codex roster/fee
+> SSOT; this section documents the schema, not the live values.
 
 ---
 
