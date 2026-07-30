@@ -99,6 +99,10 @@ steps:
         STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $$TOKEN" "https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" || echo "000")
         if [ "$$STATUS" != "200" ] && [ "$$STATUS" != "404" ]; then echo "FAIL: Python AR $$STATUS"; exit 1; fi
         gcloud artifacts repositories describe unified-trading-system --location=asia-northeast1 --quiet || { echo "FAIL: Docker AR"; exit 1; }
+        # Persisted for the "build" step's gar_token BuildKit secret (that step's own image,
+        # gcr.io/cloud-builders/docker, has no gcloud CLI to mint its own token) — mounted as a
+        # BuildKit secret in the Dockerfile's uv pip install layer, never baked into an image layer.
+        echo "$$TOKEN" > /workspace/.gar_token
         echo "Auth pre-check passed"
     waitFor: ["-"]
 
@@ -163,7 +167,11 @@ steps:
         # substitutions as docker build-args, so both must be explicit.
         VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
         echo "build: SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION"
+        # gar_token: minted by the auth-precheck step (this step's own image,
+        # gcr.io/cloud-builders/docker, has no gcloud CLI) and persisted to
+        # /workspace/.gar_token — mounted below as a BuildKit secret, never baked into a layer.
         docker build -f Dockerfile \
+          --secret id=gar_token,src=/workspace/.gar_token \
           --build-arg PROJECT_ID=$PROJECT_ID \
           --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
@@ -171,7 +179,7 @@ steps:
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           .
-    waitFor: ["pull-base-image", "ensure-repo", "fetch-ui", "extract-version"]
+    waitFor: ["pull-base-image", "ensure-repo", "fetch-ui", "extract-version", "auth-precheck"]
 
   - name: "gcr.io/cloud-builders/docker"
     id: "quality-gates"
