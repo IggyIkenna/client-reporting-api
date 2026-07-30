@@ -42,9 +42,20 @@ ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 
 # Strip local uv sources (../unified-trading-library doesn't exist in container)
-# UTL is pre-installed in the base image, so uv will see it as satisfied
-RUN sed -i '/\[tool\.uv\.sources/,/^$/d' pyproject.toml \
-    && uv pip install --system .
+# UTL is pre-installed in the base image, so uv will see it as satisfied for THIS floor.
+RUN sed -i '/\[tool\.uv\.sources/,/^$/d' pyproject.toml
+
+# uv does NOT read pip.conf's extra-index-url (pip-only convention), and this Dockerfile
+# carries no pip.conf at all — the install above has silently relied on the pinned base image
+# already satisfying unified-trading-library>=0.66.0 / unified-api-contracts>=0.80.0, the exact
+# latent gap that broke instruments-service's build the moment ITS floor outran its base image
+# (see unified-trading-pm/plans/active/issues/cloud_build_unified_api_contracts_publish_ordering_race_2026_07_29.md).
+# Same fix as instruments-service@4c05f2d3: mount a freshly-minted GAR token as a BuildKit
+# secret, scoped to only this RUN layer, never baked into an image layer/history. 3-attempt
+# retry with backoff mirrors the fleet-wide pattern (transient AR/network hiccups).
+RUN --mount=type=secret,id=gar_token \
+    UV_EXTRA_INDEX_URL="https://oauth2accesstoken:$(cat /run/secrets/gar_token)@asia-northeast1-python.pkg.dev/central-element-323112/unified-libraries/simple/" \
+    sh -c 'i=1; until uv pip install --system .; do [ "$i" -ge 3 ] && { echo "uv pip install failed after 3 attempts" >&2; exit 1; }; w=$((15 * i)); echo "uv pip install failed (attempt $i/3) -- retrying in ${w}s"; sleep "$w"; i=$((i + 1)); done'
 
 # ============================================
 # Target: API server (Cloud Run Service)
