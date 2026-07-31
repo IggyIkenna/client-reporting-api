@@ -34,13 +34,14 @@ docker run -p 8080:8080 \
 ## Cloud Run Deployment
 
 ```bash
-# Build via Cloud Build
+# Build via Cloud Build (images publish to Artifact Registry; Container Registry / gcr.io/ is deprecated).
+# Canonical image path: asia-northeast1-docker.pkg.dev/{project_id}/{repository}/client-reporting-api:{tag}
 gcloud builds submit --config cloudbuild.yaml
 
 # Deploy
 gcloud run deploy client-reporting-api \
-  --image gcr.io/{project_id}/client-reporting-api \
-  --region us-central1 \
+  --image asia-northeast1-docker.pkg.dev/{project_id}/{repository}/client-reporting-api:latest \
+  --region asia-northeast1 \
   --platform managed \
   --set-env-vars ENVIRONMENT=production \
   --set-secrets API_KEY=client-reporting-api-key:latest \
