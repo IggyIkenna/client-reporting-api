@@ -12,30 +12,17 @@ tests/
 
 ## Running Tests
 
+Run the repo quality gate — it drives tests through the correct `.venv` and enforces the coding-standard checks.
+**Never run `pytest` directly** (wrong venv, and it bypasses the enforced gates).
+
 ```bash
 cd client-reporting-api
-uv pip install -e ".[dev]"
-
-# All tests
-pytest tests/ -v
-
-# Unit tests only
-pytest tests/unit/ -v
-
-# With coverage (must reach 70%)
-pytest tests/ --cov=client_reporting_api --cov-report=term-missing
-
-# Parallel
-pytest tests/ -n auto
+bash scripts/quality-gates.sh            # ship mode (autofix + check)
+bash scripts/quality-gates.sh --no-fix   # diagnostic / check only
 ```
 
-## Quality Gates
-
-```bash
-bash scripts/quality-gates.sh
-```
-
-Runs ruff, basedpyright, pytest, bandit, pip-audit.
+The gate runs ruff, basedpyright, pytest (70%+ coverage), bandit, and pip-audit through the pinned `.venv`.
+SSOT: `/codex/06-coding-standards/quality-gates.md`.
 
 ## Testing Fee Calculator
 
@@ -104,6 +91,5 @@ assert resp.status_code == 200
 
 ## Type Checking
 
-```bash
-run_timeout 120 basedpyright client_reporting_api/
-```
+Type checking (`basedpyright`, strict) runs as part of the quality gate — invoke it via `bash scripts/quality-gates.sh`
+rather than calling the checker standalone (the gate wires the correct `.venv` and config).
