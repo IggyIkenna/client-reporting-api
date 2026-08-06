@@ -49,7 +49,7 @@ dependencies = [
     #                        changes in the 50.0.0 changelog; cryptography is transitive-only here (no direct import).
     # pillow       <12.3.0 → PYSEC-2026-2253/2254/2255/2256/2257
     # pygments     <2.20.0 → CVE-2026-4539
-    "aiohttp>=3.14.1,<4.0.0",
+    "aiohttp>=3.14.3,<4.0.0",
     "cryptography>=50.0.0,<51.0.0",
     "pillow>=12.3.0,<13.0.0",
     "pygments>=2.20.0,<3.0.0",
