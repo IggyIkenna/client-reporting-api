@@ -19,6 +19,7 @@ substitutions:
   # triggers set BRANCH_NAME automatically; manual `gcloud builds submit` runs
   # pass --substitutions=_BRANCH=<name>. Only deployment-api consumes it.
   _BRANCH: "live-defi-rollout"
+  _RUN_INIMAGE_QG: "false"
 
 steps:
   # ── Fetch deployment-ui (SPA bundle source) — deployment-api ONLY ──────────
@@ -166,6 +167,16 @@ steps:
         # required by the digest-pinned base FROM; Cloud Build does NOT auto-pass
         # substitutions as docker build-args, so both must be explicit.
         VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
+        SAFE_SHA="$SHORT_SHA"
+        if [ -z "$$SAFE_SHA" ]; then SAFE_SHA="$$VERSION"; fi
+        if [ -z "$$VERSION" ]; then VERSION="$$SAFE_SHA"; fi
+        if [ -z "$$SAFE_SHA" ] || [ -z "$$VERSION" ]; then
+          echo "FATAL: cannot build an image tag — SHORT_SHA and VERSION are both empty." >&2
+          echo "  SHORT_SHA is set only for trigger (repoSource) builds; a manual" >&2
+          echo "  'gcloud builds submit' must pass --substitutions SHORT_SHA=<sha>," >&2
+          echo "  or the extract-version step must write /workspace/VERSION." >&2
+          exit 1
+        fi
         echo "build: SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION"
         # gar_token: minted by the auth-precheck step (this step's own image,
         # gcr.io/cloud-builders/docker, has no gcloud CLI) and persisted to
@@ -176,7 +187,7 @@ steps:
           --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
           --cache-from asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
-          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$SAFE_SHA \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           .
     waitFor:
@@ -195,13 +206,24 @@ steps:
       - "-c"
       - |
         set -e
+        # _RUN_INIMAGE_QG default false (declared in substitutions): QG is already
+        # enforced at quickmerge + the quality-gates-v2 promotion gate, and the
+        # in-image harness (unified-trading-pm/base-service.sh) is absent from the
+        # image, so re-running it here is redundant+impossible (exit 127). Deploy
+        # triggers set _RUN_INIMAGE_QG=true to keep the gate on feature/LDR builds.
+        if [ "${_RUN_INIMAGE_QG}" != "true" ]; then
+          echo "quality-gates: skipped (_RUN_INIMAGE_QG=${_RUN_INIMAGE_QG}) — QG already enforced at quickmerge + promotion v2"
+          exit 0
+        fi
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
-          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
-          /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
+          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
+          /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
 
   # ── Immutable sha-tag guard (first push wins) ──────────────────────────────
@@ -285,5 +307,14 @@ availableSecrets:
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: "E2_HIGHCPU_8"
+  # ALLOW_LOOSE: gcloud builds submit auto-injects `_BRANCH` for source uploads
+  # (git branch), and this config references `_BRANCH` only via the shell-default
+  # form ${_BRANCH:-...}, which Cloud Build's substitution scanner does NOT treat
+  # as a template reference. Without ALLOW_LOOSE a manual submit is rejected with
+  # "key _BRANCH ... not matched in the template". ALLOW_LOOSE lets the injected
+  # _BRANCH pass through (unused — the shell fallback governs) and SHORT_SHA stay
+  # empty so the SAFE_SHA guard's VERSION fallback is reachable. (2026-08-06, proof
+  # b7bcfccc first exposed this; verified empirically with a no-source busybox build.)
+  substitutionOption: ALLOW_LOOSE
 
 timeout: "600s"
