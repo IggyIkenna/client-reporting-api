@@ -30,6 +30,7 @@ from client_reporting_api.core.ledger_views import (
     read_batch_total_pnl,
     read_canonical_positions,
     read_canonical_run_fills,
+    read_execution_alpha_bps,
     read_ledger_rows,
     read_marks,
     read_run_window,
@@ -875,6 +876,7 @@ def get_client_backtest(
     paper_total = Decimal(str(paper_pnl["total_pnl"]))
     window_start, window_end, _strategy_ids, fill_model = read_run_window(client_id, run_id)
     batch_run_id, batch_total = read_batch_total_pnl(client_id, run_id)
+    exec_alpha_bps = read_execution_alpha_bps(client_id, run_id)
     recon = latest_recon_verdict(client_id)
     matched = recon.get("matched_trades") if recon.get("paper_run_id") == run_id else None
     surface = backtest_surface(
@@ -885,6 +887,7 @@ def get_client_backtest(
         batch_total_pnl=batch_total,
         batch_run_id=batch_run_id,
         matched_trades=matched if isinstance(matched, int) else None,
+        execution_alpha_bps=exec_alpha_bps,
     )
     surface["client_id"] = client_id
     surface["run_id"] = run_id

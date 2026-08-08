@@ -423,6 +423,7 @@ def backtest_surface(
     batch_total_pnl: Decimal | None,
     batch_run_id: str | None,
     matched_trades: int | None = None,
+    execution_alpha_bps: Decimal | None = None,
 ) -> dict[str, object]:
     """Paper-vs-batch backtest payload: historical PnL + execution cost + assumptions.
 
@@ -462,7 +463,9 @@ def backtest_surface(
             ),
         },
         "execution_cost": {
-            "execution_alpha": "0" if fill_model.upper() == "BENCHMARK" else None,
+            "execution_alpha": "0" if fill_model.upper() == "BENCHMARK" else (
+                str(execution_alpha_bps) if execution_alpha_bps is not None else None
+            ),
             "execution_alpha_is_structural_zero": fill_model.upper() == "BENCHMARK",
             "definition": (
                 "execution alpha = smart-matching fill - benchmark fill (~0 while paper/batch use the "

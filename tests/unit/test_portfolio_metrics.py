@@ -400,3 +400,34 @@ def test_backtest_surface_ok_when_batch_present_computes_paper_minus_batch() -> 
     # determinism ε=0 — Decimal subtraction preserves scale → "0.0".
     assert surface["paper_vs_batch"]["paper_minus_batch"] == str(Decimal("-3.5") - Decimal("-3.5"))
     assert surface["paper_vs_batch"]["matched_trades"] == 42
+
+
+def test_backtest_surface_smart_with_measured_alpha() -> None:
+    """SMART fill_model + sidecar present → real execution_alpha, not structural zero."""
+    surface = backtest_surface(
+        fill_model="SMART",
+        window_start=datetime(2026, 5, 16, tzinfo=UTC),
+        window_end=datetime(2026, 5, 22, tzinfo=UTC),
+        paper_total_pnl=Decimal("100"),
+        batch_total_pnl=None,
+        batch_run_id=None,
+        execution_alpha_bps=Decimal("10"),
+    )
+    assert surface["execution_cost"]["execution_alpha"] == "10"
+    assert surface["execution_cost"]["execution_alpha_is_structural_zero"] is False
+    assert surface["execution_assumptions"]["fill_model"] == "SMART"
+
+
+def test_backtest_surface_smart_pending_when_no_sidecar() -> None:
+    """SMART fill_model + no sidecar yet → execution_alpha is None (honest PENDING)."""
+    surface = backtest_surface(
+        fill_model="SMART",
+        window_start=datetime(2026, 5, 16, tzinfo=UTC),
+        window_end=datetime(2026, 5, 22, tzinfo=UTC),
+        paper_total_pnl=Decimal("100"),
+        batch_total_pnl=None,
+        batch_run_id=None,
+        execution_alpha_bps=None,
+    )
+    assert surface["execution_cost"]["execution_alpha"] is None
+    assert surface["execution_cost"]["execution_alpha_is_structural_zero"] is False

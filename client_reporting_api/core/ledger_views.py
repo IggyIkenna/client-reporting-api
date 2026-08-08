@@ -84,6 +84,8 @@ _LEDGER_TYPE_PRICING = "ledger_type=pricing"
 #: views resolve, so money movements belong to the exact run on the dashboard.
 _LEDGER_TYPE_TRANSFER = "ledger_type=transfer"
 
+_LEDGER_TYPE_EXECUTION_ALPHA = "ledger_type=execution_alpha"
+
 #: ``LedgerRow.event_type`` value that discriminates a PricingLedger mark row.
 _MARK_UPDATE_EVENT_TYPE = "mark_update"
 
@@ -596,6 +598,69 @@ def read_run_window(
         tuple(manifest.strategy_ids),
         str(manifest.fill_model),
     )
+
+
+def _sum_alpha_jsonl(raw: str) -> tuple[Decimal, bool]:
+    """Sum ``execution_alpha_bps`` values from a raw execution-alpha JSONL string.
+
+    Returns ``(total, found_any)`` — ``found_any`` is False iff no numeric rows were
+    present (e.g. an empty file), which the caller treats as PENDING, not zero.
+    """
+    total = Decimal("0")
+    found_any = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        row = json.loads(stripped)
+        bps = row.get("execution_alpha_bps")
+        if bps is not None:
+            total += Decimal(str(bps))
+            found_any = True
+    return total, found_any
+
+
+def read_execution_alpha_bps(
+    client_id: str,
+    run_id: str,
+    cloud: str = "gcp",
+) -> Decimal | None:
+    """Read the execution-alpha sidecar → Σ execution_alpha_bps, or None if absent.
+
+    Execution-service smart-fill replay writes an ADDITIVE sidecar to
+    ``{run_root}/ledger_type=execution_alpha/{run_id}.jsonl`` AFTER the paper
+    InstructionLedger lands. Returns the sum of per-fill ``execution_alpha_bps``
+    values. Returns ``None`` (honest PENDING) when the sidecar has not yet been
+    written (replay has not run for this paper run yet).
+    """
+    if not run_id:
+        return None
+    try:
+        ledger_root = client_ledger_root(client_id, run_id, cloud=cloud).rstrip("/")
+        bucket, prefix = _split_gs(ledger_root)
+        alpha_prefix = f"{prefix}/{_LEDGER_TYPE_EXECUTION_ALPHA}/"
+        storage = get_storage_client()
+        total = Decimal("0")
+        found_any = False
+        for blob_meta in storage.list_blobs(bucket, prefix=alpha_prefix):
+            path = str(getattr(blob_meta, "name", ""))
+            if not path.endswith(".jsonl"):
+                continue
+            raw = storage.download_bytes(bucket, path).decode("utf-8")
+            blob_total, blob_found = _sum_alpha_jsonl(raw)
+            total += blob_total
+            found_any = found_any or blob_found
+        if not found_any:
+            return None
+        return total
+    except Exception as exc:
+        logger.warning(
+            "read_execution_alpha_bps: read failed for client=%s run=%s: %s",
+            client_id,
+            run_id,
+            exc,
+        )
+        return None
 
 
 def _decimal_str(value: Decimal | None) -> str | None:
