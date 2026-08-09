@@ -19,7 +19,6 @@ substitutions:
   # triggers set BRANCH_NAME automatically; manual `gcloud builds submit` runs
   # pass --substitutions=_BRANCH=<name>. Only deployment-api consumes it.
   _BRANCH: "live-defi-rollout"
-  _RUN_INIMAGE_QG: "false"
 
 steps:
   # ── Fetch deployment-ui (SPA bundle source) — deployment-api ONLY ──────────
@@ -206,24 +205,13 @@ steps:
       - "-c"
       - |
         set -e
-        # _RUN_INIMAGE_QG default false (declared in substitutions): QG is already
-        # enforced at quickmerge + the quality-gates-v2 promotion gate, and the
-        # in-image harness (unified-trading-pm/base-service.sh) is absent from the
-        # image, so re-running it here is redundant+impossible (exit 127). Deploy
-        # triggers set _RUN_INIMAGE_QG=true to keep the gate on feature/LDR builds.
-        if [ "${_RUN_INIMAGE_QG}" != "true" ]; then
-          echo "quality-gates: skipped (_RUN_INIMAGE_QG=${_RUN_INIMAGE_QG}) — QG already enforced at quickmerge + promotion v2"
-          exit 0
-        fi
-        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
-        echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
-          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
-          /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
+          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
+          /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
 
   # ── Immutable sha-tag guard (first push wins) ──────────────────────────────
