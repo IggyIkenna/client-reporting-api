@@ -45,6 +45,22 @@ def _base_url() -> str:
     return get_config().deployment_api_url
 
 
+def _headers() -> dict[str, str]:
+    """X-API-Key header for deployment-api server-to-server calls (empty-safe).
+
+    The key is the same GSM secret `deployment-api-api-key` deployment-api validates
+    against. When unset in this service's env (deploy path not yet wired), send no
+    header — matching deployment-api's own "omit if empty" convention so the caller
+    keeps working during rollout.
+    """
+    from client_reporting_api.config import get_config
+
+    key = (get_config().deployment_api_key or "").strip()
+    if not key:
+        return {}
+    return {"X-API-Key": key}
+
+
 def get_unified_alerts() -> tuple[list[dict[str, object]], str]:
     """Fetch the unified alert ledger; ``([], "unavailable")`` on any failure.
 
@@ -53,7 +69,7 @@ def get_unified_alerts() -> tuple[list[dict[str, object]], str]:
     when the deployment-api could not be reached.
     """
     try:
-        resp = httpx.get(f"{_base_url()}/api/alerts", timeout=_TIMEOUT_S)
+        resp = httpx.get(f"{_base_url()}/api/alerts", timeout=_TIMEOUT_S, headers=_headers())
         resp.raise_for_status()
         payload = cast(dict[str, object], resp.json())
         alerts = cast(list[dict[str, object]], payload.get("alerts", []))
@@ -73,7 +89,7 @@ def get_data_status_coverage() -> tuple[dict[str, dict[str, object]], str]:
     panel's corpus-coverage lens is in sync with the operator's data-status page.
     """
     try:
-        resp = httpx.get(f"{_base_url()}/api/data-status/honest-coverage", timeout=_TIMEOUT_S)
+        resp = httpx.get(f"{_base_url()}/api/data-status/honest-coverage", timeout=_TIMEOUT_S, headers=_headers())
         resp.raise_for_status()
         payload = cast(dict[str, object], resp.json())
         by_ag = cast(dict[str, dict[str, object]], payload.get("by_asset_group", {}))

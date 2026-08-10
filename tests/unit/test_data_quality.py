@@ -385,7 +385,7 @@ class TestDeploymentApiClient:
         import client_reporting_api.core.deployment_api_client as dac
 
         payload: dict[str, object] = {"alerts": [{"kind": "vm_down"}], "streams": []}
-        monkeypatch.setattr(dac.httpx, "get", lambda url, timeout=5.0: _FakeResp(payload))
+        monkeypatch.setattr(dac.httpx, "get", lambda url, timeout=5.0, headers=None: _FakeResp(payload))
         alerts, source = dac.get_unified_alerts()
         assert source == "deployment-api"
         assert alerts == [{"kind": "vm_down"}]
@@ -393,7 +393,7 @@ class TestDeploymentApiClient:
     def test_alerts_unreachable_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.core.deployment_api_client as dac
 
-        def _boom(url: str, timeout: float = 5.0) -> _FakeResp:
+        def _boom(url: str, timeout: float = 5.0, headers: dict[str, str] | None = None) -> _FakeResp:
             raise httpx.ConnectError("down")
 
         monkeypatch.setattr(dac.httpx, "get", _boom)
@@ -408,7 +408,7 @@ class TestDeploymentApiClient:
                 "cefi": {"captured": 716159, "total": 35829048, "coverage_pct": 11.68},
             }
         }
-        monkeypatch.setattr(dac.httpx, "get", lambda url, timeout=5.0: _FakeResp(payload))
+        monkeypatch.setattr(dac.httpx, "get", lambda url, timeout=5.0, headers=None: _FakeResp(payload))
         by_ag, source = dac.get_data_status_coverage()
         assert source == "deployment-api"
         assert by_ag["cefi"]["coverage_pct"] == 11.68
@@ -416,7 +416,7 @@ class TestDeploymentApiClient:
     def test_coverage_unreachable_degrades(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import client_reporting_api.core.deployment_api_client as dac
 
-        def _boom(url: str, timeout: float = 5.0) -> _FakeResp:
+        def _boom(url: str, timeout: float = 5.0, headers: dict[str, str] | None = None) -> _FakeResp:
             raise httpx.ConnectError("down")
 
         monkeypatch.setattr(dac.httpx, "get", _boom)

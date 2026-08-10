@@ -26,6 +26,14 @@ class ClientReportingApiConfig(UnifiedCloudConfig):
     k_service: str = Field(default="", alias="K_SERVICE")
     cloud_run_job: str = Field(default="", alias="CLOUD_RUN_JOB")
 
+    # deployment-api X-API-Key (server-to-server). The value is the same GSM
+    # secret `deployment-api-api-key` that deployment-api validates against in
+    # the prod GCP project, wired into this service's env via the deploy path
+    # (`--update-secrets DEPLOYMENT_API_KEY=deployment-api-api-key:latest`).
+    # Empty → send no header (matching deployment-api's own "omit if empty"
+    # convention) so the caller still works if the key is temporarily unset.
+    deployment_api_key: str = Field(default="", alias="DEPLOYMENT_API_KEY")
+
     def model_post_init(self, __context: object) -> None:
         project_id = self.gcp_project_id or ""
         if not self.config_store_bucket:
