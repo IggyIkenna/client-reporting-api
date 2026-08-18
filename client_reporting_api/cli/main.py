@@ -111,7 +111,7 @@ def _add_daily_ledger_digest_parser(sub: argparse._SubParsersAction[argparse.Arg
         "daily-ledger-digest",
         help="Build + POST the daily ledger digest to alerting-service (P7.1-C cron stage C)",
     )
-    p_digest.add_argument("--client-id", required=True, help="Client whose run-ledger to digest")
+    p_digest.add_argument("--client", help="Specific client ID (default: all active/managed clients)")
     p_digest.add_argument("--date", help="Digest date YYYY-MM-DD (default: yesterday, T+1)")
     p_digest.add_argument("--seed-nav", default="0", help="NAV seed for the HWM series (default 0)")
     p_digest.add_argument("--channel", default="#uts-live-alerts", help="Slack channel target")
