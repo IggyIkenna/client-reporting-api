@@ -135,9 +135,8 @@ def _persist_treasury_config(
     """Persist treasury endpoint config JSON to GCS.
 
     Writes to ``gs://{bucket_name}/{client_id}/treasury/sources.json``.
-    Uses google-cloud-storage directly (no extra deps required).
     """
-    from google.cloud import storage
+    from unified_trading_library import get_storage_client
 
     payload: dict[str, object] = {
         "client_id": client_id,
@@ -150,10 +149,13 @@ def _persist_treasury_config(
             for src, cfg in sources.items()
         },
     }
-    gcs_client: storage.Client = storage.Client()
-    bucket: storage.Bucket = gcs_client.bucket(bucket_name)
-    blob = bucket.blob(f"{client_id}/treasury/sources.json")
-    blob.upload_from_string(json.dumps(payload, default=str), content_type="application/json")
+    storage = get_storage_client()
+    storage.upload_bytes(
+        bucket_name,
+        f"{client_id}/treasury/sources.json",
+        json.dumps(payload, default=str).encode("utf-8"),
+        content_type="application/json",
+    )
     logger.info(
         "Treasury config persisted to gs://%s/%s/treasury/sources.json",
         bucket_name,
