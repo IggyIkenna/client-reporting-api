@@ -4,7 +4,8 @@ Covers ``client_reporting_api.cli.daily_digest_command`` — the scheduled cron
 entrypoint (stage C of the paper-week determinism scheduler) that reads a
 client's run-ledger and POSTs the daily digest ``AlertEvent``. Asserts: the date
 defaults to T+1 (yesterday); an empty ledger is an honest no-op (no POST); a
-populated ledger builds + posts; ``--dry-run`` builds but never posts.
+populated ledger builds + posts; ``--dry-run`` builds but never posts; the
+top-level command loops over every active/managed client from the registry.
 
 SSOT: plans/active/citadel_paper_batch_live_reconciliation_2026_06_19.md (P7.1-C).
 """
@@ -19,11 +20,16 @@ from unittest.mock import patch
 from unified_api_contracts import EventOrigin, EventType, LedgerAssetClass, LedgerRow
 
 from client_reporting_api.cli.daily_digest_command import (
+    _digest_client,
     _resolve_digest_date,
     cmd_daily_ledger_digest,
 )
 
 _TS = datetime(2026, 5, 2, 12, 0, 0, tzinfo=UTC)
+
+_REGISTRY = {
+    "client-A": {"is_active": True, "tranche": "managed", "secret_names": {"api_key": "x"}},
+}
 
 
 def _trade_row() -> LedgerRow:
@@ -49,7 +55,7 @@ def _trade_row() -> LedgerRow:
 
 def _args(**kw: object) -> argparse.Namespace:
     base: dict[str, object] = {
-        "client_id": "client-A",
+        "client": "client-A",
         "date": "2026-05-02",
         "seed_nav": "100000",
         "channel": "#uts-live-alerts",
@@ -77,8 +83,8 @@ def test_empty_ledger_is_honest_noop() -> None:
         ),
         patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
     ):
-        rc = cmd_daily_ledger_digest(_args())
-    assert rc == 0
+        rc = _digest_client("client-A", date(2026, 5, 2), Decimal("100000"), "#uts-live-alerts", False)
+    assert rc is True
     mock_post.assert_not_called()
 
 
@@ -90,8 +96,8 @@ def test_populated_ledger_builds_and_posts() -> None:
         ),
         patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
     ):
-        rc = cmd_daily_ledger_digest(_args())
-    assert rc == 0
+        rc = _digest_client("client-A", date(2026, 5, 2), Decimal("100000"), "#uts-live-alerts", False)
+    assert rc is True
     mock_post.assert_called_once()
     posted_event = mock_post.call_args.args[0]
     assert posted_event.rule_id == "DAILY_LEDGER_DIGEST"
@@ -106,6 +112,29 @@ def test_dry_run_does_not_post() -> None:
         ),
         patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
     ):
-        rc = cmd_daily_ledger_digest(_args(dry_run=True))
-    assert rc == 0
+        rc = _digest_client("client-A", date(2026, 5, 2), Decimal("100000"), "#uts-live-alerts", True)
+    assert rc is True
     mock_post.assert_not_called()
+
+
+def test_cmd_loops_over_active_clients() -> None:
+    with (
+        patch(
+            "client_reporting_api.cli.daily_digest_command._load_registry",
+            return_value=_REGISTRY,
+        ),
+        patch(
+            "client_reporting_api.cli.daily_digest_command.read_ledger_rows",
+            return_value=([_trade_row()], {"t1": "hyperliquid:PERPETUAL:BTC-PERP"}),
+        ),
+        patch("client_reporting_api.cli.daily_digest_command.post_daily_ledger_digest") as mock_post,
+    ):
+        rc = cmd_daily_ledger_digest(_args(client=None))
+    assert rc == 0
+    mock_post.assert_called_once()
+
+
+def test_cmd_no_active_clients_is_failure() -> None:
+    with patch("client_reporting_api.cli.daily_digest_command._load_registry", return_value={}):
+        rc = cmd_daily_ledger_digest(_args())
+    assert rc == 1
