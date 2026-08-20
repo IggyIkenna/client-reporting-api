@@ -23,6 +23,21 @@ _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
+def _vehicle_type_for_client(cfg: dict[str, object]) -> str:
+    """Classify a client's investment vehicle for NAV reporting.
+
+    ``client-reporting-api`` has no direct join to UAC's
+    ``ClientRegistry.vehicle_type`` (disjoint client_id namespaces — this
+    service's ids are the ``credentials-registry.yaml`` tranche keys, e.g.
+    "PR"/"IK", not UAC's "acme-fund"/"patrick-elysium"). The equivalent signal
+    already on ``ClientConfig`` is ``is_pooled``: a pooled account (multiple
+    investors sharing one NAV pool via ``pool_investors``) is the reporting
+    analogue of UAC's "fund" vehicle; a direct single-investor managed account
+    is the analogue of "sma".
+    """
+    return "fund" if cfg.get("is_pooled") else "sma"
+
+
 def _nav_investor_for_client(cid: str, cfg: dict[str, object]) -> tuple[dict[str, object], float, float] | None:
     """Build a NAV investor row plus the (current_eq, peak) it contributes.
 
@@ -38,6 +53,7 @@ def _nav_investor_for_client(cid: str, cfg: dict[str, object]) -> tuple[dict[str
     investor = {
         "name": CLIENT_NAMES.get(cid, cid),
         "class": str(cfg.get("currency", "USDT")),
+        "vehicleType": _vehicle_type_for_client(cfg),
         "commitment": current_eq,
         "navShare": current_eq,
         "pctOfFund": 0,  # set after total_nav is known
@@ -46,13 +62,16 @@ def _nav_investor_for_client(cid: str, cfg: dict[str, object]) -> tuple[dict[str
     return investor, current_eq, peak
 
 
-def _aggregate_nav_investors(ids: list[str], clients_cfg: object) -> tuple[list[dict[str, object]], float, float]:
-    """Walk ``ids`` and build investors list + total NAV + total HWM."""
+def _aggregate_nav_investors(
+    ids: list[str], clients_cfg: object
+) -> tuple[list[dict[str, object]], float, float, dict[str, float]]:
+    """Walk ``ids`` and build investors list + total NAV + total HWM + per-vehicle-type NAV."""
     investors: list[dict[str, object]] = []
     total_nav = 0.0
     total_hwm = 0.0
+    nav_by_vehicle_type: dict[str, float] = {"fund": 0.0, "sma": 0.0}
     if not isinstance(clients_cfg, dict):
-        return investors, total_nav, total_hwm
+        return investors, total_nav, total_hwm, nav_by_vehicle_type
     for cid in ids:
         cfg = clients_cfg.get(cid, {})
         if not isinstance(cfg, dict):
@@ -64,10 +83,12 @@ def _aggregate_nav_investors(ids: list[str], clients_cfg: object) -> tuple[list[
         investors.append(investor)
         total_nav += current_eq
         total_hwm = max(total_hwm, peak)
+        vehicle_type = str(investor["vehicleType"])
+        nav_by_vehicle_type[vehicle_type] = nav_by_vehicle_type.get(vehicle_type, 0.0) + current_eq
     for inv in investors:
         if total_nav > 0:
             inv["pctOfFund"] = round(float(inv["navShare"]) / total_nav * 100, 1)
-    return investors, total_nav, total_hwm
+    return investors, total_nav, total_hwm, nav_by_vehicle_type
 
 
 def _hourly_nav_series(ids: list[str]) -> list[dict[str, object]]:
@@ -160,7 +181,7 @@ def get_nav(
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
 
-    nav_investors, total_nav, total_hwm = _aggregate_nav_investors(ids, clients_cfg)
+    nav_investors, total_nav, total_hwm, nav_by_vehicle_type = _aggregate_nav_investors(ids, clients_cfg)
     hourly_nav = _hourly_nav_series(ids)
 
     return {
@@ -172,6 +193,7 @@ def get_nav(
         "mtd_return_pct": 0,
         "hourly_nav": hourly_nav,
         "investors": nav_investors,
+        "nav_by_vehicle_type": {k: round(v, 2) for k, v in nav_by_vehicle_type.items()},
         "fees": _nav_fee_summary(),
         "capital_flows": _capital_flows_for_clients(ids),
     }
