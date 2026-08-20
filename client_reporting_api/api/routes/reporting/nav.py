@@ -10,6 +10,7 @@ from unified_trading_library import AuthContext, create_api_auth
 
 from client_reporting_api.api.routes.reporting._shared import (
     _resolve_client_ids,
+    _vehicle_type_for_client,
     state_mgr,
 )
 from client_reporting_api.core.backfill_store import get_equity_curve
@@ -21,21 +22,6 @@ router = APIRouter()
 
 _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
-
-
-def _vehicle_type_for_client(cfg: dict[str, object]) -> str:
-    """Classify a client's investment vehicle for NAV reporting.
-
-    ``client-reporting-api`` has no direct join to UAC's
-    ``ClientRegistry.vehicle_type`` (disjoint client_id namespaces — this
-    service's ids are the ``credentials-registry.yaml`` tranche keys, e.g.
-    "PR"/"IK", not UAC's "acme-fund"/"patrick-elysium"). The equivalent signal
-    already on ``ClientConfig`` is ``is_pooled``: a pooled account (multiple
-    investors sharing one NAV pool via ``pool_investors``) is the reporting
-    analogue of UAC's "fund" vehicle; a direct single-investor managed account
-    is the analogue of "sma".
-    """
-    return "fund" if cfg.get("is_pooled") else "sma"
 
 
 def _nav_investor_for_client(cid: str, cfg: dict[str, object]) -> tuple[dict[str, object], float, float] | None:

@@ -8,7 +8,7 @@ from typing import Annotated, cast
 from fastapi import APIRouter, Depends, Query
 from unified_trading_library import AuthContext, create_api_auth
 
-from client_reporting_api.api.routes.reporting._shared import _resolve_client_ids
+from client_reporting_api.api.routes.reporting._shared import _resolve_client_ids, _vehicle_type_for_client
 from client_reporting_api.core.backfill_store import get_equity_curve
 from client_reporting_api.core.entitlement import require_internal
 from client_reporting_api.core.pnl_chart_generator import CLIENT_NAMES, compute_pnl_series
@@ -27,6 +27,7 @@ def _investor_row(cid: str, cfg: dict[str, object], net_deposits: float) -> dict
     return {
         "name": CLIENT_NAMES.get(cid, str(cfg.get("full_name", cid))),
         "type": investor_type,
+        "vehicleType": _vehicle_type_for_client(cfg),
         "commitment": net_deposits,
         "drawn": net_deposits,
         "remaining": 0,
@@ -87,14 +88,15 @@ def _distribution_waterfall(total_pnl: float) -> list[dict[str, object]]:
 
 def _walk_clients_for_fund_ops(
     ids: list[str], clients_cfg: object
-) -> tuple[list[dict[str, object]], dict[str, list[dict[str, object]]], float, float]:
-    """Accumulate per-investor rows + capital accounts + aggregate AUM/PnL."""
+) -> tuple[list[dict[str, object]], dict[str, list[dict[str, object]]], float, float, dict[str, float]]:
+    """Accumulate per-investor rows + capital accounts + aggregate AUM/PnL + per-vehicle-type AUM."""
     investors: list[dict[str, object]] = []
     capital_accounts: dict[str, list[dict[str, object]]] = {}
     total_aum = 0.0
     total_pnl = 0.0
+    aum_by_vehicle_type: dict[str, float] = {"fund": 0.0, "sma": 0.0}
     if not isinstance(clients_cfg, dict):
-        return investors, capital_accounts, total_aum, total_pnl
+        return investors, capital_accounts, total_aum, total_pnl, aum_by_vehicle_type
 
     for cid in ids:
         cfg = clients_cfg.get(cid, {})
@@ -115,12 +117,14 @@ def _walk_clients_for_fund_ops(
 
         total_aum += current_eq
         total_pnl += trading_pnl
+        vehicle_type = _vehicle_type_for_client(cast(dict[str, object], cfg))
+        aum_by_vehicle_type[vehicle_type] = aum_by_vehicle_type.get(vehicle_type, 0.0) + current_eq
 
         investors.append(_investor_row(cid, cast(dict[str, object], cfg), net_deposits))
         capital_accounts[CLIENT_NAMES.get(cid, cid)] = _capital_account_rows(
             starting, net_deposits_alone, trading_pnl, current_eq
         )
-    return investors, capital_accounts, total_aum, total_pnl
+    return investors, capital_accounts, total_aum, total_pnl, aum_by_vehicle_type
 
 
 @router.get("/fund-operations")
@@ -137,7 +141,9 @@ def get_fund_operations(
     registry = load_registry()
     clients_cfg = registry.get("clients", {})
 
-    investors, capital_accounts, total_aum, total_pnl = _walk_clients_for_fund_ops(ids, clients_cfg)
+    investors, capital_accounts, total_aum, total_pnl, aum_by_vehicle_type = _walk_clients_for_fund_ops(
+        ids, clients_cfg
+    )
 
     return {
         "investors": investors,
@@ -146,4 +152,5 @@ def get_fund_operations(
         "total_aum": round(total_aum, 2),
         "total_pnl": round(total_pnl, 2),
         "investor_count": len(investors),
+        "aum_by_vehicle_type": {k: round(v, 2) for k, v in aum_by_vehicle_type.items()},
     }
