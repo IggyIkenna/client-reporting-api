@@ -492,6 +492,39 @@ class TestReportingNav:
         assert len(data["hourly_nav"]) > 0
         assert len(data["capital_flows"]) == 1
 
+    def test_reports_fund_and_sma_nav_separately(self, _internal_nav: None) -> None:
+        """GET /nav labels direct accounts instead of silently treating them as pooled funds."""
+        registry = {
+            "clients": {
+                "PR": {"is_active": True, "currency": "USDT", "is_pooled": True},
+                "NN": {"is_active": True, "currency": "USDT", "is_pooled": False},
+            }
+        }
+        with (
+            patch(
+                "client_reporting_api.api.routes.reporting.nav.get_equity_curve",
+                return_value=_EC,
+            ),
+            patch(
+                "client_reporting_api.api.routes.reporting.nav.compute_pnl_series",
+                return_value={},
+            ),
+            patch(
+                "client_reporting_api.api.routes.reporting.nav.load_registry",
+                return_value=registry,
+            ),
+            patch("client_reporting_api.api.routes.reporting.nav.state_mgr") as mock_mgr,
+        ):
+            mock_mgr.get_invoices.return_value = []
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/reporting/nav", params={"client_ids": "PR,NN"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert {investor["vehicleType"] for investor in data["investors"]} == {"fund", "sma"}
+        assert data["nav_by_vehicle_type"] == {"fund": 102000.0, "sma": 102000.0}
+        assert data["current_nav"] == 204000.0
+
     def test_returns_403_for_external_caller(self) -> None:
         async def _external_fake() -> AuthContext:
             return AuthContext(
