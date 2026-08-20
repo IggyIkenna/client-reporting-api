@@ -18,6 +18,7 @@ from unified_trading_library import AuthContext
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes import clients as _clients_mod
 from client_reporting_api.api.routes import invoices as _inv_mod
+from client_reporting_api.api.routes.reporting import fund_operations as _fo_mod
 from client_reporting_api.api.routes.reporting import nav as _nav_mod
 from client_reporting_api.api.routes.reporting import performance as _rp_mod
 from client_reporting_api.api.routes.reporting import reports_overview as _ro_mod
@@ -92,6 +93,7 @@ def _enable_mock_mode() -> Generator[None]:
     app.dependency_overrides.pop(_nav_mod._require_auth, None)
     app.dependency_overrides.pop(_reporting_trades_mod._require_auth, None)
     app.dependency_overrides.pop(_clients_mod._require_auth, None)
+    app.dependency_overrides.pop(_fo_mod._require_auth, None)
 
 
 def _make_internal_fake(module_attr: object) -> None:
@@ -134,6 +136,13 @@ def _internal_trades() -> Generator[None]:
     _make_internal_fake(_reporting_trades_mod._require_auth)
     yield
     app.dependency_overrides.pop(_reporting_trades_mod._require_auth, None)
+
+
+@pytest.fixture
+def _internal_fo() -> Generator[None]:
+    _make_internal_fake(_fo_mod._require_auth)
+    yield
+    app.dependency_overrides.pop(_fo_mod._require_auth, None)
 
 
 @pytest.fixture
@@ -501,6 +510,92 @@ class TestReportingNav:
         finally:
             app.dependency_overrides.pop(_nav_mod._require_auth, None)
         assert response.status_code == 403
+
+    def test_nav_flags_sma_client_out_of_fund_vehicle_type(self, _internal_nav: None) -> None:
+        """SMA (non-pooled) clients are classified separately from the pooled fund's NAV.
+
+        Regression test for client_reporting_api_nav_aggregation_vehicle_type_blind_2026_08_20:
+        seeds one `fund` (is_pooled=True) and one `sma` (is_pooled=False) client and asserts each
+        investor row is correctly labelled and their NAV contributions are split out via
+        `nav_by_vehicle_type`, so a consumer can read the pooled-fund-only NAV without the SMA
+        client's balance bleeding in unlabelled.
+        """
+        registry = {
+            "clients": {
+                "PR": {"is_active": True, "currency": "USDT", "venue": "okx", "is_pooled": True},
+                "SM": {"is_active": True, "currency": "USDT", "venue": "okx", "is_pooled": False},
+            }
+        }
+        with (
+            patch(
+                "client_reporting_api.api.routes.reporting.nav.get_equity_curve",
+                return_value=_EC,
+            ),
+            patch(
+                "client_reporting_api.api.routes.reporting.nav.compute_pnl_series",
+                return_value=_PNL_DATA_WITH_TRANSFERS,
+            ),
+            patch(
+                "client_reporting_api.api.routes.reporting.nav.load_registry",
+                return_value=registry,
+            ),
+            patch("client_reporting_api.api.routes.reporting.nav.state_mgr") as mock_mgr,
+        ):
+            mock_mgr.get_invoices.return_value = []
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/reporting/nav", params={"client_ids": "PR,SM"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["investors"]) == 2
+        assert data["investors"][0]["vehicleType"] == "fund"
+        assert data["investors"][1]["vehicleType"] == "sma"
+        assert data["nav_by_vehicle_type"]["fund"] > 0
+        assert data["nav_by_vehicle_type"]["sma"] > 0
+
+
+# ---------------------------------------------------------------------------
+# GET /api/reporting/fund-operations
+# ---------------------------------------------------------------------------
+
+
+class TestReportingFundOperations:
+    def test_flags_sma_client_out_of_fund_vehicle_type(self, _internal_fo: None) -> None:
+        """Same vehicle_type blind spot as /nav, now closed for /fund-operations too.
+
+        Regression test for client_reporting_api_nav_aggregation_vehicle_type_blind_2026_08_20
+        todo 2: `fund_operations.py` pooled `total_aum`/`total_pnl` across all clients exactly
+        like `nav.py` did before that fix -- seeds one `fund` and one `sma` client and asserts
+        each investor-register row is labelled and `aum_by_vehicle_type` splits their AUM out.
+        """
+        registry = {
+            "clients": {
+                "PR": {"is_active": True, "currency": "USDT", "venue": "okx", "is_pooled": True},
+                "SM": {"is_active": True, "currency": "USDT", "venue": "okx", "is_pooled": False},
+            }
+        }
+        with (
+            patch(
+                "client_reporting_api.api.routes.reporting.fund_operations.get_equity_curve",
+                return_value=_EC,
+            ),
+            patch(
+                "client_reporting_api.api.routes.reporting.fund_operations.compute_pnl_series",
+                return_value=_PNL_DATA_WITH_TRANSFERS,
+            ),
+            patch(
+                "client_reporting_api.api.routes.reporting.fund_operations.load_registry",
+                return_value=registry,
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=True)
+            response = client.get("/api/reporting/fund-operations", params={"client_ids": "PR,SM"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["investors"]) == 2
+        assert data["investors"][0]["vehicleType"] == "fund"
+        assert data["investors"][1]["vehicleType"] == "sma"
+        assert data["aum_by_vehicle_type"]["fund"] > 0
+        assert data["aum_by_vehicle_type"]["sma"] > 0
 
 
 # ---------------------------------------------------------------------------
