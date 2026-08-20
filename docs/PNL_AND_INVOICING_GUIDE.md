@@ -44,11 +44,11 @@ Local copies live in `data/backfill/{client_id}/` for development. (GCS bucket +
 
 ### Scripts
 
-| Script                   | What It Does                                                                                   | When to Run                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `backfill_history.py`    | Full historical pull from exchange API (CCXT). Rebuilds all JSONs from scratch. ~3 min/client. | Initial setup, or when data needs full rebuild |
-| `daily_update.py`        | Incremental update. Appends new equity points and trades. ~30s/client.                         | Hourly via cron or Cloud Scheduler             |
-| `generate_full_audit.py` | Generates audit HTML + tear sheets for all 10 accounts using production code paths.            | Ad-hoc, for validation/review                  |
+| Script                           | What It Does                                                                                   | When to Run                                    |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `backfill_history.py`            | Full historical pull from exchange API (CCXT). Rebuilds all JSONs from scratch. ~3 min/client. | Initial setup, or when data needs full rebuild |
+| `client-reporting-manage update` | Incremental update. Appends new equity points and trades. ~30s/client.                         | Hourly via cron or Cloud Scheduler             |
+| `generate_full_audit.py`         | Generates audit HTML + tear sheets for all 10 accounts using production code paths.            | Ad-hoc, for validation/review                  |
 
 ### Running Locally
 
@@ -60,7 +60,7 @@ python scripts/backfill_history.py --client PR
 python scripts/backfill_history.py
 
 # Incremental update (all active clients)
-python scripts/daily_update.py
+client-reporting-manage update
 
 # Generate audit + tear sheets
 python scripts/generate_full_audit.py
@@ -149,8 +149,8 @@ seed VALUES are in the codex roster/fee SSOT; this is where they wire in):
 
 ### Manual Steps Required
 
-- **Data refresh:** Run `backfill_history.py` or `daily_update.py` to pull latest exchange data. Cloud Run Jobs
-  automate this in production, but local dev requires manual runs.
+- **Data refresh:** Run `backfill_history.py` or `client-reporting-manage update` to pull latest exchange data. Cloud
+  Run Jobs automate this in production, but local dev requires manual runs.
 - **HWM seeds:** New clients with prior history need seeds added to `hwm_seeds.py` and `invoice_state.py` (§2).
 - **Invoice issuance:** Triggered manually via CLI or API. Not auto-scheduled.
 - **Fund-of-fund NAV:** YOAV and GUY_ASRAF require manual NAV entry each period.
