@@ -4,17 +4,27 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from unified_trading_library import UnifiedCloudConfig, generate_download_url, generate_upload_url
+from unified_trading_library import (
+    AuthContext,
+    UnifiedCloudConfig,
+    create_api_auth,
+    generate_download_url,
+    generate_upload_url,
+)
 
+from client_reporting_api.core.entitlement import enforce_entitlement, require_internal
 from client_reporting_api.mock_state import get_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 _DOCUMENTS_BUCKET = "client-reporting-documents"
 
@@ -110,12 +120,18 @@ for _doc in MOCK_DOCUMENTS:
 
 
 @router.post("/upload-url")
-def create_upload_url(request: UploadUrlRequest) -> dict[str, object]:
+def create_upload_url(request: UploadUrlRequest, auth: AuthDep) -> dict[str, object]:
     """Return a pre-signed upload URL and allocate a document_id.
 
     In mock mode: returns a synthetic URL and stores document metadata in-memory.
     In live mode: generates a cloud storage pre-signed upload URL via UCI.
+
+    Entitlement: an external caller may only upload documents attributed
+    to their own org (``request.org_id`` must equal ``auth.org_id``);
+    internal callers may upload for any org. 2026-08-21 CTO handoff P1
+    fix.
     """
+    enforce_entitlement(auth, request.org_id)
     doc_id = f"DOC-{uuid.uuid4().hex[:8].upper()}"
     object_path = f"documents/{request.org_id}/{request.category}/{doc_id}/{request.filename}"
 
@@ -154,14 +170,28 @@ def create_upload_url(request: UploadUrlRequest) -> dict[str, object]:
 
 
 @router.get("/{document_id}/download-url")
-def get_download_url(document_id: str) -> dict[str, object]:
+def get_download_url(document_id: str, auth: AuthDep) -> dict[str, object]:
     """Return a pre-signed download URL for a document.
 
     In mock mode: returns a synthetic URL.
     In live mode: generates a cloud storage pre-signed download URL via UCI.
+
+    Entitlement: scoped to the document's real owning org when that's
+    resolvable from the shared document store (mock-mode seed/upload
+    data today). Live-mode uploads aren't persisted to any per-document
+    ownership record yet (``create_upload_url``'s live branch never
+    writes one), so when the owning org can't be resolved this fails
+    closed to internal callers only rather than trusting a
+    caller-supplied claim. 2026-08-21 CTO handoff P1 fix, judgment call
+    documented in walkthrough_feedback_remediation_2026_08_21.md.
     """
+    doc = _store.get("documents", document_id)
+    if doc is not None:
+        enforce_entitlement(auth, str(doc.get("org_id", "")))
+    else:
+        require_internal(auth)
+
     if _cloud_cfg.is_mock_mode():
-        doc = _store.get("documents", document_id)
         if doc is None:
             raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
         return {
@@ -187,6 +217,7 @@ def get_download_url(document_id: str) -> dict[str, object]:
 
 @router.get("")
 def list_documents(
+    auth: AuthDep,
     org_id: str = Query(..., description="Organisation identifier"),
     category: str | None = Query(None, description="Filter by category (INVOICE, REPORT, CONTRACT, COMPLIANCE)"),
 ) -> list[dict[str, object]]:
@@ -195,6 +226,7 @@ def list_documents(
     In mock mode: returns seed + mutated documents from the in-memory store.
     In live mode: queries document metadata from cloud storage/database.
     """
+    enforce_entitlement(auth, org_id)
     if _cloud_cfg.is_mock_mode():
         all_docs = _store.list("documents")
         filtered = [d for d in all_docs if d.get("org_id") == org_id]
@@ -208,12 +240,18 @@ def list_documents(
 
 
 @router.delete("/{document_id}")
-def delete_document(document_id: str) -> dict[str, str]:
+def delete_document(document_id: str, auth: AuthDep) -> dict[str, str]:
     """Soft-delete a document (admin only).
 
     In mock mode: marks the document as deleted in the in-memory store.
     In live mode: sets status=deleted in the document metadata store.
+
+    Entitlement: internal-only, matching the docstring's pre-existing
+    "(admin only)" intent — this is a destructive operation, not a
+    per-client read, so it doesn't get the entitlement-by-ownership
+    treatment ``get_download_url`` does. 2026-08-21 CTO handoff P1 fix.
     """
+    require_internal(auth)
     if _cloud_cfg.is_mock_mode():
         doc = _store.get("documents", document_id)
         if doc is None:

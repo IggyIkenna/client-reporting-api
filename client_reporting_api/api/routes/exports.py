@@ -12,10 +12,15 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
+from client_reporting_api.api.routes.trades import (
+    _backfill_trades,  # pyright: ignore[reportPrivateUsage]
+    _ledger_run_trades,  # pyright: ignore[reportPrivateUsage]
+)
 from client_reporting_api.core.backfill_store import (
     _get_equity,  # pyright: ignore[reportPrivateUsage]
     _get_transfer,  # pyright: ignore[reportPrivateUsage]
     _is_btc_account,  # pyright: ignore[reportPrivateUsage]
+    compute_monthly_returns,
     get_equity_curve,
 )
 from client_reporting_api.core.entitlement import (
@@ -28,6 +33,7 @@ from client_reporting_api.core.mock_performance_data import (
     get_mock_performance_summary,
 )
 from client_reporting_api.core.tear_sheet_generator import generate_tear_sheet
+from client_reporting_api.core.trade_analytics import compute_coin_breakdown
 from client_reporting_api.core.transfer_store import get_transfers
 
 logger = logging.getLogger(__name__)
@@ -36,6 +42,45 @@ router = APIRouter(prefix="/api/v1/exports", tags=["exports"])
 _cloud_cfg = UnifiedCloudConfig()
 _require_auth = create_api_auth("client-reporting-api")
 AuthDep = Annotated[AuthContext, Depends(_require_auth)]
+
+# Real-mode coin-breakdown columns differ from the mock fixture's shape — the
+# real ``compute_coin_breakdown`` engine (core/trade_analytics.py) doesn't
+# track entry/current price or cost-basis, so real CSVs get their own honest
+# column set rather than padding the fixture's columns with blanks.
+_MOCK_COIN_FIELDS = [
+    "symbol",
+    "quantity",
+    "avg_entry_price",
+    "current_price",
+    "cost_basis_usd",
+    "market_value_usd",
+    "realized_pnl",
+    "unrealized_pnl",
+    "total_pnl",
+    "allocation_pct",
+    "trade_count",
+]
+_REAL_COIN_FIELDS = [
+    "symbol",
+    "realized_pnl",
+    "trading_fees",
+    "funding_pnl",
+    "total_pnl",
+    "volume_usd",
+    "trade_count",
+    "buy_count",
+    "sell_count",
+    "avg_trade_size_usd",
+    "avg_holding_hours",
+    "round_trips",
+]
+
+# compute_monthly_returns() (core/backfill_store.py) only computes {month,
+# return_pct} — the mock fixture's pnl_usd/opening_equity/closing_equity/year
+# columns aren't produced by any real reader today, so real-mode CSVs use a
+# reduced, honest column set instead of padding with blanks.
+_MOCK_MONTHLY_FIELDS = ["year", "month", "return_pct", "pnl_usd", "opening_equity", "closing_equity"]
+_REAL_MONTHLY_FIELDS = ["month", "return_pct"]
 
 
 def _csv_stream(rows: list[dict[str, Any]], fieldnames: list[str]) -> io.StringIO:
@@ -54,7 +99,19 @@ def export_trades_csv(
     auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
-    """Download full trade history as CSV."""
+    """Download full trade history as CSV.
+
+    Real data path (2026-08-21 CTO handoff P2 fix): the canonical
+    paper-run ledger fills, falling back to the backfilled historical
+    trade tape when the ledger has none — the same primary/fallback
+    sources ``trades.py::get_trade_history`` uses for its two most
+    common cases. The rarer case of a client with neither ledger fills
+    nor backfilled history but with live-collector-only state isn't
+    covered by this CSV yet (filed as a follow-up in
+    walkthrough_feedback_remediation_2026_08_21.md). ``MOCK_TRADES`` is
+    now mock-mode-only; an empty real result is an honest "No data"
+    row, never a silent fixture.
+    """
     enforce_entitlement(auth, client_id)
     fields = [
         "trade_id",
@@ -71,7 +128,15 @@ def export_trades_csv(
         "trade_type",
         "notional_usd",
     ]
-    buf = _csv_stream(MOCK_TRADES, fields)
+    if _cloud_cfg.is_mock_mode():
+        rows: list[dict[str, Any]] = list(MOCK_TRADES)
+    else:
+        _run_id, ledger_rows = _ledger_run_trades(client_id)
+        rows = cast(list[dict[str, Any]], ledger_rows) or cast(list[dict[str, Any]], _backfill_trades(client_id))
+    if not rows:
+        buf: io.StringIO = io.StringIO("No data\n")
+    else:
+        buf = _csv_stream(rows, fields)
     return StreamingResponse(
         buf,
         media_type="text/csv",
@@ -84,13 +149,30 @@ def export_daily_summary_csv(
     auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
-    """Download daily P&L summary as CSV."""
-    enforce_entitlement(auth, client_id)
-    summary = get_mock_performance_summary(client_id)
-    monthly = summary.get("monthly_returns", [])
+    """Download daily P&L summary as CSV.
 
-    fields = ["year", "month", "return_pct", "pnl_usd", "opening_equity", "closing_equity"]
-    buf = _csv_stream(cast(list[dict[str, Any]], monthly), fields)
+    Real data path (2026-08-21 CTO handoff P2 fix): monthly returns
+    computed from the real equity curve via ``compute_monthly_returns``
+    — the same engine ``performance.py``'s real summary path uses. That
+    engine only produces {month, return_pct}, not the mock fixture's
+    pnl_usd/opening_equity/closing_equity columns, so real-mode CSVs use
+    a reduced column set (see ``_REAL_MONTHLY_FIELDS``) rather than a
+    fixture masquerading as those unavailable figures.
+    """
+    enforce_entitlement(auth, client_id)
+    if _cloud_cfg.is_mock_mode():
+        summary = get_mock_performance_summary(client_id)
+        monthly = summary.get("monthly_returns", [])
+        fields = _MOCK_MONTHLY_FIELDS
+    else:
+        curve = get_equity_curve(client_id)
+        monthly = compute_monthly_returns(curve) if curve else []
+        fields = _REAL_MONTHLY_FIELDS
+
+    if not monthly:
+        buf: io.StringIO = io.StringIO("No data\n")
+    else:
+        buf = _csv_stream(cast(list[dict[str, Any]], monthly), fields)
     return StreamingResponse(
         buf,
         media_type="text/csv",
@@ -103,13 +185,24 @@ def export_hourly_snapshots_csv(
     auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
-    """Download hourly equity snapshots as CSV."""
-    enforce_entitlement(auth, client_id)
-    summary = get_mock_performance_summary(client_id)
-    curve = summary.get("equity_curve", [])
+    """Download hourly equity snapshots as CSV.
 
+    2026-08-21 CTO handoff P2 fix: no real hourly-granularity equity
+    store exists today — ``get_equity_curve`` (used by ``/daily-equity``
+    above) is daily-only. Rather than relabel daily data as hourly, real
+    mode returns an explicit, clearly-labeled empty result; the fixture
+    is mock-mode-only.
+    """
+    enforce_entitlement(auth, client_id)
     fields = ["timestamp", "equity_usd", "hwm_usd", "drawdown_pct"]
-    buf = _csv_stream(cast(list[dict[str, Any]], curve), fields)
+    if _cloud_cfg.is_mock_mode():
+        summary = get_mock_performance_summary(client_id)
+        curve = summary.get("equity_curve", [])
+        buf: io.StringIO = (
+            io.StringIO("No data\n") if not curve else _csv_stream(cast(list[dict[str, Any]], curve), fields)
+        )
+    else:
+        buf = io.StringIO("No data: hourly equity snapshots are not yet captured for live clients\n")
     return StreamingResponse(
         buf,
         media_type="text/csv",
@@ -122,22 +215,42 @@ def export_coin_breakdown_csv(
     auth: AuthDep,
     client_id: str = Query(..., description="Client identifier"),
 ) -> StreamingResponse:
-    """Download per-coin P&L breakdown as CSV."""
+    """Download per-coin P&L breakdown as CSV.
+
+    Real data path (2026-08-21 CTO handoff P2 fix): reuses
+    ``compute_coin_breakdown`` — the same per-coin engine
+    ``performance.py``'s real ``/coin-breakdown`` JSON route uses.
+    ``MOCK_COIN_BREAKDOWN`` is now mock-mode-only.
+    """
     enforce_entitlement(auth, client_id)
-    fields = [
-        "symbol",
-        "quantity",
-        "avg_entry_price",
-        "current_price",
-        "cost_basis_usd",
-        "market_value_usd",
-        "realized_pnl",
-        "unrealized_pnl",
-        "total_pnl",
-        "allocation_pct",
-        "trade_count",
-    ]
-    buf = _csv_stream(cast(list[dict[str, Any]], MOCK_COIN_BREAKDOWN), fields)
+    if _cloud_cfg.is_mock_mode():
+        fields = _MOCK_COIN_FIELDS
+        rows: list[dict[str, Any]] = list(MOCK_COIN_BREAKDOWN)
+    else:
+        analytics = compute_coin_breakdown(client_id)
+        fields = _REAL_COIN_FIELDS
+        rows = [
+            {
+                "symbol": c.symbol,
+                "realized_pnl": c.realized_pnl,
+                "trading_fees": c.trading_fees,
+                "funding_pnl": c.funding_pnl,
+                "total_pnl": c.net_pnl,
+                "volume_usd": c.volume_usd,
+                "trade_count": c.trade_count,
+                "buy_count": c.buy_count,
+                "sell_count": c.sell_count,
+                "avg_trade_size_usd": c.avg_trade_size_usd,
+                "avg_holding_hours": c.avg_holding_hours,
+                "round_trips": c.round_trips,
+            }
+            for c in analytics.coins
+        ]
+
+    if not rows:
+        buf: io.StringIO = io.StringIO("No data\n")
+    else:
+        buf = _csv_stream(rows, fields)
     return StreamingResponse(
         buf,
         media_type="text/csv",
@@ -272,7 +385,7 @@ def export_tear_sheet(
         description="Comma-separated client IDs (e.g. 'PR,ODUM_PROP')",
     ),
     title: str = Query(
-        default="Odum Capital \u2014 Strategy Performance",
+        default="Odum Capital — Strategy Performance",
         description="Report title",
     ),
 ) -> HTMLResponse:
