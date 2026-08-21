@@ -27,6 +27,7 @@ from client_reporting_api.core.entitlement import (
     enforce_entitlement,  # pyright: ignore[reportPrivateUsage]
     require_internal,
 )
+from client_reporting_api.core.live_data_provider import get_collector
 from client_reporting_api.core.mock_performance_data import (
     MOCK_COIN_BREAKDOWN,
     MOCK_TRADES,
@@ -101,16 +102,15 @@ def export_trades_csv(
 ) -> StreamingResponse:
     """Download full trade history as CSV.
 
-    Real data path (2026-08-21 CTO handoff P2 fix): the canonical
-    paper-run ledger fills, falling back to the backfilled historical
-    trade tape when the ledger has none — the same primary/fallback
-    sources ``trades.py::get_trade_history`` uses for its two most
-    common cases. The rarer case of a client with neither ledger fills
-    nor backfilled history but with live-collector-only state isn't
-    covered by this CSV yet (filed as a follow-up in
-    walkthrough_feedback_remediation_2026_08_21.md). ``MOCK_TRADES`` is
-    now mock-mode-only; an empty real result is an honest "No data"
-    row, never a silent fixture.
+    Real data path (2026-08-21 CTO handoff P2 fix, extended same day): the
+    canonical paper-run ledger fills, falling back to the backfilled
+    historical trade tape, falling back to live-collector-only state — the
+    same three sources ``trades.py::get_trade_history`` uses, in the same
+    order, reusing its ``get_collector().get_client_trades(...)`` call
+    rather than reimplementing it. The collector leg covers the rare client
+    with neither a ledger run nor backfilled history (live-collector-only
+    state). ``MOCK_TRADES`` is mock-mode-only; a real result empty across
+    all three sources is an honest "No data" row, never a silent fixture.
     """
     enforce_entitlement(auth, client_id)
     fields = [
@@ -133,6 +133,26 @@ def export_trades_csv(
     else:
         _run_id, ledger_rows = _ledger_run_trades(client_id)
         rows = cast(list[dict[str, Any]], ledger_rows) or cast(list[dict[str, Any]], _backfill_trades(client_id))
+        if not rows:
+            records = get_collector().get_client_trades(client_id)
+            rows = [
+                {
+                    "trade_id": r.trade_id,
+                    "venue": r.venue,
+                    "symbol": r.symbol,
+                    "side": r.side.value if hasattr(r.side, "value") else str(r.side),
+                    "quantity": float(r.quantity),
+                    "price": float(r.price),
+                    "fee": float(r.fee),
+                    "fee_currency": r.fee_currency,
+                    "realized_pnl": float(r.realized_pnl),
+                    "timestamp": r.timestamp.isoformat(),
+                    "order_id": r.order_id,
+                    "trade_type": r.trade_type.value if hasattr(r.trade_type, "value") else str(r.trade_type),
+                    "notional_usd": float(r.notional_usd if r.notional_usd else r.quantity * r.price),
+                }
+                for r in records
+            ]
     if not rows:
         buf: io.StringIO = io.StringIO("No data\n")
     else:

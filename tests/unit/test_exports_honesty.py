@@ -13,11 +13,14 @@ from __future__ import annotations
 import csv
 import io
 from collections.abc import Generator
-from unittest.mock import patch
+from datetime import UTC, datetime
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 import pytest
 import unified_trading_library.cloud_interface.api_auth as _uci_auth
 from fastapi.testclient import TestClient
+from unified_api_contracts.internal import TradeRecord, TradeSide, TradeType
 
 from client_reporting_api.api.main import app
 from client_reporting_api.api.routes import exports as _exports_mod
@@ -113,10 +116,49 @@ class TestTradesCsvHonesty:
         assert "REAL-1" in resp.text
         assert "REAL-SYM" in resp.text
 
-    def test_real_mode_empty_returns_explicit_no_data(self, http: TestClient, _real_mode: None) -> None:
+    def test_real_mode_uses_collector_when_no_ledger_and_no_backfill(self, http: TestClient, _real_mode: None) -> None:
+        """The rarer third case: live-collector-only state (no ledger run, no backfill history).
+
+        Reuses ``get_collector().get_client_trades(...)`` exactly like
+        ``trades.py::get_trade_history``'s own collector fallback, rather than
+        reimplementing it (2026-08-21 P3 follow-up to the P2 fixture-honesty fix).
+        """
+        collector_row = TradeRecord(
+            trade_id="COLLECTOR-1",
+            client_id="client-A",
+            venue="okx",
+            symbol="COLLECTOR-SYM",
+            side=TradeSide.BUY,
+            quantity=Decimal("1"),
+            price=Decimal("2"),
+            fee=Decimal("0.1"),
+            fee_currency="USDT",
+            realized_pnl=Decimal("0"),
+            timestamp=datetime(2026, 8, 21, tzinfo=UTC),
+            order_id="ord-collector-1",
+            trade_type=TradeType.MARKET,
+            notional_usd=Decimal("2"),
+        )
+        fake_collector = MagicMock()
+        fake_collector.get_client_trades.return_value = [collector_row]
         with (
             patch.object(_exports_mod, "_ledger_run_trades", return_value=(None, [])),
             patch.object(_exports_mod, "_backfill_trades", return_value=[]),
+            patch.object(_exports_mod, "get_collector", return_value=fake_collector),
+        ):
+            resp = http.get("/api/v1/exports/trades", params={"client_id": "client-A"})
+        assert resp.status_code == 200
+        assert "COLLECTOR-1" in resp.text
+        assert "COLLECTOR-SYM" in resp.text
+
+    def test_real_mode_empty_returns_explicit_no_data(self, http: TestClient, _real_mode: None) -> None:
+        """All three sources empty (ledger, backfill, AND collector) -> explicit "No data"."""
+        empty_collector = MagicMock()
+        empty_collector.get_client_trades.return_value = []
+        with (
+            patch.object(_exports_mod, "_ledger_run_trades", return_value=(None, [])),
+            patch.object(_exports_mod, "_backfill_trades", return_value=[]),
+            patch.object(_exports_mod, "get_collector", return_value=empty_collector),
         ):
             resp = http.get("/api/v1/exports/trades", params={"client_id": "client-A"})
         assert resp.status_code == 200
