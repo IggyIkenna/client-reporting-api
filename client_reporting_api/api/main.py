@@ -157,9 +157,6 @@ app.include_router(
 # --- Unauthenticated: auth (login, me, list users) ---
 app.include_router(create_auth_router("client-reporting-api"))
 
-# --- Unauthenticated: SSE streaming ---
-app.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
-
 # --- Allocator-facing routes (enforce auth per-route via create_api_auth dep) ---
 # Each allocator route already depends on AuthContext to perform entitlement
 # checks against the path ``client_id``. Mount at the root (no extra auth
@@ -171,6 +168,13 @@ app.include_router(allocators_router)
 _api_auth = create_api_auth("client-reporting-api")
 _authenticated_router = APIRouter(dependencies=[Depends(_api_auth)])
 _authenticated_router.include_router(reports_router)
+# 2026-08-21 CTO handoff P0 fix: this SSE fan-out used to be mounted directly on
+# ``app`` with no auth dependency at all (see the git history on this line) —
+# every subscriber received every published report event for every client with
+# no token check and no client_id scoping. Moved inside the blanket-auth router
+# like every other route here; the route itself also applies the second
+# (entitlement) gate via ``require_internal`` — see reports_stream.py.
+_authenticated_router.include_router(reports_stream_router, prefix="/api/v1", tags=["Streaming"])
 _authenticated_router.include_router(pnl_router)
 _authenticated_router.include_router(alerts_router)
 _authenticated_router.include_router(sports_router)

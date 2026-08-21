@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Query
-from unified_trading_library import UnifiedCloudConfig
+from fastapi import APIRouter, Depends, Query
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
+
+from client_reporting_api.core.entitlement import enforce_entitlement
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/compliance", tags=["compliance"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 # --- Mock data ---
@@ -215,6 +220,7 @@ MOCK_COMPLIANCE_DASHBOARD: dict[str, object] = {
 
 @router.get("/trade-reporting")
 def get_trade_reporting(
+    auth: AuthDep,
     org_id: str = Query(..., description="Organisation identifier"),
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
@@ -223,6 +229,7 @@ def get_trade_reporting(
     In mock mode: returns synthetic transaction reporting data.
     In live mode: queries the ARM submission records.
     """
+    enforce_entitlement(auth, org_id)
     if _cloud_cfg.is_mock_mode():
         return {**MOCK_TRADE_REPORTING, "org_id": org_id, "period_month": period_month}
 
@@ -238,6 +245,7 @@ def get_trade_reporting(
 
 @router.get("/best-execution")
 def get_best_execution(
+    auth: AuthDep,
     org_id: str = Query(..., description="Organisation identifier"),
     period_month: str = Query(..., description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
@@ -246,6 +254,7 @@ def get_best_execution(
     In mock mode: returns synthetic best execution analysis data.
     In live mode: computes from execution records.
     """
+    enforce_entitlement(auth, org_id)
     if _cloud_cfg.is_mock_mode():
         return {**MOCK_BEST_EXECUTION, "org_id": org_id, "period_month": period_month}
 
@@ -256,6 +265,7 @@ def get_best_execution(
 
 @router.get("/positions")
 def get_large_positions(
+    auth: AuthDep,
     org_id: str = Query(..., description="Organisation identifier"),
 ) -> dict[str, object]:
     """Large position reporting — positions above regulatory thresholds.
@@ -263,6 +273,7 @@ def get_large_positions(
     In mock mode: returns synthetic large position data.
     In live mode: queries current positions and checks against thresholds.
     """
+    enforce_entitlement(auth, org_id)
     if _cloud_cfg.is_mock_mode():
         return {**MOCK_LARGE_POSITIONS, "org_id": org_id}
 
@@ -273,6 +284,7 @@ def get_large_positions(
 
 @router.get("/dashboard")
 def get_compliance_dashboard(
+    auth: AuthDep,
     org_id: str = Query(..., description="Organisation identifier"),
     period_month: str = Query("2026-02", description="Period in YYYY-MM format"),
 ) -> dict[str, object]:
@@ -281,6 +293,7 @@ def get_compliance_dashboard(
     In mock mode: returns synthetic compliance dashboard data.
     In live mode: aggregates compliance data from all subsystems.
     """
+    enforce_entitlement(auth, org_id)
     if _cloud_cfg.is_mock_mode():
         return {**MOCK_COMPLIANCE_DASHBOARD, "org_id": org_id, "period": period_month}
 

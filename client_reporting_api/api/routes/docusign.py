@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from unified_trading_library import UnifiedCloudConfig
+from unified_trading_library import AuthContext, UnifiedCloudConfig, create_api_auth
 
+from client_reporting_api.core.entitlement import enforce_entitlement, require_internal
 from client_reporting_api.mock_state import get_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["docusign"])
 
 _cloud_cfg = UnifiedCloudConfig()
+_require_auth = create_api_auth("client-reporting-api")
+AuthDep = Annotated[AuthContext, Depends(_require_auth)]
 
 
 # --- Mock data ---
@@ -77,16 +81,35 @@ for _env in MOCK_ENVELOPES:
         _store.create("envelopes", {**_env, "id": _env["envelope_id"]})
 
 
+def _enforce_document_entitlement(auth: AuthContext, document_id: str) -> None:
+    """Scope to the document's real owning org when resolvable; fail closed otherwise.
+
+    The shared ``documents`` store (``client_reporting_api.mock_state``,
+    shared with documents.py) only carries ownership for mock-mode
+    seed/upload data — live-mode uploads don't persist an org_id
+    anywhere yet. When it can't be resolved, deny non-internal callers
+    outright rather than trusting a caller-supplied claim. Same pattern
+    as ``documents.py::get_download_url`` and the same 2026-08-21 CTO
+    handoff P1 fix.
+    """
+    doc = _store.get("documents", document_id)
+    if doc is not None:
+        enforce_entitlement(auth, str(doc.get("org_id", "")))
+    else:
+        require_internal(auth)
+
+
 # --- Routes ---
 
 
 @router.post("/api/v1/documents/{document_id}/send-for-signature")
-def send_for_signature(document_id: str, request: SendForSignatureRequest) -> dict[str, object]:
+def send_for_signature(document_id: str, request: SendForSignatureRequest, auth: AuthDep) -> dict[str, object]:
     """Create a DocuSign envelope and send a document for signature.
 
     In mock mode: creates a synthetic envelope record in the in-memory store.
     In live mode: creates a DocuSign envelope via the DocuSign API.
     """
+    _enforce_document_entitlement(auth, document_id)
     envelope_id = f"ENV-{uuid.uuid4().hex[:8].upper()}"
 
     if _cloud_cfg.is_mock_mode():
@@ -126,12 +149,13 @@ def send_for_signature(document_id: str, request: SendForSignatureRequest) -> di
 
 
 @router.get("/api/v1/documents/{document_id}/signature-status")
-def get_signature_status(document_id: str) -> dict[str, object]:
+def get_signature_status(document_id: str, auth: AuthDep) -> dict[str, object]:
     """Check the DocuSign signature status for a document.
 
     In mock mode: returns the envelope status from the in-memory store.
     In live mode: queries the DocuSign API for envelope status.
     """
+    _enforce_document_entitlement(auth, document_id)
     if _cloud_cfg.is_mock_mode():
         all_envelopes = _store.list("envelopes")
         matching = [e for e in all_envelopes if e.get("document_id") == document_id]
@@ -162,7 +186,7 @@ def get_signature_status(document_id: str) -> dict[str, object]:
 
 
 @router.post("/api/v1/webhooks/docusign")
-async def docusign_webhook(request: Request) -> dict[str, str]:
+async def docusign_webhook(request: Request, auth: AuthDep) -> dict[str, str]:
     """DocuSign webhook receiver — processes envelope status changes.
 
     DocuSign sends webhook events when envelope status changes (sent, delivered,
@@ -171,7 +195,18 @@ async def docusign_webhook(request: Request) -> dict[str, str]:
 
     In mock mode: accepts the payload and updates the in-memory store.
     In live mode: validates the HMAC signature and processes the event.
+
+    Entitlement: this is meant to be called by the DocuSign platform
+    itself, not by an external client of this service — there is no
+    client_id/org_id concept on a webhook payload, so
+    ``require_internal`` is the strictest plausible gate (2026-08-21
+    CTO handoff P1 fix). Whether DocuSign's own callback can actually
+    present a valid internal token, vs. this needing real HMAC-signature
+    validation independent of ``create_api_auth``, was flagged as an
+    open question in the api-reference doc and is not resolved by this
+    change.
     """
+    require_internal(auth)
     body = await request.json()
     event_type = body.get("event", "unknown")
     envelope_id = body.get("envelope_id", "")
