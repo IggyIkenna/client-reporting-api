@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "updated_at": "2026-08-21T00:00:00Z",
+  "presentations": [
+    {
+      "id": "archive-readiness-snapshot",
+      "title": "Archived readiness snapshot",
+      "subtitle": "Earlier plan narrative",
+      "description": "Historical snapshot preserved for archive; substantive updates live in Plan & Longevity.",
+      "href": "/investor-relations/plan-presentation",
+      "tags": ["Archive", "Roadmap"],
+      "entitlement": "investor-plan",
+      "pillar": 2,
+      "status": "archive",
+      "year": 2024,
+      "audienceTags": ["Board"],
+      "iconKey": "calendar-clock"
+    },
+    {
+      "id": "board-presentation",
+      "title": "Board Presentation",
+      "subtitle": "One Unified Trading System",
+      "description": "15-slide strategic advisor deck: how we got here → the landscape (named competitors) → the Odum solution → IP-protection proof → traction → demand evidence → trajectory → the ask → live demo.",
+      "href": "/investor-relations/board-presentation",
+      "tags": ["Strategic Advisors", "Commercial Model", "FCA Authorised"],
+      "entitlement": "investor-board",
+      "pillar": 1,
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Board", "Advisors"],
+      "iconKey": "presentation"
+    },
+    {
+      "id": "plan-presentation",
+      "title": "Plan & Longevity",
+      "subtitle": "The Path to $100M",
+      "description": "12-slide capital-trajectory deck: $7.5M → $100M path, strategy availability matrix, service readiness, IP partitioning, and a 30-month milestone map. Self-funded trajectory with no bridge capital.",
+      "href": "/investor-relations/plan-presentation",
+      "tags": ["Growth Plan", "Strategy Timeline", "Capital Trajectory"],
+      "entitlement": "investor-plan",
+      "pillar": 2,
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Board", "Finance"],
+      "iconKey": "calendar-clock"
+    },
+    {
+      "id": "site-navigation",
+      "title": "Portal & website navigation",
+      "subtitle": "Three engagement routes",
+      "description": "Walks the board through public, lighter gate, IR, and signed-in platform surfaces: three engagement routes (Odum-Managed Strategies, DART Trading Infrastructure, Regulated Operating Models) plus auth levels and where live vs fixture data matters.",
+      "href": "/investor-relations/site-navigation",
+      "tags": ["Portal", "IA", "Navigation"],
+      "entitlement": "investor-board",
+      "pillar": 3,
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Board", "IR"],
+      "iconKey": "map"
+    },
+    {
+      "id": "platform-presentation",
+      "title": "DART Trading Infrastructure",
+      "subtitle": "Trading Infrastructure Without the Build",
+      "description": "DART product deck: named-competitor landscape (Bloomberg, QuantConnect, Hummingbot, FlexTrade, IBKR, FalconX, Citadel-internal), single engagement route with client-provided / Odum-provided / hybrid signal capability, alpha-protection boundary by layer, and how to start.",
+      "href": "/investor-relations/platform-presentation",
+      "tags": ["Product Deck", "Client-Facing", "Engagement Levels"],
+      "entitlement": "investor-platform",
+      "pillar": "standalone",
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Clients", "Platform"],
+      "iconKey": "layout-grid"
+    },
+    {
+      "id": "investment-presentation",
+      "title": "Odum-Managed Strategies",
+      "subtitle": "FCA-Authorised Discretionary Management",
+      "description": "Allocator deck: the allocator landscape (BlackRock Alt, Galaxy, Pantera, Millennium LPs), live performance ($7.5M / 30%+ annualised), strategy families, investor portal, co-invest terms, and FAQ. Investment Management is the legal/contract label retained on signup, contracts, and admin surfaces.",
+      "href": "/investor-relations/investment-presentation",
+      "tags": ["Odum-Managed Strategies", "Performance", "Investor Portal"],
+      "entitlement": "investor-im",
+      "pillar": "standalone",
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Allocators", "Clients"],
+      "iconKey": "trending-up"
+    },
+    {
+      "id": "regulatory-presentation",
+      "title": "Regulated Operating Models",
+      "subtitle": "FCA-Authorised Operating Coverage",
+      "description": "Coverage deck built on the four-axis flexibility model (structure × scope × counterparty-facing × activity). Concrete engagement shapes assessed case by case, named competitors (G10, Sapia, Thornbridge, Duff & Phelps), and the client portal. Regulatory Umbrella is the legal/contract label retained on signup, contracts, and admin surfaces.",
+      "href": "/investor-relations/regulatory-presentation",
+      "tags": [
+        "Regulated Operating Models",
+        "Regulatory Coverage",
+        "Fund Structures"
+      ],
+      "entitlement": "investor-regulatory",
+      "pillar": "standalone",
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Legal", "Compliance"],
+      "iconKey": "landmark"
+    },
+    {
+      "id": "disaster-recovery",
+      "title": "Disaster Recovery & Business Continuity",
+      "subtitle": "Operational Resilience Playbook",
+      "description": "Circuit breakers, autonomous AI recovery agents, key-person access matrix, real-time client alerting, and financial continuity protocols.",
+      "href": "/investor-relations/disaster-recovery",
+      "tags": [
+        "Circuit Breaker",
+        "Access Matrix",
+        "Client Alerts",
+        "FCA Compliant"
+      ],
+      "entitlement": "investor-relations",
+      "pillar": 4,
+      "status": "current",
+      "year": 2026,
+      "audienceTags": ["Board", "Risk"],
+      "iconKey": "shield-alert"
+    }
+  ]
+}
